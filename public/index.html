@@ -522,6 +522,9 @@ textarea.fc{min-height:72px;resize:vertical}
 .mp-search-clear{position:absolute;right:.4rem;background:none;border:none;color:var(--muted);cursor:pointer;padding:0 .18rem;display:flex;align-items:center;line-height:1}
 .mp-bar-gap{flex:1}
 .mp-sort-btn{min-width:112px;min-height:40px;padding:.5rem .85rem;font-size:.84rem;white-space:nowrap}
+.mp-filter{flex:0 1 148px;min-width:148px}
+.mp-filter .tf-btn{min-width:0;width:100%;min-height:40px}
+.mp-filter .tf-panel{min-width:220px;max-width:min(280px,calc(100vw - 2rem))}
 .mp-view-btns{display:flex;gap:.25rem;flex-shrink:0}
 .mp-view-btn{background:transparent;border:1px solid var(--border);border-radius:var(--r);width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .15s;font-size:.92rem;flex-shrink:0}
 .mp-view-btn:hover{border-color:var(--gdim);color:var(--text)}
@@ -642,7 +645,7 @@ textarea.fc{min-height:72px;resize:vertical}
 .mi-t{font-size:.85rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mi-title-row{display:flex;align-items:center;gap:.42rem;min-width:0}
 .mi-title-row .mi-t{flex:1;min-width:0}
-.mi-m{font-size:.74rem;color:var(--muted)}
+.mi-m{font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .perm-badge{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;padding:.14rem .46rem;border:1px solid var(--border);border-radius:999px;font-size:.66rem;line-height:1.1;color:var(--muted);background:transparent;white-space:nowrap}
 .perm-badge.owner{border-color:#b66a6a;color:#d89a9a;background:rgba(182,106,106,.08)}
 .perm-badge.admin{border-color:#7d6b3d;color:#c9a84c;background:rgba(201,168,76,.08)}
@@ -1092,6 +1095,8 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
               <button type="button" class="mp-search-clear" id="mp-search-clear" onclick="mpSearchClear()" style="display:none" aria-label="清除搜尋">×</button>
             </div>
             <button class="btn btn-out mp-sort-btn" id="mp-btn-sort" onclick="toggleManSortDir()">顯示排序：正序</button>
+            <div class="tf mp-filter" id="mp-cat-filter"></div>
+            <div class="tf mp-filter" id="mp-tag-filter"></div>
           </div>
           <div class="mp-view-btns">
             <button class="mp-view-btn on" id="mp-btn-list" onclick="setManView('list')" title="清單模式" aria-label="清單模式"></button>
@@ -1302,6 +1307,7 @@ const S = {
   collection: localStorage.getItem('catalog-coll') || 'scenario',
   lbImgs: [], lbSlide: 0, lbItemId: null,
   F:      { q:'', cats:[], tags:[], page:1, pageSize:20 },
+  MF:     { cats:[], tags:[] },
   up:     { prevs:[], files:[], tags:[], categories:[], mode:'up' },
   eTags:  [], eCatsPicked: [], eId: null, ePrevs: [], eDownloadEntries: [],
   authUsers: [], currentAuthUser: null, roleConfig: null,
@@ -1557,6 +1563,17 @@ function getItemCategoryLabel(item) {
   const cats = getItemCategories(item);
   return cats.length ? cats.join('、') : '未分類';
 }
+function getItemMetaLabel(item) {
+  const parts = [];
+  const categoryLabel = getItemCategoryLabel(item);
+  if (categoryLabel) parts.push(categoryLabel);
+  const tags = (item.tags || []).filter(Boolean);
+  if (tags.length) parts.push(tags.join(', '));
+  return parts.join(' · ');
+}
+function hasManActiveFilters() {
+  return !!(S.mpQ || (S.MF.cats || []).length || (S.MF.tags || []).length);
+}
 function ensureMasterCategory(v) {
   const c = String(v || '').trim();
   if (!c) return;
@@ -1777,6 +1794,8 @@ async function openManageListPage(ev) {
   S.manSel.clear();
   S.manLastSelIdx = -1;
   S.mpQ = '';
+  S.MF.cats = [];
+  S.MF.tags = [];
   const inp = document.getElementById('mp-search-inp');
   if (inp) inp.value = '';
   document.getElementById('mp-search-clear') && (document.getElementById('mp-search-clear').style.display = 'none');
@@ -1784,6 +1803,8 @@ async function openManageListPage(ev) {
   if (sortBtn) sortBtn.textContent = `顯示排序：${S.manSortDir === 'asc' ? '正序' : '倒序'}`;
   const sidebarBtn = document.getElementById('btn-man-sidebar-sort');
   if (sidebarBtn) sidebarBtn.textContent = `顯示排序：${S.manSortDir === 'asc' ? '正序' : '倒序'}`;
+  renderManCategoryFilter();
+  renderManTagFilter();
   updateManSelUI();
   document.getElementById('man-page')?.classList.add('on');
   document.body.style.overflow = 'hidden';
@@ -1798,6 +1819,8 @@ async function closeManageListPage(ev) {
   }
   S.manPageOpen = false;
   resetManMarquee();
+  closeManCategoryFilter();
+  closeManTagFilter();
   document.getElementById('man-page')?.classList.remove('on');
   document.body.style.overflow = '';
   await releaseManagePageLock(true);
@@ -2570,6 +2593,27 @@ function renderPills() {
         : '<div class="tf-empty">目前沒有可篩選的標籤</div>'}
     </div>`;
 }
+function renderManTagFilter() {
+  const wrap = document.getElementById('mp-tag-filter');
+  if (!wrap) return;
+  const all = (S.cat.tags || []).slice();
+  S.MF.tags = (S.MF.tags || []).filter(t => all.includes(t));
+  const label = S.MF.tags.length ? `已選 ${S.MF.tags.length} 個標籤` : '標籤篩選';
+  wrap.innerHTML =
+    `<button class="btn btn-out tf-btn" type="button" onclick="toggleManTagFilter(event)">
+      <span class="lab">${esc(label)}</span>
+      <span class="arr" aria-hidden="true"></span>
+    </button>
+    <div class="tf-panel" onclick="event.stopPropagation()">
+      <div class="tf-actions"><button class="tf-clear" type="button" onclick="clearManTagFilter()">清除選取</button></div>
+      ${all.length
+        ? all.map(t => `<label class="tf-opt">
+            <input type="checkbox" ${S.MF.tags.includes(t) ? 'checked' : ''} onchange="togManTag('${esc(t)}')">
+            <span>${esc(t)}</span>
+          </label>`).join('')
+        : '<div class="tf-empty">目前沒有可篩選的標籤</div>'}
+    </div>`;
+}
 function renderCategoryFilter() {
   const all = (S.cat.categories || []).slice();
   const label = S.F.cats.length ? `已選 ${S.F.cats.length} 個類別` : '類別篩選';
@@ -2588,6 +2632,27 @@ function renderCategoryFilter() {
         : '<div class="tf-empty">目前沒有可篩選的類別</div>'}
     </div>`;
 }
+function renderManCategoryFilter() {
+  const wrap = document.getElementById('mp-cat-filter');
+  if (!wrap) return;
+  const all = (S.cat.categories || []).slice();
+  S.MF.cats = (S.MF.cats || []).filter(c => all.includes(c));
+  const label = S.MF.cats.length ? `已選 ${S.MF.cats.length} 個類別` : '類別篩選';
+  wrap.innerHTML =
+    `<button class="btn btn-out tf-btn" type="button" onclick="toggleManCategoryFilter(event)">
+      <span class="lab">${esc(label)}</span>
+      <span class="arr" aria-hidden="true"></span>
+    </button>
+    <div class="tf-panel" onclick="event.stopPropagation()">
+      <div class="tf-actions"><button class="tf-clear" type="button" onclick="clearManCategoryFilter()">清除選取</button></div>
+      ${all.length
+        ? all.map(c => `<label class="tf-opt">
+            <input type="checkbox" ${S.MF.cats.includes(c) ? 'checked' : ''} onchange="togManCategory('${esc(c)}')">
+            <span>${esc(c)}</span>
+          </label>`).join('')
+        : '<div class="tf-empty">目前沒有可篩選的類別</div>'}
+    </div>`;
+}
 function restoreTagFilterState(keepOpen, scrollTop) {
   const wrap = document.getElementById('pills');
   if (!wrap || !keepOpen) return;
@@ -2597,8 +2662,26 @@ function restoreTagFilterState(keepOpen, scrollTop) {
     if (panel) panel.scrollTop = scrollTop || 0;
   });
 }
+function restoreManTagFilterState(keepOpen, scrollTop) {
+  const wrap = document.getElementById('mp-tag-filter');
+  if (!wrap || !keepOpen) return;
+  wrap.classList.add('on');
+  requestAnimationFrame(() => {
+    const panel = wrap.querySelector('.tf-panel');
+    if (panel) panel.scrollTop = scrollTop || 0;
+  });
+}
 function restoreCategoryFilterState(keepOpen, scrollTop) {
   const wrap = document.getElementById('cat-filter');
+  if (!wrap || !keepOpen) return;
+  wrap.classList.add('on');
+  requestAnimationFrame(() => {
+    const panel = wrap.querySelector('.tf-panel');
+    if (panel) panel.scrollTop = scrollTop || 0;
+  });
+}
+function restoreManCategoryFilterState(keepOpen, scrollTop) {
+  const wrap = document.getElementById('mp-cat-filter');
   if (!wrap || !keepOpen) return;
   wrap.classList.add('on');
   requestAnimationFrame(() => {
@@ -2775,12 +2858,48 @@ function clearCategoryFilter() {
   renderCategoryFilter(); renderGallery();
   restoreCategoryFilterState(keepOpen, scrollTop);
 }
+function toggleManCategoryFilter(ev) {
+  if (ev) ev.stopPropagation();
+  document.getElementById('mp-cat-filter').classList.toggle('on');
+}
+function closeManCategoryFilter() {
+  document.getElementById('mp-cat-filter').classList.remove('on');
+}
+function togManCategory(cat) {
+  const wrap = document.getElementById('mp-cat-filter');
+  const panel = wrap?.querySelector('.tf-panel');
+  const keepOpen = wrap?.classList.contains('on');
+  const scrollTop = panel?.scrollTop || 0;
+  const i = S.MF.cats.indexOf(cat);
+  if (i >= 0) S.MF.cats.splice(i, 1); else S.MF.cats.push(cat);
+  renderManCategoryFilter();
+  renderManVirtual();
+  restoreManCategoryFilterState(keepOpen, scrollTop);
+}
+function clearManCategoryFilter() {
+  const wrap = document.getElementById('mp-cat-filter');
+  const panel = wrap?.querySelector('.tf-panel');
+  const keepOpen = wrap?.classList.contains('on');
+  const scrollTop = panel?.scrollTop || 0;
+  if (!S.MF.cats.length) return restoreManCategoryFilterState(keepOpen, scrollTop);
+  S.MF.cats = [];
+  renderManCategoryFilter();
+  renderManVirtual();
+  restoreManCategoryFilterState(keepOpen, scrollTop);
+}
 function toggleTagFilter(ev) {
   if (ev) ev.stopPropagation();
   document.getElementById('pills').classList.toggle('on');
 }
 function closeTagFilter() {
   document.getElementById('pills').classList.remove('on');
+}
+function toggleManTagFilter(ev) {
+  if (ev) ev.stopPropagation();
+  document.getElementById('mp-tag-filter').classList.toggle('on');
+}
+function closeManTagFilter() {
+  document.getElementById('mp-tag-filter').classList.remove('on');
 }
 function clearTagFilter() {
   const wrap = document.getElementById('pills');
@@ -2793,6 +2912,17 @@ function clearTagFilter() {
   renderPills(); renderGallery();
   restoreTagFilterState(keepOpen, scrollTop);
 }
+function clearManTagFilter() {
+  const wrap = document.getElementById('mp-tag-filter');
+  const panel = wrap?.querySelector('.tf-panel');
+  const keepOpen = wrap?.classList.contains('on');
+  const scrollTop = panel?.scrollTop || 0;
+  if (!S.MF.tags.length) return restoreManTagFilterState(keepOpen, scrollTop);
+  S.MF.tags = [];
+  renderManTagFilter();
+  renderManVirtual();
+  restoreManTagFilterState(keepOpen, scrollTop);
+}
 function togTag(t) {
   const wrap = document.getElementById('pills');
   const panel = wrap?.querySelector('.tf-panel');
@@ -2803,6 +2933,17 @@ function togTag(t) {
   resetLoaded();
   renderPills(); renderGallery();
   restoreTagFilterState(keepOpen, scrollTop);
+}
+function togManTag(t) {
+  const wrap = document.getElementById('mp-tag-filter');
+  const panel = wrap?.querySelector('.tf-panel');
+  const keepOpen = wrap?.classList.contains('on');
+  const scrollTop = panel?.scrollTop || 0;
+  const i = S.MF.tags.indexOf(t);
+  if (i >= 0) S.MF.tags.splice(i, 1); else S.MF.tags.push(t);
+  renderManTagFilter();
+  renderManVirtual();
+  restoreManTagFilterState(keepOpen, scrollTop);
 }
 
 // ════════════════════════════════════════════════════
@@ -3074,6 +3215,10 @@ document.addEventListener('click', e => {
   if (catWrap && !catWrap.contains(e.target)) closeCategoryFilter();
   const wrap = document.getElementById('pills');
   if (wrap && !wrap.contains(e.target)) closeTagFilter();
+  const mpCatWrap = document.getElementById('mp-cat-filter');
+  if (mpCatWrap && !mpCatWrap.contains(e.target)) closeManCategoryFilter();
+  const mpTagWrap = document.getElementById('mp-tag-filter');
+  if (mpTagWrap && !mpTagWrap.contains(e.target)) closeManTagFilter();
   const sug = document.getElementById('u-ts');
   const chipWrap = document.getElementById('u-tw');
   if (sug && chipWrap && !sug.contains(e.target) && !chipWrap.contains(e.target)) closeTagSuggest();
@@ -3105,7 +3250,7 @@ function closeAdm() {
   document.getElementById('ovbg').classList.remove('on');
   closeAdminCollectionMenu();
 }
-function closeAll() { closeAdm(); closeCategoryFilter(); closeTagFilter(); closeCollectionMenu(); closeAdminCollectionMenu(); }
+function closeAll() { closeAdm(); closeCategoryFilter(); closeTagFilter(); closeManCategoryFilter(); closeManTagFilter(); closeCollectionMenu(); closeAdminCollectionMenu(); }
 async function doLogout() {
   try { await releaseManagePageLock(true); } catch {}
   try {
@@ -4806,7 +4951,7 @@ function manRowHtml(item, i, total, top) {
           <div class="mi-t">${esc(item.title)}</div>
           ${permissionBadgeHtml(item.permission)}
         </div>
-        <div class="mi-m">${esc(getItemCategoryLabel(item))}${(item.tags||[]).length ? ' · ' + item.tags.slice(0, 2).join(', ') : ''}</div>
+        <div class="mi-m">${esc(getItemMetaLabel(item))}</div>
       </div>
       <div class="mi-acts">
         <button class="ib" onclick="openEdit('${item.id}')" title="編輯" ${canEditInfo ? '' : 'disabled'}>${icon('edit')}</button>
@@ -4821,7 +4966,7 @@ function manPageListRowHtml(item, i, total, top) {
   const canEditOrder = canRolePermission('editItemOrder');
   const canEditInfo = canRolePermission('editItemInfo');
   const sel = S.manSel.has(item.id);
-  const canDrag = canEditOrder && !S.mpQ;
+  const canDrag = canEditOrder && !hasManActiveFilters();
   const displayOrder = S.manSortDir === 'desc' ? (total - i) : (i + 1);
   const style = top !== undefined ? ` style="top:${top}px"` : '';
   const classes = [
@@ -4842,7 +4987,7 @@ function manPageListRowHtml(item, i, total, top) {
       onchange="commitCardOrderInput(this, '${item.id}')"
       onblur="commitCardOrderInput(this, '${item.id}')">
     <input type="checkbox" class="mi-chk" ${sel ? 'checked' : ''} onclick="event.stopPropagation();mpClick(event,'${item.id}',${i},'toggle')" tabindex="-1" aria-label="選取">
-    <span class="dh" title="${canDrag ? '拖曳排序' : S.mpQ ? '搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
+    <span class="dh" title="${canDrag ? '拖曳排序' : hasManActiveFilters() ? '篩選或搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
     ${th?.src && th.kind === 'image' ? `<img class="mth" src="${esc(th.src)}" loading="lazy" onerror="this.style.display='none'">` :
       th?.src && th.kind === 'video' ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"></video>` :
       th?.src && th.kind === 'audio' ? `<div class="mth" style="display:flex;align-items:center;justify-content:center;color:var(--gold)">${icon('audio')}</div>` :
@@ -4852,7 +4997,7 @@ function manPageListRowHtml(item, i, total, top) {
         <div class="mi-t">${esc(item.title)}</div>
         ${permissionBadgeHtml(item.permission)}
       </div>
-      <div class="mi-m">${esc(getItemCategoryLabel(item))}${(item.tags||[]).length ? ' · ' + item.tags.slice(0, 2).join(', ') : ''}</div>
+      <div class="mi-m">${esc(getItemMetaLabel(item))}</div>
     </div>
     <div class="mi-acts">
       <button class="ib" onclick="event.stopPropagation();openEdit('${esc(item.id)}')" title="編輯" ${canEditInfo ? '' : 'disabled'}>${icon('edit')}</button>
@@ -4865,7 +5010,7 @@ function manPageGridCardHtml(item, i) {
   const th = getItemCoverEntry(item);
   const sel = S.manSel.has(item.id);
   const canEditOrder = canRolePermission('editItemOrder');
-  const canDrag = canEditOrder && !S.mpQ;
+  const canDrag = canEditOrder && !hasManActiveFilters();
   const classes = ['mp-gc', sel ? 'sel' : '', S.justMovedId === item.id ? 'moved' : ''].filter(Boolean).join(' ');
   return `<div class="${classes}" data-id="${esc(item.id)}" data-i="${i}"
     draggable="${canDrag ? 'true' : 'false'}"
@@ -4874,7 +5019,7 @@ function manPageGridCardHtml(item, i) {
     ondragstart="return dSt(event,${i})" ondragover="dOv(event)"
     ondrop="dDp(event,${i})" ondragend="dEd(event)">
     <input type="checkbox" class="mp-gc-chk" ${sel ? 'checked' : ''} onclick="event.stopPropagation();mpClick(event,'${item.id}',${i},'toggle')" tabindex="-1" aria-label="選取">
-    <span class="mp-gc-grip dh" title="${canDrag ? '拖曳排序' : S.mpQ ? '搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
+    <span class="mp-gc-grip dh" title="${canDrag ? '拖曳排序' : hasManActiveFilters() ? '篩選或搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
     ${th?.src && th.kind === 'image' ? `<img class="mp-gc-img" src="${esc(th.src)}" loading="lazy" onerror="this.style.display='none'">` :
       th?.src && th.kind === 'video' ? `<video class="mp-gc-img" src="${esc(th.src)}" muted playsinline preload="metadata"></video>` :
       `<div class="mp-gc-no-img">${icon(th?.kind === 'audio' ? 'audio' : 'image')}</div>`}
@@ -4889,6 +5034,8 @@ function renderMan() {
   const sourceItems = S.cat.items || [];
   const sideList = document.getElementById('man-list');
   const def = getCollectionDef();
+  renderManCategoryFilter();
+  renderManTagFilter();
   const sidebarItems = S.manSortDir === 'desc'
     ? [...sourceItems].reverse()
     : [...sourceItems];
@@ -4907,6 +5054,8 @@ function renderMan() {
 function getManFilteredItems() {
   let items = [...(S.cat.items || [])];
   const q = (S.mpQ || '').toLowerCase().trim();
+  const cats = S.MF.cats || [];
+  const tags = S.MF.tags || [];
   if (q) {
     items = items.filter(item =>
     (item.title || '').toLowerCase().includes(q) ||
@@ -4915,6 +5064,8 @@ function getManFilteredItems() {
     (item.tags || []).some(t => t.toLowerCase().includes(q))
     );
   }
+  if (cats.length) items = items.filter(item => cats.some(cat => getItemCategories(item).includes(cat)));
+  if (tags.length) items = items.filter(item => tags.every(tag => (item.tags || []).includes(tag)));
   if (S.manSortDir === 'desc') items.reverse();
   return items;
 }
@@ -4968,7 +5119,8 @@ function renderManVirtual() {
     wrap.style.height = 'auto';
     wrap.style.position = '';
     wrap.className = '';
-    wrap.innerHTML = `<p style="color:var(--muted);text-align:center;padding:2rem 0;font-size:.84rem">尚無${esc(def.itemNoun)}${S.mpQ ? '（搜尋無結果）' : '，請先上傳'}</p>`;
+    const hasFilters = hasManActiveFilters();
+    wrap.innerHTML = `<p style="color:var(--muted);text-align:center;padding:2rem 0;font-size:.84rem">尚無${esc(def.itemNoun)}${hasFilters ? `（${S.mpQ ? '搜尋或篩選' : '篩選'}無結果）` : '，請先上傳'}</p>`;
     updateManSelUI();
     return;
   }

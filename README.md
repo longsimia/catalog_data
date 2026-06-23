@@ -29,7 +29,19 @@
 
 ## 第 1 步：把專案抓到 Oracle Cloud
 
-SSH 進你的 Oracle Cloud 主機後，執行：
+首先在本機打開終端機，用 SSH 連進你的 Oracle Cloud 主機：
+
+```powershell
+ssh -i <你的金鑰路徑>\ssh-key.key ubuntu@你的主機IP
+```
+
+例如：
+
+```powershell
+ssh -i C:\Users\username\Downloads\ssh-key-2026-06-25.key ubuntu@123.123.123.123
+```
+
+然後執行：
 
 ```bash
 git clone https://github.com/longsimia/catalog_data.git ~/catalog_app
@@ -93,18 +105,10 @@ http://123.123.123.123:3000
 
 這個模式不使用 GitHub Actions，也不需要 fork。
 
-做法是讓你的 Oracle Cloud 主機自己定時執行更新腳本。
-
-由於某些連線環境不支援互動式編輯 `crontab -e`，建議直接在 Oracle Cloud 主機上執行：
+做法是讓你的 Oracle Cloud 主機自己定時執行更新腳本：
 
 ```bash
-printf '%s\n' '*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1' | crontab -
-```
-
-以及：
-
-```bash
-(crontab -l 2>/dev/null; printf '%s\n' '0 0 1 * * > /home/ubuntu/catalog_update.log') | crontab -
+printf '%s\n' '*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1' '0 0 1 * * > /home/ubuntu/catalog_update.log' | crontab -
 ```
 
 然後執行：
@@ -123,7 +127,9 @@ crontab -l
 意思是：
 
 - 每 5 分鐘檢查一次是否有新版本
-- 有新版本才會開始 reload ：
+- 沒有新版本時，平常不會輸出任何內容到 log
+- 如果昨天一整天都沒有更新，會在隔天第一次排程時補一條摘要到 log
+- 有新版本才會開始 reload 並寫入更新紀錄：
   - 進入 `/home/ubuntu/catalog_app`
   - 執行 `update.sh`
   - 將輸出寫到 `/home/ubuntu/catalog_update.log`
@@ -165,22 +171,24 @@ bash update.sh
 
 ## `update.sh` 會做什麼
 
-`update.sh` 目前會做：
+`update.sh` 目前會做的流程示意：
 
-```bash
-git fetch origin main
-git rev-parse HEAD
-git rev-parse origin/main
-if 沒有新 commit -> 直接結束
-git reset --hard origin/main
-npm install --silent
-pm2 reload ecosystem.config.js --update-env
-```
+1. 先檢查昨天是否整天都沒有更新<br>
+   如果昨天整天都沒有更新，就補一條摘要到 `catalog_update.log`
+2. 執行 `git fetch origin main`
+3. 比較本機版本與遠端版本<br>
+  3-1. 如果沒有新 commit，就直接結束且不輸出更新紀錄<br>
+  3-2. 如果有新 commit：<br>
+   (1) 把程式碼同步到遠端 `main`<br>
+   (2) 執行 `npm install --silent`<br>
+   (3) 執行 `pm2 reload ecosystem.config.js --update-env`<br>
+   (4) 寫入本次更新完成紀錄
 
 這表示：
 
 - 只有遠端有新 commit 時，才會真的更新並 reload
-- 沒有新版本時，腳本會直接結束，不會重載網站
+- 沒有新版本時，腳本會直接結束，不會重載網站，也不會寫入日誌
+- 如果某一天完全沒有更新，隔天第一次排程會補一條摘要日誌
 - 程式碼目錄會被強制同步成維護者最新版本
 - 已追蹤的程式碼檔案會以遠端 `main` 為準
 - npm 套件會同步更新
