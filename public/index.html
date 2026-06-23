@@ -133,6 +133,7 @@ header::after{content:'';position:absolute;inset:0;pointer-events:none;
 .ico{display:inline-flex;align-items:center;justify-content:center;width:1.05rem;height:1.05rem;flex-shrink:0}
 .ico svg{width:100%;height:100%;display:block}
 .theme-btn .ico{width:1.1rem;height:1.1rem}
+.ctrl-view-btn{position:relative;top:auto;right:auto;width:42px;height:42px;padding:0;flex:0 0 42px;z-index:auto;background:var(--card)}
 
 /* ── CONTROL BAR ── */
 .ctrl{position:sticky;top:0;z-index:100;background:var(--ctrl-bg);
@@ -194,6 +195,7 @@ select.fs:focus{border-color:var(--gold)}
 /* ── GALLERY ── */
 main{max-width:1340px;margin:0 auto;padding:2.2rem 1.3rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:1.3rem}
+body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.85rem}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
   overflow:hidden;cursor:pointer;position:relative;top:0;
   transform:translateY(0);
@@ -222,6 +224,14 @@ main{max-width:1340px;margin:0 auto;padding:2.2rem 1.3rem}
 .card-tags .tag{flex:0 0 auto}
 .card-tags{margin-top:auto}
 .card-badge{display:inline-flex;align-items:center;justify-content:center;padding:.2rem .48rem;border:1px solid var(--border);border-radius:999px;font-size:.68rem;letter-spacing:.08em;color:var(--muted);background:var(--panel)}
+body[data-gallery-view="list"] .card{display:grid;grid-template-columns:132px minmax(0,1fr);align-items:stretch}
+body[data-gallery-view="list"] .card-cover,
+body[data-gallery-view="list"] .card-cover-video,
+body[data-gallery-view="list"] .card-ph{aspect-ratio:auto;height:100%;min-height:100%;display:flex;align-items:center;justify-content:center}
+body[data-gallery-view="list"] .card-cover-audio{aspect-ratio:auto;height:100%;min-height:100%;border-right:1px solid var(--border)}
+body[data-gallery-view="list"] .card-body{min-height:0;padding:.9rem 1rem}
+body[data-gallery-view="list"] .card-tags{width:100%;margin-left:0;margin-right:0}
+body[data-gallery-view="list"] .card:hover{top:-4px;transform:translateY(-2px)}
 body[data-collection-mode="image"] .card-body{min-height:44px;padding:.32rem 1rem}
 body[data-collection-mode="image"] .card-body{display:flex;flex-direction:column;justify-content:center;align-items:stretch}
 body[data-collection-mode="image"] .card-title{margin-bottom:0;min-height:1.4em}
@@ -524,7 +534,7 @@ textarea.fc{min-height:72px;resize:vertical}
 .mp-sort-btn{min-width:112px;min-height:40px;padding:.5rem .85rem;font-size:.84rem;white-space:nowrap}
 .mp-filter{flex:0 1 148px;min-width:148px}
 .mp-filter .tf-btn{min-width:0;width:100%;min-height:40px}
-.mp-filter .tf-panel{min-width:220px;max-width:min(280px,calc(100vw - 2rem))}
+.mp-filter .tf-panel{width:100%;min-width:100%;max-width:100%}
 .mp-view-btns{display:flex;gap:.25rem;flex-shrink:0}
 .mp-view-btn{background:transparent;border:1px solid var(--border);border-radius:var(--r);width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .15s;font-size:.92rem;flex-shrink:0}
 .mp-view-btn:hover{border-color:var(--gdim);color:var(--text)}
@@ -737,6 +747,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   .collection-add-row{flex-wrap:wrap}
   .collection-add-row .fc{flex:1 0 100%;max-width:none}
   .ctrl{min-height:auto;padding:.7rem .85rem}
+  .ctrl-view-btn{flex:0 0 42px}
   .sw{flex-basis:100%}
   .pgsel{width:100%;justify-content:flex-start}
   .page-jump{width:43px}
@@ -787,6 +798,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 
 <!-- Control Bar -->
 <div class="ctrl">
+  <button class="theme-btn ctrl-view-btn" id="gallery-view-btn" type="button" onclick="toggleGalleryView()" aria-label="切換檢視模式"></button>
   <div class="sw">
     <span class="si"></span>
     <input type="text" id="search-in" placeholder="搜尋名稱、作者…" oninput="doQ(this.value)">
@@ -1376,6 +1388,8 @@ const getAuthUsername = () => localStorage.getItem('adm-user') || '';
 const setAuthUsername = v => localStorage.setItem('adm-user', v || '');
 const getTheme = () => localStorage.getItem('theme-mode') || 'dark';
 const setTheme = theme => localStorage.setItem('theme-mode', theme);
+const getGalleryView = () => localStorage.getItem('gallery-view') === 'list' ? 'list' : 'grid';
+const setGalleryViewStorage = view => localStorage.setItem('gallery-view', view === 'list' ? 'list' : 'grid');
 const setCollectionStorage = value => localStorage.setItem('catalog-coll', value || 'scenario');
 
 function normalizeCollectionMode(value) {
@@ -1647,6 +1661,7 @@ function decorateStaticIcons() {
   setLabeled('#lb-src', 'link', '原文連結');
   setLabeled('#lb-preview', 'file', '線上閱覽');
   setHtml('.si', icon('search'));
+  setHtml('#gallery-view-btn', icon('layoutList'));
 }
 
 let _connTimer = null;
@@ -2034,6 +2049,24 @@ function toggleTheme() {
   setTheme(next);
 }
 
+function applyGalleryView(view) {
+  const mode = view === 'list' ? 'list' : 'grid';
+  document.body.dataset.galleryView = mode;
+  const btn = document.getElementById('gallery-view-btn');
+  if (btn) {
+    btn.innerHTML = mode === 'list' ? icon('grid') : icon('layoutList');
+    btn.setAttribute('title', mode === 'list' ? '切換為格狀檢視' : '切換為清單檢視');
+    btn.setAttribute('aria-label', mode === 'list' ? '切換為格狀檢視' : '切換為清單檢視');
+  }
+}
+
+function toggleGalleryView() {
+  const next = (document.body.dataset.galleryView || 'grid') === 'list' ? 'grid' : 'list';
+  applyGalleryView(next);
+  setGalleryViewStorage(next);
+  fitCardTags();
+}
+
 async function api(method, url, body) {
   const finalUrl = cUrl(url);
   const opts = { method, headers: {} };
@@ -2379,6 +2412,7 @@ async function setCollection(next) {
 async function init() {
   applyTheme(getTheme());
   decorateStaticIcons();
+  applyGalleryView(getGalleryView());
   await loadCollections();
   applyCollectionUI();
   ensureConnBadge();
