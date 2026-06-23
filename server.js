@@ -15,6 +15,10 @@ const PORT     = process.env.PORT || 3000;
 const ROOT     = __dirname;
 const DEFAULT_DATA_DIR = path.join(os.homedir(), 'catalog_data');
 const DATA     = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : DEFAULT_DATA_DIR;
+const DEFAULT_INITIAL_ADMIN_USERNAME = 'admin';
+const DEFAULT_INITIAL_ADMIN_PASSWORD = 'admin123456';
+const BOOTSTRAP_ADMIN_USERNAME = String(process.env.BOOTSTRAP_ADMIN_USERNAME || '').trim();
+const BOOTSTRAP_ADMIN_PASSWORD = String(process.env.BOOTSTRAP_ADMIN_PASSWORD || '');
 const UPLOADS  = path.join(DATA, 'uploads');
 const CAT_FILE = path.join(DATA, 'catalog.json');
 const CFG_FILE = path.join(DATA, 'config.json');
@@ -31,6 +35,25 @@ const managePageLocks = new Map();
 
 // ── 工具函式 ──────────────────────────────────────
 const sha256 = s => crypto.createHash('sha256').update(String(s)).digest('hex');
+
+function getDefaultInitialAuthUser() {
+  return {
+    id: 'default-admin',
+    username: DEFAULT_INITIAL_ADMIN_USERNAME,
+    passwordHash: sha256(DEFAULT_INITIAL_ADMIN_PASSWORD),
+    role: 'owner'
+  };
+}
+
+function getBootstrapAuthUser() {
+  if (!BOOTSTRAP_ADMIN_USERNAME || !BOOTSTRAP_ADMIN_PASSWORD) return null;
+  return {
+    id: 'bootstrap-owner',
+    username: BOOTSTRAP_ADMIN_USERNAME,
+    passwordHash: sha256(BOOTSTRAP_ADMIN_PASSWORD),
+    role: 'owner'
+  };
+}
 
 function getActiveManagePageLock(collection = 'scenario') {
   const key = sanitizeCollectionKey(collection);
@@ -447,6 +470,14 @@ function normalizeAuthUsers(rawUsers = [], fallbackPwdHash = '') {
       role: sanitizeRoleKey(user?.role) || (idx === 0 ? 'owner' : 'admin')
     }))
     .filter(user => user.username);
+  if (normalized.some(user => user.passwordHash)) return normalized;
+  if (typeof fallbackPwdHash === 'string' && fallbackPwdHash) {
+    return [{
+      ...getDefaultInitialAuthUser(),
+      passwordHash: fallbackPwdHash
+    }];
+  }
+  return [getDefaultInitialAuthUser()];
   if (normalized.length) return normalized;
   return [{
     id: 'default-admin',
@@ -632,12 +663,16 @@ function safeEq(a, b) {
 }
 
 function getAuthUserById(cfg, id) {
+  const bootstrapUser = getBootstrapAuthUser();
+  if (bootstrapUser && bootstrapUser.id === id) return bootstrapUser;
   return normalizeAuthUsers(cfg?.users, cfg?.pwdHash).find(user => user.id === id) || null;
 }
 
 function getAuthUserByUsername(cfg, username) {
   const target = String(username || '').trim();
   if (!target) return null;
+  const bootstrapUser = getBootstrapAuthUser();
+  if (bootstrapUser && bootstrapUser.username === target) return bootstrapUser;
   return normalizeAuthUsers(cfg?.users, cfg?.pwdHash).find(user => user.username === target) || null;
 }
 
