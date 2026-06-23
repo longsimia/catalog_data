@@ -195,7 +195,7 @@ select.fs:focus{border-color:var(--gold)}
 /* ── GALLERY ── */
 main{max-width:1340px;margin:0 auto;padding:2.2rem 1.3rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:1.3rem}
-body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.85rem}
+body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
   overflow:hidden;cursor:pointer;position:relative;top:0;
   transform:translateY(0);
@@ -224,14 +224,8 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.85rem}
 .card-tags .tag{flex:0 0 auto}
 .card-tags{margin-top:auto}
 .card-badge{display:inline-flex;align-items:center;justify-content:center;padding:.2rem .48rem;border:1px solid var(--border);border-radius:999px;font-size:.68rem;letter-spacing:.08em;color:var(--muted);background:var(--panel)}
-body[data-gallery-view="list"] .card{display:grid;grid-template-columns:132px minmax(0,1fr);align-items:stretch}
-body[data-gallery-view="list"] .card-cover,
-body[data-gallery-view="list"] .card-cover-video,
-body[data-gallery-view="list"] .card-ph{aspect-ratio:auto;height:100%;min-height:100%;display:flex;align-items:center;justify-content:center}
-body[data-gallery-view="list"] .card-cover-audio{aspect-ratio:auto;height:100%;min-height:100%;border-right:1px solid var(--border)}
-body[data-gallery-view="list"] .card-body{min-height:0;padding:.9rem 1rem}
-body[data-gallery-view="list"] .card-tags{width:100%;margin-left:0;margin-right:0}
-body[data-gallery-view="list"] .card:hover{top:-4px;transform:translateY(-2px)}
+body[data-gallery-view="list"] .gallery-list-row{margin-bottom:0;cursor:pointer}
+body[data-gallery-view="list"] .gallery-list-row:hover{border-color:var(--gdim)}
 body[data-collection-mode="image"] .card-body{min-height:44px;padding:.32rem 1rem}
 body[data-collection-mode="image"] .card-body{display:flex;flex-direction:column;justify-content:center;align-items:stretch}
 body[data-collection-mode="image"] .card-title{margin-bottom:0;min-height:1.4em}
@@ -2534,6 +2528,20 @@ function cardHtml(item, idx) {
   const def = getCollectionDef();
   const creator = item.creator || item.author || '';
   const subtitle = item.subtitle || item.translatedTitle || '';
+  const galleryView = document.body.dataset.galleryView || 'grid';
+  if (galleryView === 'list') {
+    const thumbHtml = thToListThumb(coverEntry);
+    return `<div class="mi gallery-list-row" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
+          ${thumbHtml}
+          <div class="mi-info">
+            <div class="mi-title-row">
+              <div class="mi-t${item.title ? '' : ' empty'}">${esc(item.title || '\u00A0')}</div>
+              ${permissionBadgeHtml(item.permission)}
+            </div>
+            <div class="mi-m">${esc(getItemMetaLabel(item))}</div>
+          </div>
+        </div>`;
+  }
   if (entry.mode === 'image') {
     return `<div class="card" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
           ${renderCardCover(coverEntry, item.title)}
@@ -2568,10 +2576,21 @@ function cardHtml(item, idx) {
       </div>`;
 }
 
+function thToListThumb(th) {
+  return th?.src && th.kind === 'image'
+    ? `<img class="mth" src="${esc(th.src)}" loading="lazy" onerror="this.style.display='none'">`
+    : th?.src && th.kind === 'video'
+    ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"></video>`
+    : th?.src && th.kind === 'audio'
+    ? `<div class="mth" style="display:flex;align-items:center;justify-content:center;color:var(--gold)">${icon('audio')}</div>`
+    : `<div class="mth"${th ? '' : ' style="display:flex;align-items:center;justify-content:center;color:var(--muted)"'}>${th ? '' : icon('image')}</div>`;
+}
+
 function renderGallery() {
   const items = filtered();
   const grid  = document.getElementById('grid');
   const empty = document.getElementById('empty');
+  const galleryView = document.body.dataset.galleryView || 'grid';
   const n = items.length;
   document.getElementById('hd-c').textContent = n > 0 ? `共 ${n} 件` : '';
 
@@ -2582,6 +2601,13 @@ function renderGallery() {
     return;
   }
   empty.style.display = 'none';
+
+  if (galleryView === 'list') {
+    grid.innerHTML = items.map((item, idx) => cardHtml(item, idx)).join('');
+    fitCardTags();
+    renderPager(0);
+    return;
+  }
 
   const totalPages = Math.max(1, Math.ceil(items.length / S.F.pageSize));
   if (S.F.page > totalPages) S.F.page = totalPages;
