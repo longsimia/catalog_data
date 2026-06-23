@@ -81,6 +81,12 @@ $HOME/catalog_data
 http://你的主機IP:3000
 ```
 
+例如：
+
+```text
+http://123.123.123.123:3000
+```
+
 第一次使用時，可以進後台自行設定密碼。
 
 ## 第 5 步：設定主機自動更新
@@ -89,16 +95,22 @@ http://你的主機IP:3000
 
 做法是讓你的 Oracle Cloud 主機自己定時執行更新腳本。
 
-先打開 crontab：
+由於某些連線環境不支援互動式編輯 `crontab -e`，建議直接在 Oracle Cloud 主機上執行：
 
 ```bash
-crontab -e
+printf '%s\n' '*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1' | crontab -
 ```
 
-加入下面這一行：
+然後執行：
 
 ```bash
-printf '%s\n' '*/5 * * * * cd /home/ubuntu/catalog_git && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1' | crontab -
+crontab -l
+```
+
+你應該會看到：
+
+```bash
+*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1
 ```
 
 意思是：
@@ -149,7 +161,6 @@ bash update.sh
 ```bash
 git fetch origin main
 git reset --hard origin/main
-git clean -fd
 npm install --silent
 pm2 reload ecosystem.config.js --update-env
 ```
@@ -157,13 +168,15 @@ pm2 reload ecosystem.config.js --update-env
 這表示：
 
 - 程式碼目錄會被強制同步成維護者最新版本
-- repo 裡的未追蹤檔案會被清掉
+- 已追蹤的程式碼檔案會以遠端 `main` 為準
+- npm 套件會同步更新
+- PM2 會重新載入網站服務
 
-因此正式資料一定要放在專案外的：
+因此仍然建議正式資料放在專案外的：
 
 - `catalog_data`
 
-不要放在 repo 內的 `data/`
+不要把正式資料放在 repo 內的 `data/`，這樣可以避免程式碼更新與站點資料混在一起。
 
 ## 重要原則
 
