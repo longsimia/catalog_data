@@ -98,7 +98,7 @@ crontab -e
 加入下面這一行：
 
 ```bash
-*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1
+printf '%s\n' '*/5 * * * * cd /home/ubuntu/catalog_git && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1' | crontab -
 ```
 
 意思是：
