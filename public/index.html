@@ -195,7 +195,7 @@ select.fs:focus{border-color:var(--gold)}
 /* ── GALLERY ── */
 main{max-width:1340px;margin:0 auto;padding:2.2rem 1.3rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:1.3rem}
-body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem}
+body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justify-items:center}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
   overflow:hidden;cursor:pointer;position:relative;top:0;
   transform:translateY(0);
@@ -225,6 +225,7 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem}
 .card-tags{margin-top:auto}
 .card-badge{display:inline-flex;align-items:center;justify-content:center;padding:.2rem .48rem;border:1px solid var(--border);border-radius:999px;font-size:.68rem;letter-spacing:.08em;color:var(--muted);background:var(--panel)}
 body[data-gallery-view="list"] .gallery-list-row{margin-bottom:0;cursor:pointer}
+body[data-gallery-view="list"] .gallery-list-row{width:min(100%,760px)}
 body[data-gallery-view="list"] .gallery-list-row:hover{border-color:var(--gdim)}
 body[data-collection-mode="image"] .card-body{min-height:44px;padding:.32rem 1rem}
 body[data-collection-mode="image"] .card-body{display:flex;flex-direction:column;justify-content:center;align-items:stretch}
@@ -2520,7 +2521,7 @@ function updatePageJump(totalPages, hasItems) {
   if (!hasItems) wrap.classList.remove('open');
 }
 
-function cardHtml(item, idx) {
+function galleryGridCardHtml(item, idx) {
   const coverEntry = getItemCoverEntry(item);
   const tags = item.tags || [];
   const delay = Math.min(idx, 10) * 0.04;
@@ -2528,20 +2529,6 @@ function cardHtml(item, idx) {
   const def = getCollectionDef();
   const creator = item.creator || item.author || '';
   const subtitle = item.subtitle || item.translatedTitle || '';
-  const galleryView = document.body.dataset.galleryView || 'grid';
-  if (galleryView === 'list') {
-    const thumbHtml = thToListThumb(coverEntry);
-    return `<div class="mi gallery-list-row" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
-          ${thumbHtml}
-          <div class="mi-info">
-            <div class="mi-title-row">
-              <div class="mi-t${item.title ? '' : ' empty'}">${esc(item.title || '\u00A0')}</div>
-              ${permissionBadgeHtml(item.permission)}
-            </div>
-            <div class="mi-m">${esc(getItemMetaLabel(item))}</div>
-          </div>
-        </div>`;
-  }
   if (entry.mode === 'image') {
     return `<div class="card" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
           ${renderCardCover(coverEntry, item.title)}
@@ -2576,6 +2563,22 @@ function cardHtml(item, idx) {
       </div>`;
 }
 
+function galleryListRowHtml(item, idx) {
+  const coverEntry = getItemCoverEntry(item);
+  const delay = Math.min(idx, 10) * 0.04;
+  const thumbHtml = thToListThumb(coverEntry);
+  return `<div class="mi gallery-list-row" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
+        ${thumbHtml}
+        <div class="mi-info">
+          <div class="mi-title-row">
+            <div class="mi-t${item.title ? '' : ' empty'}">${esc(item.title || '\u00A0')}</div>
+            ${permissionBadgeHtml(item.permission)}
+          </div>
+          <div class="mi-m">${esc(getItemMetaLabel(item))}</div>
+        </div>
+      </div>`;
+}
+
 function thToListThumb(th) {
   return th?.src && th.kind === 'image'
     ? `<img class="mth" src="${esc(th.src)}" loading="lazy" onerror="this.style.display='none'">`
@@ -2603,7 +2606,7 @@ function renderGallery() {
   empty.style.display = 'none';
 
   if (galleryView === 'list') {
-    grid.innerHTML = items.map((item, idx) => cardHtml(item, idx)).join('');
+    grid.innerHTML = items.map((item, idx) => galleryListRowHtml(item, idx)).join('');
     fitCardTags();
     renderPager(0);
     return;
@@ -2614,7 +2617,7 @@ function renderGallery() {
   const start = (S.F.page - 1) * S.F.pageSize;
   const shown = items.slice(start, start + S.F.pageSize);
 
-  grid.innerHTML = shown.map((item, idx) => cardHtml(item, idx)).join('');
+  grid.innerHTML = shown.map((item, idx) => galleryGridCardHtml(item, idx)).join('');
   fitCardTags();
   renderPager(items.length);
 }
