@@ -115,12 +115,14 @@ crontab -l
 
 意思是：
 
-- 每 5 分鐘
-- 進入 `/home/ubuntu/catalog_app`
-- 執行 `update.sh`
-- 將輸出寫到 `/home/ubuntu/catalog_update.log`
+- 每 5 分鐘檢查一次是否有新版本
+- 有新版本才會開始 reload ：
+  - 進入 `/home/ubuntu/catalog_app`
+  - 執行 `update.sh`
+  - 將輸出寫到 `/home/ubuntu/catalog_update.log`
 
-如果你想降低更新頻率，也可以改成每 10 分鐘或每 30 分鐘。
+
+如果你想降低檢查頻率，也可以改成每 10 分鐘或每 30 分鐘。
 
 ## 第 6 步：確認自動更新可用
 
@@ -160,6 +162,9 @@ bash update.sh
 
 ```bash
 git fetch origin main
+git rev-parse HEAD
+git rev-parse origin/main
+if 沒有新 commit -> 直接結束
 git reset --hard origin/main
 npm install --silent
 pm2 reload ecosystem.config.js --update-env
@@ -167,6 +172,8 @@ pm2 reload ecosystem.config.js --update-env
 
 這表示：
 
+- 只有遠端有新 commit 時，才會真的更新並 reload
+- 沒有新版本時，腳本會直接結束，不會重載網站
 - 程式碼目錄會被強制同步成維護者最新版本
 - 已追蹤的程式碼檔案會以遠端 `main` 為準
 - npm 套件會同步更新

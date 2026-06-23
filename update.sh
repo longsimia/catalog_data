@@ -6,6 +6,15 @@ cd "$APP_DIR"
 
 echo "▶ 拉取最新版本..."
 git fetch origin main
+
+LOCAL_SHA="$(git rev-parse HEAD)"
+REMOTE_SHA="$(git rev-parse origin/main)"
+
+if [ "$LOCAL_SHA" = "$REMOTE_SHA" ]; then
+  echo "ℹ️  沒有新版本，略過更新"
+  exit 0
+fi
+
 git reset --hard origin/main
 
 echo "▶ 同步套件..."
