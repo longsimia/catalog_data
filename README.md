@@ -101,6 +101,12 @@ http://123.123.123.123:3000
 printf '%s\n' '*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1' | crontab -
 ```
 
+以及：
+
+```bash
+(crontab -l 2>/dev/null; printf '%s\n' '0 0 1 * * > /home/ubuntu/catalog_update.log') | crontab -
+```
+
 然後執行：
 
 ```bash
@@ -111,6 +117,7 @@ crontab -l
 
 ```bash
 */5 * * * * cd /home/ubuntu/catalog_app && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1
+0 0 1 * * > /home/ubuntu/catalog_update.log
 ```
 
 意思是：
@@ -120,9 +127,9 @@ crontab -l
   - 進入 `/home/ubuntu/catalog_app`
   - 執行 `update.sh`
   - 將輸出寫到 `/home/ubuntu/catalog_update.log`
+- 每個月 1 號 00:00 會自動清空 log 內容
 
-
-如果你想降低檢查頻率，也可以改成每 10 分鐘或每 30 分鐘。
+如果你想降低檢查頻率，也可以把 `*/5` 改成`*/10`（每 10 分鐘）或 `*/30`（每 30 分鐘）。
 
 ## 第 6 步：確認自動更新可用
 
