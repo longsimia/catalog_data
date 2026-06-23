@@ -2059,7 +2059,7 @@ function toggleGalleryView() {
   const next = (document.body.dataset.galleryView || 'grid') === 'list' ? 'grid' : 'list';
   applyGalleryView(next);
   setGalleryViewStorage(next);
-  fitCardTags();
+  renderGallery();
 }
 
 async function api(method, url, body) {
