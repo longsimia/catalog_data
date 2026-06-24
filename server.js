@@ -154,12 +154,13 @@ function getImageBundleFiles(item = {}) {
     seen.add(file.key);
     results.push(file);
   };
-  getImageDownloadFiles(item).forEach(push);
   normalizeDownloadFiles(item).forEach(file => push({
     key: file.key,
     name: sanitizeDownloadName(file.name || path.basename(file.key), path.basename(file.key)),
+    relativePath: file.relativePath || file.name || path.basename(file.key),
     abs: path.join(UPLOADS, file.key)
   }));
+  getImageDownloadFiles(item).forEach(push);
   return results;
 }
 

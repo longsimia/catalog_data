@@ -3457,6 +3457,22 @@ function getPreviewTreeIconName(file) {
   if (kind === 'image') return 'image';
   return 'file';
 }
+function shouldRenderPreviewAsGrid(file) {
+  const kind = getMediaKindFromName(file?.name || file?.url || '');
+  return kind === 'image' || kind === 'video';
+}
+function renderPreviewListEntries(files, mode = 'preview') {
+  const list = Array.isArray(files) ? files : [];
+  return list.map(file => {
+    const label = file?.treeName || file?.name || '未命名附件';
+    const iconHtml = `<span class="ico" aria-hidden="true">${icon(getPreviewTreeIconName(file))}</span>`;
+    if (mode === 'download') {
+      const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : 0;
+      return `<button class="preview-entry" type="button" onclick="downloadModalFile(${fileIndex})" title="${esc(label)}" aria-label="${esc(label)}"><span class="meta">${iconHtml}<span class="name" title="${esc(label)}">${esc(label)}</span></span><span class="subact">下載</span></button>`;
+    }
+    return `<a class="preview-entry" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}"><span class="meta">${iconHtml}<span class="name" title="${esc(label)}">${esc(label)}</span></span></a>`;
+  }).join('');
+}
 function renderPreviewTreeNodes(node, mode = 'preview') {
   const folderHtml = Array.from(node.folders.values()).map(folder => {
     const isOpen = !!S.previewTreeOpen[folder.path];
@@ -3468,8 +3484,11 @@ function renderPreviewTreeNodes(node, mode = 'preview') {
       ${isOpen ? `<div class="preview-children">${renderPreviewTreeNodes(folder, mode)}</div>` : ''}
     </div>`;
   }).join('');
-  const fileHtml = renderPreviewFileGrid(node.files, mode);
-  return `${folderHtml}${fileHtml}`;
+  const gridFiles = (node.files || []).filter(shouldRenderPreviewAsGrid);
+  const listFiles = (node.files || []).filter(file => !shouldRenderPreviewAsGrid(file));
+  const gridHtml = renderPreviewFileGrid(gridFiles, mode);
+  const listHtml = renderPreviewListEntries(listFiles, mode);
+  return `${gridHtml}${folderHtml}${listHtml}`;
 }
 function renderPreviewFileTree(files, mode = 'preview') {
   const tree = buildPreviewFileTree(files);
