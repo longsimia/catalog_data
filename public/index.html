@@ -1311,6 +1311,8 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 </div>
 
 <script>
+const UPLOAD_ORIGIN = 'https://longsimiaupload.rikastudio.com';
+
 // ════════════════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════════════════
@@ -2301,7 +2303,7 @@ function buildFileUploadBatches(entries, fileGetter, sizeGetter) {
   return batches;
 }
 async function appendFilesInBatches(itemId, entries, options = {}) {
-  const endpoint = options.endpoint || `/api/items/${itemId}/file`;
+  const endpoint = options.endpoint || `${UPLOAD_ORIGIN}/api/items/${itemId}/file`;
   const token = getToken();
   const fileGetter = options.fileGetter || (entry => entry?.file || entry);
   const pathGetter = options.pathGetter || (entry => getEntryRelativeFilePath(entry));
@@ -2349,7 +2351,7 @@ async function appendFilesInBatches(itemId, entries, options = {}) {
 async function reorderItemDownloadFiles(itemId, orderKeys = []) {
   const fd = new FormData();
   fd.append('order', JSON.stringify(orderKeys.map(key => ({ type: 'key', value: key }))));
-  const resp = await fetch(cUrl(`/api/items/${itemId}/file`), {
+  const resp = await fetch(`${UPLOAD_ORIGIN}/api/items/${itemId}/file`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${getToken()}` },
     body: fd
@@ -4905,7 +4907,7 @@ async function doUp() {
 
   // XHR for upload progress
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', cUrl(`/api/upload/${id}`));
+  xhr.open('POST', `${UPLOAD_ORIGIN}/api/upload/${id}`);
   xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
   xhr.upload.onprogress = e => {
@@ -6595,7 +6597,7 @@ async function saveEdit() {
     }
     if (hasPreviewMutation) {
       previewsFd.append('order', JSON.stringify(previewOrder));
-      const prevResp = await fetch(cUrl(`/api/items/${S.eId}/previews`), {
+      const prevResp = await fetch(`${UPLOAD_ORIGIN}/api/items/${S.eId}/previews`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${getToken()}` },
         body: previewsFd
