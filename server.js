@@ -3329,8 +3329,9 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), (req, re
     const keptPreviewKeys = [];
     const keptPreviewUrls = [];
     const usedNewKeys = new Set();
+    const downloadFileKeys = normalizeDownloadFiles(it).map(file => file.key).filter(Boolean);
 
-    const allowedKeySet = new Set([...(it.previewKeys || []), it.coverKey].filter(Boolean));
+    const allowedKeySet = new Set([...(it.previewKeys || []), it.coverKey, ...downloadFileKeys].filter(Boolean));
     const allowedUrlSet = new Set([...(it.previewUrls || []), it.coverUrl].filter(Boolean));
 
     order.forEach(entry => {
@@ -3346,7 +3347,7 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), (req, re
       }
     });
 
-    const removedKeys = (it.previewKeys || []).filter(key => !keptPreviewKeys.includes(key));
+    const removedKeys = (it.previewKeys || []).filter(key => !keptPreviewKeys.includes(key) && !downloadFileKeys.includes(key));
     removedKeys.forEach(removeStoredFile);
     newKeys.filter(key => !usedNewKeys.has(key)).forEach(removeStoredFile);
 
