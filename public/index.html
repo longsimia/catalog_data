@@ -3553,7 +3553,7 @@ function renderDownloadModalContent(item, data) {
   const title = document.getElementById('preview-title');
   const body = document.getElementById('preview-body');
   if (!body || !title) return;
-  title.textContent = '下載檔案';
+  title.textContent = '下載檔案清單';
   const files = Array.isArray(data?.files) ? data.files : [];
   const allUrl = data?.allUrl || '';
   const allName = data?.allName || item?.downloadName || item?.title || 'download';
