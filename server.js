@@ -2559,7 +2559,7 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
 
   const files = getDownloadableFilesForItem(item, collCfg.mode).map(file => ({
     index: file.index,
-    name: file.name,
+    name: path.posix.basename(String(file.relativePath || file.name || path.basename(file.key || 'download')).replace(/\\/g, '/')),
     relativePath: file.relativePath || file.name,
     url: withCollection(`/api/download/${item.id}/files/${file.index}`, collection),
     key: file.key || '',
@@ -2608,7 +2608,7 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
       title: item.translatedTitle || item.title || '線上閱覽',
       files: files.map((file, index) => ({
         index,
-        name: file?.name || path.basename(file?.key || 'document'),
+        name: path.posix.basename(String(file?.relativePath || file?.name || path.basename(file?.key || 'document')).replace(/\\/g, '/')),
         relativePath: file?.relativePath || file?.name || path.basename(file?.key || 'document'),
         url: withCollection(`/preview-open/${item.id}/${index}`, collection),
         mediaUrl: PREVIEWABLE_MEDIA_MIME[file?.ext]
