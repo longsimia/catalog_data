@@ -3461,9 +3461,9 @@ function renderPreviewTreeNodes(node, mode = 'preview') {
   const folderHtml = Array.from(node.folders.values()).map(folder => {
     const isOpen = !!S.previewTreeOpen[folder.path];
     return `<div class="preview-tree-node">
-      <button class="preview-entry folder${isOpen ? ' open' : ''}" type="button" onclick="togglePreviewTreeFolder('${encodeURIComponent(folder.path)}')">
+      <button class="preview-entry folder${isOpen ? ' open' : ''}" type="button" onclick="togglePreviewTreeFolder('${encodeURIComponent(folder.path)}')" title="${esc(folder.name)}" aria-label="${esc(folder.name)}">
         <span class="arr" aria-hidden="true">${icon(isOpen ? 'chevronDown' : 'chevronRight')}</span>
-        <span class="meta"><span class="folder-ico" aria-hidden="true">${icon('folder')}</span><span class="name">${esc(folder.name)}</span></span>
+        <span class="meta"><span class="folder-ico" aria-hidden="true">${icon('folder')}</span><span class="name" title="${esc(folder.name)}">${esc(folder.name)}</span></span>
       </button>
       ${isOpen ? `<div class="preview-children">${renderPreviewTreeNodes(folder, mode)}</div>` : ''}
     </div>`;
@@ -3497,14 +3497,14 @@ function renderPreviewFileGrid(files, mode = 'preview') {
     const label = file?.treeName || file?.name || `image-${index + 1}`;
     const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : index;
     if (mode === 'download') {
-      return `<button class="preview-card" type="button" onclick="downloadModalFile(${fileIndex})">
+      return `<button class="preview-card" type="button" onclick="downloadModalFile(${fileIndex})" title="${esc(label)}" aria-label="${esc(label)}">
         ${renderPreviewGridThumb(file, label)}
-        <div class="preview-card-name">${esc(label)}</div>
+        <div class="preview-card-name" title="${esc(label)}">${esc(label)}</div>
       </button>`;
     }
-    return `<a class="preview-card" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener">
+    return `<a class="preview-card" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}">
       ${renderPreviewGridThumb(file, label)}
-      <div class="preview-card-name">${esc(label)}</div>
+      <div class="preview-card-name" title="${esc(label)}">${esc(label)}</div>
     </a>`;
   }).join('');
   return html ? `<div class="preview-grid">${html}</div>` : '';

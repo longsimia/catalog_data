@@ -134,12 +134,13 @@ function normalizeDownloadFiles(item) {
 }
 
 function getImageDownloadFiles(item = {}) {
+  const downloadFileMap = new Map(normalizeDownloadFiles(item).map(file => [file.key, file]));
   const previewKeys = Array.isArray(item.previewKeys) ? item.previewKeys.filter(Boolean) : [];
   return previewKeys
     .map(key => ({
       key,
-      name: sanitizeDownloadName(path.basename(key), path.basename(key)),
-      relativePath: path.basename(key),
+      name: sanitizeDownloadName(downloadFileMap.get(key)?.name || path.basename(key), path.basename(key)),
+      relativePath: downloadFileMap.get(key)?.relativePath || downloadFileMap.get(key)?.name || path.basename(key),
       abs: path.join(UPLOADS, key)
     }))
     .filter(file => fs.existsSync(file.abs));
@@ -2609,7 +2610,9 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
         name: file?.name || path.basename(file?.key || 'document'),
         relativePath: file?.relativePath || file?.name || path.basename(file?.key || 'document'),
         url: withCollection(`/preview-open/${item.id}/${index}`, collection),
-        mediaUrl: withCollection(`/api/preview/${item.id}/${index}`, collection)
+        mediaUrl: PREVIEWABLE_MEDIA_MIME[file?.ext]
+          ? withCollection(`/uploads/${file.key}`, collection)
+          : withCollection(`/api/preview/${item.id}/${index}`, collection)
       }))
     });
   } catch (e) {
