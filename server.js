@@ -2204,6 +2204,7 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
   if (!files?.length) return { downloadKey: null, downloadName: null, downloadFiles: [] };
 
   const dir = collUploadDir(collection, itemId);
+  const legacyZipPath = path.join(dir, 'dl.zip');
   fs.mkdirSync(dir, { recursive: true });
 
   const sourceFiles = files.map((file, idx) => {
@@ -2237,6 +2238,7 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
   });
 
   if (normalizedFiles.length === 1) {
+    if (fs.existsSync(legacyZipPath)) fs.rmSync(legacyZipPath, { force: true });
     const file = normalizedFiles[0];
     return {
       downloadKey: file.key,
@@ -2245,13 +2247,10 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
     };
   }
 
-  const entryNames = makeUniqueZipEntryNames(normalizedFiles.map(file => ({ relativePath: file.relativePath })));
-  const zipPath = path.join(dir, 'dl.zip');
   const zipBase = sanitizeDownloadName(String(preferredBaseName || 'download').replace(/\.zip$/i, ''), 'download');
-  const zipBuffer = buildZipBuffer(normalizedFiles.map((file, idx) => ({ path: file.path, name: entryNames[idx] })));
-  fs.writeFileSync(zipPath, zipBuffer);
+  if (fs.existsSync(legacyZipPath)) fs.rmSync(legacyZipPath, { force: true });
   return {
-    downloadKey: buildStoredKey(collection, itemId, 'dl.zip'),
+    downloadKey: null,
     downloadName: `${zipBase}.zip`,
     downloadFiles: normalizedFiles.map(({ key, name, size, relativePath }) => ({ key, name, size, relativePath }))
   };
@@ -2446,6 +2445,7 @@ app.get('/api/items/:id/download', auth, (req, res) => {
   if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限查看這個項目' });
   if (collCfg.mode === 'image' && getImageBundleFiles(item).length) return res.json({ url: withCollection(`/api/download/${item.id}`, collection) });
   if (item.downloadUrl) return res.json({ url: item.downloadUrl });
+  if (getDownloadableFilesForItem(item, collCfg.mode).length) return res.json({ url: withCollection(`/api/download/${item.id}`, collection) });
   if (item.downloadKey) return res.json({ url: withCollection(`/api/download/${item.id}`, collection) });
   return res.json({ url: '' });
 });
@@ -2539,6 +2539,18 @@ app.get('/api/download/:id', auth, (req, res) => {
     }
     const zipBase = sanitizeDownloadName(String(item.title || item.subtitle || 'media').replace(/\.zip$/i, ''), 'media');
     const entryNames = makeUniqueZipEntryNames(files.map(file => ({ originalname: file.name })));
+    const zipBuffer = buildZipBuffer(files.map((file, idx) => ({ path: file.abs, name: entryNames[idx] })));
+    setDownloadHeaders(res, `${zipBase}.zip`);
+    return res.end(zipBuffer);
+  }
+  const files = getDownloadableFilesForItem(item, collCfg.mode);
+  if (files.length) {
+    if (files.length === 1) {
+      setDownloadHeaders(res, files[0].name);
+      return res.sendFile(files[0].abs);
+    }
+    const zipBase = sanitizeDownloadName(String(item.downloadName || item.title || item.subtitle || 'download').replace(/\.zip$/i, ''), 'download');
+    const entryNames = makeUniqueZipEntryNames(files.map(file => ({ relativePath: file.relativePath || file.name })));
     const zipBuffer = buildZipBuffer(files.map((file, idx) => ({ path: file.abs, name: entryNames[idx] })));
     setDownloadHeaders(res, `${zipBase}.zip`);
     return res.end(zipBuffer);
