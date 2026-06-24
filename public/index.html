@@ -264,7 +264,7 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
   justify-content:center;transition:all .2s;line-height:1;flex:0 0 auto}
 .lb-x:hover{outline-color:var(--gold);background:rgba(50,38,10,.7)}
 .lb-inner{display:flex;width:100%;height:100%}
-.lb-vis{flex:6;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.lb-vis{flex:7.5;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .lb-tw{flex:1;overflow:hidden;position:relative}
 .lb-track{display:flex;height:100%;transition:transform .32s var(--ease)}
 .lb-slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:3rem 4rem}
@@ -281,7 +281,7 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .lb-dots{position:absolute;bottom:1.1rem;left:50%;transform:translateX(-50%);display:flex;gap:.45rem}
 .lb-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.22);cursor:pointer;transition:all .2s}
 .lb-dot.on{background:var(--gold);transform:scale(1.35)}
-.lb-info{flex:4;min-width:0;background:var(--panel);border-left:1px solid var(--border);
+.lb-info{flex:2.5;min-width:0;background:var(--panel);border-left:1px solid var(--border);
   padding:2rem 1.4rem 1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:.7rem}
 .lb-head{position:sticky;top:-2rem;z-index:3;display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;
   margin:-2rem -1.4rem 0;padding:2rem 1.4rem .85rem;background:var(--panel)}
@@ -337,12 +337,13 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .collection-add-row{display:flex;align-items:center;gap:.5rem;flex-wrap:nowrap}
 .collection-add-row .fc{flex:0 1 170px;min-width:0;max-width:170px;margin:0}
 .collection-add-row .btn{flex:0 0 auto;white-space:nowrap}
-.collection-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(150px,190px) 42px auto;gap:.5rem;align-items:center}
-.collection-row > .fc:not(.ord-inp){grid-column:1}
-.collection-row .tag{grid-column:2;white-space:nowrap;justify-self:start}
-.collection-row .field-inline-perm{grid-column:3}
-.collection-row .ord-inp{grid-column:4;justify-self:end}
-.collection-row > .ib,.collection-row > button.ib{grid-column:5;justify-self:end}
+.collection-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto auto auto;gap:.5rem;align-items:center}
+.collection-row .ord-inp{grid-column:1;grid-row:1;justify-self:start}
+.collection-row > .fc:not(.ord-inp){grid-column:2 / 6;grid-row:1}
+.collection-row .tag{grid-column:1 / 3;grid-row:2;white-space:nowrap;justify-self:start}
+.collection-row .field-inline-perm{grid-column:3 / 5;grid-row:2}
+.collection-row > .ib,.collection-row > button.ib,.collection-row > .collection-action-placeholder{grid-column:5;grid-row:2;justify-self:end}
+.collection-action-placeholder{display:inline-flex;width:30px;height:30px}
 .field-inline{display:inline-flex;align-items:center;gap:.4rem;min-width:0;flex:0 0 auto}
 .field-inline .fs{flex:1 1 auto;min-width:0}
 .field-inline-perm .fs{width:118px}
@@ -377,6 +378,13 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
   .role-perms{grid-template-columns:1fr;gap:.6rem}
   .role-perm-divider{display:none}
   .role-perm-group + .role-perm-group{padding-top:.6rem;border-top:1px solid var(--border)}
+  .manage-block-head{flex-wrap:wrap}
+  .manage-block-head .manage-actions{width:100%;justify-content:flex-end}
+  .collection-row{grid-template-columns:42px minmax(0,1fr) auto;align-items:start}
+  .collection-row > .fc:not(.ord-inp){grid-column:2 / 4}
+  .collection-row .tag{grid-column:1 / 3;grid-row:2}
+  .collection-row .field-inline-perm{grid-column:1 / 4;grid-row:3}
+  .collection-row > .ib,.collection-row > button.ib,.collection-row > .collection-action-placeholder{grid-column:3;grid-row:2}
 }
 .fc[disabled], .fs[disabled], .btn[disabled]{opacity:.55;cursor:not-allowed}
 .adm-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
@@ -453,6 +461,11 @@ textarea.fc{min-height:72px;resize:vertical}
 .manage-sort-actions{display:flex;align-items:center;justify-content:flex-end;gap:.45rem;flex-wrap:wrap;margin-left:auto}
 .manage-actions{display:flex;justify-content:flex-end;gap:.45rem;margin-top:.75rem}
 .manage-actions .btn{min-height:30px;padding:.28rem .62rem;font-size:.74rem;white-space:nowrap}
+.manage-block-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem;margin:.2rem 0 .75rem}
+.manage-block-head .manage-head-copy{min-width:0;flex:1}
+.manage-block-head .manage-actions{margin-top:0;flex-shrink:0}
+.manage-block-head .tag-man-add{margin-bottom:0}
+.manage-block-head .tag-man-add .fc{min-width:180px}
 .tag-man-list{display:flex;flex-direction:column;gap:.45rem}
 .tag-row{position:relative;display:flex;align-items:center;gap:.55rem;padding:.58rem .68rem;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);cursor:grab;transition:border-color .2s,box-shadow .18s var(--ease)}
 .tag-row.drag{opacity:.45}
@@ -462,7 +475,7 @@ textarea.fc{min-height:72px;resize:vertical}
 .tag-row.drop-before::before,.tag-row.drop-after::after{opacity:1;transform:scaleX(1)}
 .tag-row.drop-before,.tag-row.drop-after{border-color:var(--gold);box-shadow:0 0 0 1px var(--gglow)}
 .tag-row.moved{animation:miMoved 1.1s ease}
-.tag-row-name{flex:1;font-size:.82rem;color:var(--text)}
+.tag-row-name{flex:1;font-size:.82rem;color:var(--text);min-width:0}
 .tag-row-edit{flex:1;min-width:0}
 .tag-row-acts{display:flex;align-items:center;gap:.35rem}
 .tag-row-acts .ib{width:28px;height:28px}
@@ -1026,7 +1039,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           <div class="di" id="dz-f-ico"></div>
           <p id="u-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
         </div>
-        <input type="file" id="fi-f" webkitdirectory mozdirectory multiple style="display:none" onchange="onFile(this.files)">
+        <input type="file" id="fi-f" multiple style="display:none" onchange="onFile(this.files)">
         <div id="fi-picked"></div>
         <div id="fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
       </div>
@@ -1052,29 +1065,33 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       <details class="disc" id="collection-disc" data-disc-id="collection-disc">
         <summary><div class="disc-head"><span>資料夾頁籤</span><span class="disc-head-actions"></span></div></summary>
         <div class="disc-body">
-          <div class="collection-add-stack">
-            <p class="role-note" style="margin:0">建立頁籤後僅能再調整頁籤名稱與權限，不得變更模式。</p>
-            <div class="collection-add-row">
-              <input type="text" class="fc" id="collection-new-label" placeholder="新增頁籤"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();addCollectionConfigRow()}">
-              <div class="field-inline" title="建立後不可變更">
-                <span class="field-cap">模式</span>
-                <select class="fs" id="collection-new-mode">
-                  <option value="scenario">資料</option>
-                  <option value="image">圖庫</option>
-                </select>
+          <div class="manage-block-head">
+            <div class="manage-head-copy">
+              <div class="collection-add-stack">
+                <p class="role-note" style="margin:0">建立頁籤後僅能再調整頁籤名稱與權限，不得變更模式。</p>
+                <div class="collection-add-row">
+                  <input type="text" class="fc" id="collection-new-label" placeholder="新增頁籤"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();addCollectionConfigRow()}">
+                  <div class="field-inline" title="建立後不可變更">
+                    <span class="field-cap">模式</span>
+                    <select class="fs" id="collection-new-mode">
+                      <option value="scenario">資料</option>
+                      <option value="image">圖庫</option>
+                    </select>
+                  </div>
+                  <div class="field-inline" title="之後仍可調整">
+                    <span class="field-cap">權限</span>
+                    <select class="fs" id="collection-new-permission"></select>
+                  </div>
+                  <button class="btn btn-out" type="button" onclick="addCollectionConfigRow()">新增</button>
+                </div>
               </div>
-              <div class="field-inline" title="之後仍可調整">
-                <span class="field-cap">權限</span>
-                <select class="fs" id="collection-new-permission"></select>
-              </div>
-              <button class="btn btn-out" type="button" onclick="addCollectionConfigRow()">新增</button>
+            </div>
+            <div class="manage-actions">
+              <button class="btn btn-gold sort-save-btn" id="btn-save-collections" onclick="saveCollectionConfig()">儲存</button>
             </div>
           </div>
           <div class="role-grid" id="collection-config-list"></div>
-          <div class="manage-actions">
-            <button class="btn btn-gold sort-save-btn" id="btn-save-collections" onclick="saveCollectionConfig()">儲存</button>
-          </div>
         </div>
       </details>
       <details class="disc" id="role-disc" data-disc-id="role-disc">
@@ -1091,27 +1108,35 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       </details>
       <div class="sh">類別庫</div>
       <div class="tag-man-box" id="cat-man-box">
-        <div class="tag-man-add">
-          <input type="text" class="fc" id="cat-new" placeholder="新增類別"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();addMasterCategory()}">
+        <div class="manage-block-head">
+          <div class="manage-head-copy">
+            <div class="tag-man-add">
+              <input type="text" class="fc" id="cat-new" placeholder="新增類別"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();addMasterCategory()}">
+            </div>
+          </div>
+          <div class="manage-actions">
+            <button class="btn btn-out" id="btn-cancel-cats" onclick="cancelCategoryChanges()">取消變更</button>
+            <button class="btn btn-gold sort-save-btn" id="btn-save-cats" onclick="saveCategories()">儲存</button>
+          </div>
         </div>
         <div class="tag-man-list" id="cat-man-list"></div>
-        <div class="manage-actions">
-          <button class="btn btn-out" id="btn-cancel-cats" onclick="cancelCategoryChanges()">取消變更</button>
-          <button class="btn btn-gold sort-save-btn" id="btn-save-cats" onclick="saveCategories()">儲存</button>
-        </div>
       </div>
       <div class="sh">標籤庫</div>
       <div class="tag-man-box">
-        <div class="tag-man-add">
-          <input type="text" class="fc" id="tag-new" placeholder="新增標籤"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();addMasterTag()}">
+        <div class="manage-block-head">
+          <div class="manage-head-copy">
+            <div class="tag-man-add">
+              <input type="text" class="fc" id="tag-new" placeholder="新增標籤"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();addMasterTag()}">
+            </div>
+          </div>
+          <div class="manage-actions">
+            <button class="btn btn-out" id="btn-cancel-tags" onclick="cancelTagChanges()">取消變更</button>
+            <button class="btn btn-gold sort-save-btn" id="btn-save-tags" onclick="saveTags()">儲存</button>
+          </div>
         </div>
         <div class="tag-man-list" id="tag-man-list"></div>
-        <div class="manage-actions">
-          <button class="btn btn-out" id="btn-cancel-tags" onclick="cancelTagChanges()">取消變更</button>
-          <button class="btn btn-gold sort-save-btn" id="btn-save-tags" onclick="saveTags()">儲存</button>
-        </div>
       </div>
       <div id="man-list"></div>
       <div class="manage-page" id="man-page">
@@ -1216,7 +1241,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <div class="di" id="e-dz-f-ico"></div>
         <p id="e-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
       </div>
-      <input type="file" id="e-fi-f" webkitdirectory mozdirectory multiple style="display:none" onchange="onEditFile(this.files)">
+      <input type="file" id="e-fi-f" multiple style="display:none" onchange="onEditFile(this.files)">
       <div id="e-fi-picked"></div>
       <div id="e-fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
     </div>
@@ -3493,10 +3518,10 @@ function renderCollectionConfigPanel() {
     .map((item, idx) => ({ item, idx }))
     .filter(({ item }) => canCurrentUserAccessCollectionConfigItem(item));
   box.innerHTML = visibleEntries.map(({ item, idx }) => `
-    <div class="role-card" draggable="${canManage && item.key !== 'scenario' ? 'true' : 'false'}" data-collection-idx="${idx}" data-collection-key="${esc(item.key)}"
-      ${canManage && item.key !== 'scenario' ? `ondragstart="collectionCardDragStart(event, ${idx})" ondragover="collectionCardDragOver(event, ${idx})" ondrop="collectionCardDrop(event, ${idx})" ondragend="collectionCardDragEnd(event)"` : ''}>
+    <div class="role-card" draggable="${canManage ? 'true' : 'false'}" data-collection-idx="${idx}" data-collection-key="${esc(item.key)}"
+      ${canManage ? `ondragstart="collectionCardDragStart(event, ${idx})" ondragover="collectionCardDragOver(event, ${idx})" ondrop="collectionCardDrop(event, ${idx})" ondragend="collectionCardDragEnd(event)"` : ''}>
       <div class="collection-row">
-        <input type="number" class="fc ord-inp" value="${idx + 1}" min="1" max="${S.collections.length}" ${canManage && item.key !== 'scenario' ? '' : 'disabled'}
+        <input type="number" class="fc ord-inp" value="${idx + 1}" min="1" max="${S.collections.length}" ${canManage ? '' : 'disabled'}
           onclick="event.stopPropagation()" onfocus="primeInlineOrderInput(event,this,${idx + 1})" onkeydown="handleInlineOrderEnter(event)" onblur="commitCollectionOrderInput(this,${idx})">
         <input type="text" class="fc" value="${esc(item.label || '')}" placeholder="頁籤名稱" ${canManage ? '' : 'disabled'} oninput="updateCollectionConfigField(${idx},'label',this.value)">
         <span class="tag" title="模式（建立後不可變更）">模式：${item.mode === 'image' ? '圖庫' : '資料'}</span>
@@ -3507,7 +3532,7 @@ function renderCollectionConfigPanel() {
           </select>
         </div>
         ${item.key === 'scenario'
-          ? '<span class="ib" aria-hidden="true" style="visibility:hidden"></span>'
+          ? '<span class="collection-action-placeholder" aria-hidden="true"></span>'
           : `<button class="ib del" type="button" onclick="removeCollectionConfigRow(${idx})" title="刪除頁籤" ${canDeleteCollections ? '' : 'disabled'}>${icon('trash')}</button>`}
       </div>
       <p class="role-note">資料夾代號：${esc(item.key)}${item.key === 'scenario' ? '・預設頁籤，無法刪除或變更模式' : ''}</p>
@@ -3523,7 +3548,6 @@ function clearCollectionCardDropState() {
 
 function collectionCardDragStart(e, idx) {
   if (!canRolePermission('manageCollections')) return;
-  if (S.collections[idx]?.key === 'scenario') return;
   S.collectionDragIdx = idx;
   e.currentTarget.classList.add('drag');
   e.dataTransfer.effectAllowed = 'move';
@@ -3532,7 +3556,6 @@ function collectionCardDragStart(e, idx) {
 function collectionCardDragOver(e, idx) {
   e.preventDefault();
   if (S.collectionDragIdx === null || S.collectionDragIdx === undefined) return;
-  if (S.collections[idx]?.key === 'scenario') return;
   const rect = e.currentTarget.getBoundingClientRect();
   const pos = e.clientY >= rect.top + rect.height / 2 ? 'after' : 'before';
   if (S.collectionDragOverIdx === idx && S.collectionDragOverPos === pos) return;
@@ -3545,12 +3568,6 @@ function collectionCardDragOver(e, idx) {
 function collectionCardDrop(e, idx) {
   e.preventDefault();
   if (S.collectionDragIdx === null || S.collectionDragIdx === undefined) return;
-  if (S.collections[idx]?.key === 'scenario') {
-    clearCollectionCardDropState();
-    S.collectionDragIdx = null;
-    renderCollectionConfigPanel();
-    return;
-  }
   const rect = e.currentTarget.getBoundingClientRect();
   const pos = S.collectionDragOverIdx === idx && S.collectionDragOverPos ? S.collectionDragOverPos : (e.clientY >= rect.top + rect.height / 2 ? 'after' : 'before');
   let insertIdx = idx + (pos === 'after' ? 1 : 0);
@@ -4789,13 +4806,13 @@ function renderTagManager() {
   list.innerHTML = tags.map((tag, i) => `
     <div class="tag-row${S.tagJustMoved === tag ? ' moved' : ''}${S.tagDragOverIdx === i && S.tagDragOverPos === 'before' ? ' drop-before' : ''}${S.tagDragOverIdx === i && S.tagDragOverPos === 'after' ? ' drop-after' : ''}" draggable="${canEditTags ? 'true' : 'false'}" data-i="${i}"
       ${canEditTags ? `ondragstart="tagDragStart(event,${i})" ondragover="tagDragOver(event)" ondrop="tagDrop(event,${i})" ondragend="tagDragEnd(event)"` : ''}>
+      <input type="number" class="fc ord-inp" value="${i + 1}" min="1" max="${tags.length}" ${canEditTags ? '' : 'disabled'}
+        onclick="event.stopPropagation()" onfocus="primeInlineOrderInput(event,this,${i + 1})" onkeydown="handleInlineOrderEnter(event)" onblur="commitTagOrderInput(this,${i})">
       <span class="dh">${icon('grip')}</span>
       ${S.tagEditIdx === i
         ? `<input type="text" class="fc tag-row-edit" id="tag-edit-input" value="${esc(tag)}"
              onkeydown="if(event.key==='Enter'){event.preventDefault();commitTagRename(${i})} if(event.key==='Escape'){cancelTagRename()}">`
         : `<span class="tag-row-name">${esc(tag)}</span>`}
-      <input type="number" class="fc ord-inp" value="${i + 1}" min="1" max="${tags.length}" ${canEditTags ? '' : 'disabled'}
-        onclick="event.stopPropagation()" onfocus="primeInlineOrderInput(event,this,${i + 1})" onkeydown="handleInlineOrderEnter(event)" onblur="commitTagOrderInput(this,${i})">
       <div class="tag-row-acts">
         ${S.tagEditIdx === i
           ? `<button class="ib" type="button" ${canEditTags ? `onclick="commitTagRename(${i})"` : 'disabled'} title="儲存">${icon('save')}</button>
@@ -4819,13 +4836,13 @@ function renderCategoryManager() {
   list.innerHTML = cats.map((cat, i) => `
     <div class="tag-row${S.catJustMoved === cat ? ' moved' : ''}${S.catDragOverIdx === i && S.catDragOverPos === 'before' ? ' drop-before' : ''}${S.catDragOverIdx === i && S.catDragOverPos === 'after' ? ' drop-after' : ''}" draggable="${canEditCats ? 'true' : 'false'}" data-i="${i}"
       ${canEditCats ? `ondragstart="catDragStart(event,${i})" ondragover="catDragOver(event)" ondrop="catDrop(event,${i})" ondragend="catDragEnd(event)"` : ''}>
+      <input type="number" class="fc ord-inp" value="${i + 1}" min="1" max="${cats.length}" ${canEditCats ? '' : 'disabled'}
+        onclick="event.stopPropagation()" onfocus="primeInlineOrderInput(event,this,${i + 1})" onkeydown="handleInlineOrderEnter(event)" onblur="commitCategoryOrderInput(this,${i})">
       <span class="dh">${icon('grip')}</span>
       ${S.catEditIdx === i
         ? `<input type="text" class="fc tag-row-edit" id="cat-edit-input" value="${esc(cat)}"
              onkeydown="if(event.key==='Enter'){event.preventDefault();commitCategoryRename(${i})} if(event.key==='Escape'){cancelCategoryRename()}">`
         : `<span class="tag-row-name">${esc(cat)}</span>`}
-      <input type="number" class="fc ord-inp" value="${i + 1}" min="1" max="${cats.length}" ${canEditCats ? '' : 'disabled'}
-        onclick="event.stopPropagation()" onfocus="primeInlineOrderInput(event,this,${i + 1})" onkeydown="handleInlineOrderEnter(event)" onblur="commitCategoryOrderInput(this,${i})">
       <div class="tag-row-acts">
         ${S.catEditIdx === i
           ? `<button class="ib" type="button" ${canEditCats ? `onclick="commitCategoryRename(${i})"` : 'disabled'} title="儲存">${icon('save')}</button>
@@ -5566,7 +5583,7 @@ function commitTagOrderInput(input, idx) {
 }
 function commitCollectionOrderInput(input, idx) {
   const item = S.collections[idx];
-  if (!item || item.key === 'scenario') {
+  if (!item) {
     renderCollectionConfigPanel();
     return;
   }
