@@ -339,6 +339,8 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .auth-user-row .auth-user-google{grid-column:2;grid-row:2}
 .auth-user-row .auth-user-del{grid-column:3;grid-row:2;justify-self:start}
 .auth-user-list .auth-user-row:first-child .auth-user-del{display:none}
+.auth-user-status{grid-column:1 / -1;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;font-size:.74rem;color:var(--muted)}
+.auth-user-status .tag{font-size:.66rem}
 .auth-user-row .ib{width:32px;height:32px}
 .collection-add-stack{display:grid;gap:.38rem;margin:.55rem 0}
 .collection-add-row{display:flex;align-items:center;gap:.45rem;flex-wrap:nowrap}
@@ -4150,6 +4152,38 @@ function applyRolePermissionUI() {
   document.querySelector('#tab-man .disc-page-btn')?.toggleAttribute('disabled', !canEditOrder);
 }
 
+function normalizeGoogleEmail(email) {
+  const raw = String(email || '').trim().toLowerCase();
+  if (!raw) return '';
+  const at = raw.indexOf('@');
+  if (at <= 0 || at === raw.length - 1) return raw;
+  let local = raw.slice(0, at);
+  let domain = raw.slice(at + 1);
+  if (domain === 'googlemail.com') domain = 'gmail.com';
+  if (domain === 'gmail.com') {
+    local = local.split('+')[0].replace(/\./g, '');
+  }
+  return `${local}@${domain}`;
+}
+
+function getAuthUserGoogleStatus(user) {
+  if (user?.googleOnly && user?.googleEmail) return { text: '已停用帳號密碼登入，僅限 Google 登入', tone: 'owner' };
+  if (user?.googleEmail) return { text: '已綁定 Google 信箱，仍可使用帳號密碼登入', tone: 'admin' };
+  return { text: '尚未綁定 Google 登入', tone: '' };
+}
+
+function authUserStatusHtml(user, i, isOwner) {
+  const status = getAuthUserGoogleStatus(user);
+  const resetBtn = isOwner && user?.googleOnly
+    ? `<button class="btn btn-out" type="button" style="padding:.28rem .6rem;font-size:.72rem" onclick="clearGoogleOnly(${i})">恢復帳密登入</button>`
+    : '';
+  return `<div class="auth-user-status">
+    <span class="tag${status.tone ? ` ${status.tone}` : ''}">登入狀態</span>
+    <span>${esc(status.text)}</span>
+    ${resetBtn}
+  </div>`;
+}
+
 function renderAuthUserList() {
   const box = document.getElementById('auth-users-list');
   if (!box) return;
@@ -4160,7 +4194,7 @@ function renderAuthUserList() {
     addBtn?.setAttribute('disabled', 'disabled');
     addBtn && (addBtn.style.display = 'none');
     saveBtn?.removeAttribute('disabled');
-    const self = S.authUsers[0] || { id: '', username: '', role: S.currentAuthUser?.role || 'admin', password: '', googleEmail: '' };
+    const self = S.authUsers[0] || { id: '', username: '', role: S.currentAuthUser?.role || 'admin', password: '', googleEmail: '', googleOnly: false };
     box.innerHTML = `
       <p style="color:var(--muted);font-size:.78rem;margin:0 0 .55rem">你可以在這裡修改自己的用戶名與密碼。</p>
       <div class="auth-user-row">
@@ -4170,6 +4204,7 @@ function renderAuthUserList() {
         <input type="email" class="fc auth-user-google" value="${esc(self.googleEmail || '')}"
           placeholder="Google 登入信箱（選填）"
           oninput="updateAuthUserField(0,'googleEmail',this.value)">
+        ${authUserStatusHtml(self, 0, false)}
       </div>
     `;
     return;
@@ -4190,6 +4225,7 @@ function renderAuthUserList() {
         placeholder="Google 登入信箱（選填）"
         oninput="updateAuthUserField(${i},'googleEmail',this.value)">
       <button class="ib del auth-user-del" type="button" onclick="removeAuthUserRow(${i})" title="刪除此帳號">${icon('trash')}</button>
+      ${authUserStatusHtml(user, i, true)}
     </div>
     `).join('')}
   `;
@@ -4201,8 +4237,16 @@ function updateAuthUserField(i, field, value) {
   if (field === 'role') renderAuthUserList();
 }
 
+function clearGoogleOnly(i) {
+  if (S.currentAuthUser?.role !== 'owner' || !S.authUsers[i]) return;
+  if (!S.authUsers[i].googleOnly) return;
+  S.authUsers[i].googleOnly = false;
+  renderAuthUserList();
+  toast('已解除 Google-only 限制，記得儲存帳號設定', 'ok');
+}
+
 function addAuthUserRow() {
-  S.authUsers.push({ id: '', username: '', role: 'admin', password: '', googleEmail: '' });
+  S.authUsers.push({ id: '', username: '', role: 'admin', password: '', googleEmail: '', googleOnly: false });
   renderAuthUserList();
 }
 
@@ -4225,7 +4269,8 @@ async function loadAuthUsers() {
       username: user.username || '',
       role: user.role || 'admin',
       password: '',
-      googleEmail: user.googleEmail || ''
+      googleEmail: user.googleEmail || '',
+      googleOnly: !!user.googleOnly
     }));
     renderAuthUserList();
   } catch (e) {
@@ -4264,15 +4309,23 @@ async function saveAuthUsers() {
     username: String(user.username || '').trim(),
     role: String(user.role || 'admin'),
     password: String(user.password || ''),
-    googleEmail: String(user.googleEmail || '').trim().toLowerCase()
+    googleEmail: String(user.googleEmail || '').trim().toLowerCase(),
+    googleOnly: !!user.googleOnly
   }));
   if (!users.length) { toast('至少要保留一組登入帳號', 'err'); return; }
   if (isOwner && users[0]) users[0].role = 'owner';
   if (users.some(user => !user.username)) { toast('每組帳號都需要用戶名', 'err'); return; }
   if (isOwner && users.filter(user => user.role === 'owner').length !== 1) { toast(`只能有一位${getRoleLabel('owner')}`, 'err'); return; }
   const seenNames = new Set();
+  const seenGoogleEmails = new Set();
   for (const user of users) {
+    if (user.googleOnly && !user.googleEmail) { toast('已設為僅限 Google 登入的帳號不能清空 Google 信箱', 'err'); return; }
     if (seenNames.has(user.username)) { toast(`用戶名「${user.username}」重複`, 'err'); return; }
+    const normalizedGoogleEmail = normalizeGoogleEmail(user.googleEmail);
+    if (normalizedGoogleEmail) {
+      if (seenGoogleEmails.has(normalizedGoogleEmail)) { toast('Google 信箱重複綁定：Gmail 的點號與 +tag 會視為同一個帳號', 'err'); return; }
+      seenGoogleEmails.add(normalizedGoogleEmail);
+    }
     seenNames.add(user.username);
   }
   try {
@@ -4298,7 +4351,8 @@ async function saveAuthUsers() {
       username: user.username || '',
       role: user.role || 'admin',
       password: '',
-      googleEmail: user.googleEmail || ''
+      googleEmail: user.googleEmail || '',
+      googleOnly: !!user.googleOnly
     }));
     renderAuthUserList();
     toast('帳號設定已儲存', 'ok');

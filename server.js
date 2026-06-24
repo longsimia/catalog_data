@@ -509,6 +509,20 @@ function makeAuthUserId() {
   return `usr-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
 }
 
+function normalizeGoogleEmail(email) {
+  const raw = String(email || '').trim().toLowerCase();
+  if (!raw) return '';
+  const at = raw.indexOf('@');
+  if (at <= 0 || at === raw.length - 1) return raw;
+  let local = raw.slice(0, at);
+  let domain = raw.slice(at + 1);
+  if (domain === 'googlemail.com') domain = 'gmail.com';
+  if (domain === 'gmail.com') {
+    local = local.split('+')[0].replace(/\./g, '');
+  }
+  return `${local}@${domain}`;
+}
+
 function normalizeAuthUsers(rawUsers = [], fallbackPwdHash = '') {
   const list = Array.isArray(rawUsers) ? rawUsers : [];
   const normalized = list
@@ -517,7 +531,8 @@ function normalizeAuthUsers(rawUsers = [], fallbackPwdHash = '') {
       username: typeof user?.username === 'string' ? user.username.trim() : '',
       passwordHash: typeof user?.passwordHash === 'string' ? user.passwordHash : '',
       role: sanitizeRoleKey(user?.role) || (idx === 0 ? 'owner' : 'admin'),
-      googleEmail: typeof user?.googleEmail === 'string' ? user.googleEmail.trim().toLowerCase() : ''
+      googleEmail: typeof user?.googleEmail === 'string' ? user.googleEmail.trim().toLowerCase() : '',
+      googleOnly: !!user?.googleOnly
     }))
     .filter(user => user.username);
   if (normalized.some(user => user.passwordHash)) return normalized;
@@ -2379,11 +2394,16 @@ app.post('/api/auth/google', async (req, res) => {
     const client = new OAuth2Client(clientId);
     const ticket = await client.verifyIdToken({ idToken: req.body.credential, audience: clientId });
     const payload = ticket.getPayload();
-    const googleEmail = (payload?.email || '').toLowerCase();
+    const googleEmail = normalizeGoogleEmail(payload?.email || '');
     if (!googleEmail) return res.status(401).json({ error: '無法取得 Google 帳號信箱' });
 
     const allUsers = normalizeAuthUsers(cfg.users, cfg.pwdHash);
-    const user = allUsers.find(u => u.googleEmail && u.googleEmail === googleEmail);
+    const user = allUsers.find(u => normalizeGoogleEmail(u.googleEmail) === googleEmail);
+    if (user && !user.googleOnly) {
+      cfg.users = allUsers.map(entry => entry.id === user.id ? { ...entry, googleOnly: true } : entry);
+      saveCfg(cfg);
+      user.googleOnly = true;
+    }
     if (!user) return res.status(401).json({ error: `此 Google 帳號（${googleEmail}）尚未綁定任何使用者，請站主至後台帳號管理填入對應信箱` });
 
     res.json({
@@ -2396,6 +2416,8 @@ app.post('/api/auth/google', async (req, res) => {
 
 app.post('/api/login', (req, res) => {
   const cfg = readCfg();
+  const targetUser = getAuthUserByUsername(cfg, req.body.username || '');
+  if (targetUser?.googleOnly) return res.status(403).json({ error: '此帳號已停用帳號密碼登入，請改用 Google 登入' });
   const user = getAuthUserByCredentials(cfg, req.body.username || '', req.body.password || '');
   if (!user) return res.status(401).json({ error: '用戶名或密碼錯誤' });
   res.json({
@@ -2915,7 +2937,8 @@ app.get('/api/auth-users', auth, (req, res) => {
       role: user.role,
       roleLabel: roleConfig[user.role]?.label || user.role,
       hasPassword: !!user.passwordHash,
-      googleEmail: user.googleEmail || ''
+      googleEmail: user.googleEmail || '',
+      googleOnly: !!user.googleOnly
     }));
     res.json({
       users,
@@ -2948,12 +2971,20 @@ app.put('/api/auth-users', auth, (req, res) => {
         if (!passwordHash) throw new Error(`第 ${idx + 1} 組帳號需要設定密碼`);
         const requestedRole = sanitizeRoleKey(entry?.role);
         const role = requestedRole && allowedRoles.has(requestedRole) ? requestedRole : 'admin';
+        const googleEmail = String(entry?.googleEmail || '').trim().toLowerCase();
+        const googleEmailNormalized = normalizeGoogleEmail(googleEmail);
+        const googleOnly = !!entry?.googleOnly;
+        if (googleOnly && !googleEmail) throw new Error(`第 ${idx + 1} 個帳號已設為僅限 Google 登入，不能清空 Google 信箱`);
+        if (googleEmailNormalized && incoming.some((other, otherIdx) => otherIdx !== idx && normalizeGoogleEmail(other?.googleEmail || '') === googleEmailNormalized)) {
+          throw new Error(`第 ${idx + 1} 個帳號的 Google 信箱與其他帳號重複綁定`);
+        }
         return {
           id,
           username,
           passwordHash,
           role,
-          googleEmail: String(entry?.googleEmail || '').trim().toLowerCase()
+          googleEmail,
+          googleOnly
         };
       });
       if (nextUsers[0]?.role !== 'owner') throw new Error('第一組帳號必須固定為群主');
@@ -2970,12 +3001,18 @@ app.put('/api/auth-users', auth, (req, res) => {
       if (existingUsers.some(user => user.id !== self.id && user.username === username)) throw new Error(`用戶名「${username}」重複，請調整後再儲存`);
       const password = typeof entry?.password === 'string' ? entry.password : '';
       const passwordHash = password ? sha256(password) : self.passwordHash;
+      const googleEmail = String(entry?.googleEmail || '').trim().toLowerCase();
+      const googleEmailNormalized = normalizeGoogleEmail(googleEmail);
       if (!passwordHash) throw new Error('帳號需要設定密碼');
+      if (self.googleOnly && !googleEmail) throw new Error('此帳號目前僅限 Google 登入，不能清空 Google 信箱');
+      if (googleEmailNormalized && existingUsers.some(user => user.id !== self.id && normalizeGoogleEmail(user.googleEmail) === googleEmailNormalized)) {
+        throw new Error('此 Google 信箱已被其他帳號綁定');
+      }
       nextUsers = existingUsers.map(user => user.id === self.id ? {
         ...user,
         username,
         passwordHash,
-        googleEmail: String(entry?.googleEmail || '').trim().toLowerCase()
+        googleEmail
       } : user);
     }
     cfg.users = nextUsers;
@@ -2983,7 +3020,7 @@ app.put('/api/auth-users', auth, (req, res) => {
     const currentUser = nextUsers.find(user => user.id === req.authUser?.id) || null;
     res.json({
       ok: true,
-      users: (req.authUser?.role === 'owner' ? nextUsers : nextUsers.filter(user => user.id === req.authUser?.id)).map(user => ({ id: user.id, username: user.username, role: user.role, roleLabel: roleConfig[user.role]?.label || user.role, hasPassword: !!user.passwordHash, googleEmail: user.googleEmail || '' })),
+      users: (req.authUser?.role === 'owner' ? nextUsers : nextUsers.filter(user => user.id === req.authUser?.id)).map(user => ({ id: user.id, username: user.username, role: user.role, roleLabel: roleConfig[user.role]?.label || user.role, hasPassword: !!user.passwordHash, googleEmail: user.googleEmail || '', googleOnly: !!user.googleOnly })),
       currentUser: currentUser ? { id: currentUser.id, username: currentUser.username, role: currentUser.role } : null
     });
   } catch (e) { res.status(400).json({ error: e.message }); }
