@@ -2281,7 +2281,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 } // 500 MB 上限
+  limits: { fileSize: 2 * 1024 * 1024 * 1024 } // 2 GB 上限
 });
 function removeStoredFile(key) {
   if (!key) return;

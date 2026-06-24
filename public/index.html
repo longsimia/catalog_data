@@ -2309,8 +2309,11 @@ async function appendFilesInBatches(itemId, entries, options = {}) {
   const batches = buildFileUploadBatches(entries, fileGetter, sizeGetter);
   let lastItem = null;
   let done = 0;
+  let keptKeys = Array.isArray(options.keptKeys) ? [...options.keptKeys] : [];
+  const uploadedKeyMap = new Map();
   for (const batch of batches) {
     const fd = new FormData();
+    if (options.includeKeptKeys) fd.append('keptKeys', JSON.stringify(keptKeys));
     batch.forEach(entry => {
       const file = fileGetter(entry);
       if (!file) return;
@@ -2326,10 +2329,22 @@ async function appendFilesInBatches(itemId, entries, options = {}) {
     const data = parseJsonText(text, {});
     if (!resp.ok) throw new Error(data.error || readResponseErrorText(text, '附檔上傳失敗'));
     lastItem = data.item || lastItem;
+    if (options.includeKeptKeys && lastItem) {
+      const nextFiles = getItemDownloadFiles(lastItem);
+      const prevKeySet = new Set(keptKeys);
+      const newFiles = nextFiles.filter(file => !prevKeySet.has(file.key));
+      batch.forEach((entry, idx) => {
+        const mapKey = typeof options.entryKeyGetter === 'function' ? options.entryKeyGetter(entry) : null;
+        if (!mapKey) return;
+        const matched = newFiles[idx];
+        if (matched?.key) uploadedKeyMap.set(mapKey, matched.key);
+      });
+      keptKeys = nextFiles.map(file => file.key);
+    }
     done += batch.length;
     if (typeof options.onProgress === 'function') options.onProgress(done, entries.length);
   }
-  return lastItem;
+  return { item: lastItem, keptKeys, uploadedKeyMap };
 }
 async function reorderItemDownloadFiles(itemId, orderKeys = []) {
   const fd = new FormData();
@@ -4904,16 +4919,19 @@ async function doUp() {
         let createdItem = parseJsonText(xhr.responseText, {}).item || null;
         if (S.up.files.length) {
           setStat('附檔上傳中…');
-          createdItem = await appendFilesInBatches(id, S.up.files, {
+          const uploadResult = await appendFilesInBatches(id, S.up.files, {
             fileGetter: file => file,
             pathGetter: file => getRelativeFilePath(file) || file.name,
             sizeGetter: file => file?.size || 0,
+            includeKeptKeys: true,
+            keptKeys: getItemDownloadFiles(createdItem).map(file => file.key),
             onProgress: (done, total) => {
               const progress = 92 + Math.round((done / Math.max(total, 1)) * 8);
               setProgress(Math.min(progress, 100));
               setStat(`附檔上傳中… (${done}/${total})`);
             }
-          }) || createdItem;
+          });
+          createdItem = uploadResult?.item || createdItem;
         }
         await loadCatalog();
         if (createdItem) {
@@ -6599,22 +6617,30 @@ async function saveEdit() {
       const newEntries = S.eDownloadEntries.filter(entry => entry.kind === 'new');
       if (newEntries.length) {
         showLdg('儲存附檔…');
-        const uploadedItem = await appendFilesInBatches(S.eId, newEntries, {
+        const existingKeys = S.eDownloadEntries.filter(entry => entry.kind === 'existing').map(entry => entry.key);
+        const uploadResult = await appendFilesInBatches(S.eId, newEntries, {
           fileGetter: entry => entry.file,
           pathGetter: entry => getEntryRelativeFilePath(entry) || entry.file?.name || 'download.bin',
           sizeGetter: entry => entry.file?.size || 0,
+          includeKeptKeys: true,
+          keptKeys: existingKeys,
+          entryKeyGetter: entry => entry.tempId,
           onProgress: (done, total) => showLdg(`儲存附檔… (${done}/${total})`)
         });
-        Object.assign(item, uploadedItem || {});
+        Object.assign(item, uploadResult?.item || {});
+        const newKeyMap = uploadResult?.uploadedKeyMap || new Map();
+        const finalOrderKeys = S.eDownloadEntries
+          .map(entry => entry.kind === 'existing' ? entry.key : newKeyMap.get(entry.tempId))
+          .filter(Boolean);
+        const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderKeys);
+        Object.assign(item, reorderedItem || {});
+      } else {
+        const finalOrderKeys = S.eDownloadEntries
+          .map(entry => entry.kind === 'existing' ? entry.key : null)
+          .filter(Boolean);
+        const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderKeys);
+        Object.assign(item, reorderedItem || {});
       }
-      const allFiles = getItemDownloadFiles(item);
-      const uploadedKeys = allFiles.slice(-newEntries.length).map(file => file.key);
-      const newKeyMap = new Map(newEntries.map((entry, idx) => [entry.tempId, uploadedKeys[idx]]));
-      const finalOrderKeys = S.eDownloadEntries
-        .map(entry => entry.kind === 'existing' ? entry.key : newKeyMap.get(entry.tempId))
-        .filter(Boolean);
-      const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderKeys);
-      Object.assign(item, reorderedItem || {});
     }
     Object.assign(item, body);
     syncItemCategoryFields(item);
