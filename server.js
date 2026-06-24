@@ -2559,7 +2559,9 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
     index: file.index,
     name: file.name,
     relativePath: file.relativePath || file.name,
-    url: withCollection(`/api/download/${item.id}/files/${file.index}`, collection)
+    url: withCollection(`/api/download/${item.id}/files/${file.index}`, collection),
+    key: file.key || '',
+    mediaUrl: file.key ? withCollection(`/uploads/${file.key}`, collection) : ''
   }));
 
   if (files.length) {
@@ -2606,7 +2608,8 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
         index,
         name: file?.name || path.basename(file?.key || 'document'),
         relativePath: file?.relativePath || file?.name || path.basename(file?.key || 'document'),
-        url: withCollection(`/preview-open/${item.id}/${index}`, collection)
+        url: withCollection(`/preview-open/${item.id}/${index}`, collection),
+        mediaUrl: withCollection(`/api/preview/${item.id}/${index}`, collection)
       }))
     });
   } catch (e) {

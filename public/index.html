@@ -739,15 +739,16 @@ body[data-theme="light"] .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;ba
 .preview-toolbar{display:flex;justify-content:flex-end;gap:.55rem;flex-wrap:wrap;margin:0 0 .95rem}
 .preview-list{display:grid;gap:.7rem}
 .preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:.35rem;min-width:0}
-.preview-card{display:grid;gap:.34rem;width:100%;padding:.42rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);text-decoration:none;color:inherit;font:inherit;text-align:left;transition:transform .18s var(--ease),border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
-.preview-card:hover{transform:translateY(-1px);border-color:var(--gold);box-shadow:var(--toast-shadow);background:var(--bg2)}
+.preview-card{display:block;width:100%;min-width:0;padding:0;border:none;background:transparent;text-decoration:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.preview-card:hover .preview-card-thumb,
+.preview-card:hover .preview-card-media{border-color:var(--gold);box-shadow:var(--toast-shadow)}
 .preview-card-thumb{width:100%;aspect-ratio:1;object-fit:cover;display:block;border-radius:4px;border:1px solid var(--border);background:var(--bg2)}
-.preview-card-media{width:100%;aspect-ratio:1;border-radius:4px;border:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:center;padding:.7rem;color:var(--gold);text-align:center}
+.preview-card-media{width:100%;aspect-ratio:1;border-radius:4px;border:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:center;padding:.6rem;color:var(--gold);text-align:center;overflow:hidden}
 .preview-card-media.video{padding:0;background:#000;overflow:hidden}
 .preview-card-media.video video{width:100%;height:100%;object-fit:cover;display:block}
 .preview-card-media .ico{width:1.35rem;height:1.35rem}
-.preview-card-media span{display:block;font-size:.72rem;line-height:1.35;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.preview-card-name{font-size:.72rem;line-height:1.35;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preview-card-media span{display:block;font-size:.62rem;line-height:1.35;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.preview-card-name{margin-top:2px;font-size:.62rem;line-height:1.35;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .preview-tree{display:grid;gap:.45rem}
 .preview-tree-node{display:grid;gap:.35rem}
 .preview-entry{display:flex;align-items:center;gap:.5rem;width:100%;padding:.58rem .72rem;border:1px solid var(--border);border-radius:var(--r);
@@ -3467,13 +3468,7 @@ function renderPreviewTreeNodes(node, mode = 'preview') {
       ${isOpen ? `<div class="preview-children">${renderPreviewTreeNodes(folder, mode)}</div>` : ''}
     </div>`;
   }).join('');
-  if (mode === 'download') {
-    return `${folderHtml}${renderPreviewImageGrid(node.files, 'download')}`;
-  }
-  const fileHtml = node.files.map(file => {
-    const iconHtml = `<span class="ico" aria-hidden="true">${icon(getPreviewTreeIconName(file))}</span>`;
-    return `<a class="preview-entry" href="${esc(file.url)}" target="_blank" rel="noopener"><span class="meta">${iconHtml}<span class="name">${esc(file.treeName || file.name || '未命名附件')}</span></span></a>`;
-  }).join('');
+  const fileHtml = renderPreviewFileGrid(node.files, mode);
   return `${folderHtml}${fileHtml}`;
 }
 function renderPreviewFileTree(files, mode = 'preview') {
@@ -3481,19 +3476,25 @@ function renderPreviewFileTree(files, mode = 'preview') {
   const html = renderPreviewTreeNodes(tree, mode);
   return html ? `<div class="preview-tree">${html}</div>` : '';
 }
+function getPreviewCardHref(file, mode = 'preview') {
+  if (mode === 'download') return '';
+  return file?.url || '';
+}
+function getPreviewThumbSrc(file) {
+  return file?.mediaUrl || file?.url || '';
+}
 function renderPreviewGridThumb(file, label) {
   const kind = getMediaKindFromName(file?.name || file?.url || '');
-  const src = file?.url || '';
-  if (kind === 'image') return `<img class="preview-card-thumb" src="${esc(src)}" alt="${esc(label)}" loading="lazy" onerror="this.style.display='none'">`;
-  if (kind === 'video') return `<div class="preview-card-media video"><video src="${esc(src)}" muted playsinline preload="metadata" aria-label="${esc(label)}"></video></div>`;
+  const src = getPreviewThumbSrc(file);
+  if (kind === 'image' && src) return `<img class="preview-card-thumb" src="${esc(src)}" alt="${esc(label)}" loading="lazy">`;
+  if (kind === 'video' && src) return `<div class="preview-card-media video"><video src="${esc(src)}" muted playsinline preload="metadata" aria-label="${esc(label)}"></video></div>`;
   if (kind === 'audio') return `<div class="preview-card-media">${icon('audio')}<span>${esc(label)}</span></div>`;
   return `<div class="preview-card-media">${icon(getPreviewTreeIconName(file))}<span>${esc(label)}</span></div>`;
 }
-function renderPreviewImageGrid(files, mode = 'preview') {
+function renderPreviewFileGrid(files, mode = 'preview') {
   const list = Array.isArray(files) ? files : [];
   const html = list.map((file, index) => {
     const label = file?.treeName || file?.name || `image-${index + 1}`;
-    const src = file?.url || '';
     const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : index;
     if (mode === 'download') {
       return `<button class="preview-card" type="button" onclick="downloadModalFile(${fileIndex})">
@@ -3501,7 +3502,7 @@ function renderPreviewImageGrid(files, mode = 'preview') {
         <div class="preview-card-name">${esc(label)}</div>
       </button>`;
     }
-    return `<a class="preview-card" href="${esc(src)}" target="_blank" rel="noopener">
+    return `<a class="preview-card" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener">
       ${renderPreviewGridThumb(file, label)}
       <div class="preview-card-name">${esc(label)}</div>
     </a>`;
@@ -3525,7 +3526,7 @@ function renderPreviewModalContent(data) {
   body.innerHTML = files.length
     ? `
       <p class="preview-help">請選擇欲開啟線上閱覽的附件。</p>
-      ${renderPreviewImageGrid(files, 'preview')}
+      ${renderPreviewFileTree(files, 'preview')}
     `
     : `<p class="preview-help">目前沒有可線上閱覽的附件。</p>`;
 }
