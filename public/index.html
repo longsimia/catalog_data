@@ -264,7 +264,7 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
   justify-content:center;transition:all .2s;line-height:1;flex:0 0 auto}
 .lb-x:hover{outline-color:var(--gold);background:rgba(50,38,10,.7)}
 .lb-inner{display:flex;width:100%;height:100%}
-.lb-vis{flex:7.5;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.lb-vis{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .lb-tw{flex:1;overflow:hidden;position:relative}
 .lb-track{display:flex;height:100%;transition:transform .32s var(--ease)}
 .lb-slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:3rem 4rem}
@@ -281,7 +281,7 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .lb-dots{position:absolute;bottom:1.1rem;left:50%;transform:translateX(-50%);display:flex;gap:.45rem}
 .lb-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.22);cursor:pointer;transition:all .2s}
 .lb-dot.on{background:var(--gold);transform:scale(1.35)}
-.lb-info{flex:3.5;min-width:0;background:var(--panel);border-left:1px solid var(--border);
+.lb-info{flex:0 0 min(520px,100vw);width:min(520px,100vw);max-width:min(520px,100vw);min-width:0;background:var(--panel);border-left:1px solid var(--border);
   padding:2rem 1.4rem 1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:.7rem}
 .lb-head{position:sticky;top:-2rem;z-index:3;display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;
   margin:-2rem -1.4rem 0;padding:2rem 1.4rem .85rem;background:var(--panel)}
@@ -339,12 +339,15 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .collection-add-row{display:flex;align-items:center;gap:.5rem;flex-wrap:nowrap}
 .collection-add-row .fc{flex:0 1 170px;min-width:0;max-width:170px;margin:0}
 .collection-add-row .btn{flex:0 0 auto;white-space:nowrap}
-.collection-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto auto auto;gap:.5rem;align-items:center}
+.collection-row{display:grid;grid-template-columns:42px 28px minmax(0,1fr) auto auto auto;gap:.5rem;align-items:center}
 .collection-row .ord-inp{grid-column:1;grid-row:1;justify-self:start}
-.collection-row > .fc:not(.ord-inp){grid-column:2 / 6;grid-row:1}
+.collection-row .collection-grip{grid-column:2;grid-row:1;justify-self:center}
+.collection-row > .fc:not(.ord-inp){grid-column:3 / 7;grid-row:1}
 .collection-row .tag{grid-column:1 / 3;grid-row:2;white-space:nowrap;justify-self:start}
 .collection-row .field-inline-perm{grid-column:3 / 5;grid-row:2}
-.collection-row > .ib,.collection-row > button.ib,.collection-row > .collection-action-placeholder{grid-column:5;grid-row:2;justify-self:end}
+.collection-row > .ib,.collection-row > button.ib,.collection-row > .collection-action-placeholder{grid-column:6;grid-row:2;justify-self:end}
+.collection-grip{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;color:var(--muted);cursor:grab}
+.collection-grip svg{width:15px;height:15px}
 .collection-action-placeholder{display:inline-flex;width:30px;height:30px}
 .field-inline{display:inline-flex;align-items:center;gap:.4rem;min-width:0;flex:0 0 auto}
 .field-inline .fs{flex:1 1 auto;min-width:0}
@@ -382,8 +385,9 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
   .role-perm-group + .role-perm-group{padding-top:.6rem;border-top:1px solid var(--border)}
   .manage-block-head{flex-wrap:wrap}
   .manage-block-head .manage-actions{width:100%;justify-content:flex-end}
-  .collection-row{grid-template-columns:42px minmax(0,1fr) auto;align-items:start}
-  .collection-row > .fc:not(.ord-inp){grid-column:2 / 4}
+  .collection-row{grid-template-columns:42px 28px minmax(0,1fr);align-items:start}
+  .collection-row > .fc:not(.ord-inp){grid-column:3;grid-row:1}
+  .collection-row .collection-grip{grid-column:2;grid-row:1;align-self:center}
   .collection-row .tag{grid-column:1 / 3;grid-row:2}
   .collection-row .field-inline-perm{grid-column:1 / 4;grid-row:3}
   .collection-row > .ib,.collection-row > button.ib,.collection-row > .collection-action-placeholder{grid-column:3;grid-row:2}
@@ -789,7 +793,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   .lb-inner{flex-direction:column}
   .lb-vis{flex:0 0 54vh}
   .lb-slide{padding:1.8rem 2.5rem}
-  .lb-info{width:100%;border-left:none;border-top:1px solid var(--border);padding:1rem 1.2rem 1.2rem}
+  .lb-info{flex:0 0 auto;width:100%;max-width:none;border-left:none;border-top:1px solid var(--border);padding:1rem 1.2rem 1.2rem}
   .lb-head{top:-1rem;margin:-1rem -1.2rem 0;padding:1rem 1.2rem .75rem}
   .mp-view-btns{flex-wrap:wrap;justify-content:flex-end}
   .adm-tabs{flex-wrap:wrap;gap:.3rem}
@@ -1076,6 +1080,8 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
                 <div class="collection-add-row">
                   <input type="text" class="fc" id="collection-new-label" placeholder="新增頁籤"
                     onkeydown="if(event.key==='Enter'){event.preventDefault();addCollectionConfigRow()}">
+                </div>
+                <div class="collection-add-row">
                   <div class="field-inline" title="建立後不可變更">
                     <span class="field-cap">模式</span>
                     <select class="fs" id="collection-new-mode">
@@ -1092,6 +1098,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
               </div>
             </div>
             <div class="manage-actions">
+              <button class="btn btn-out" id="btn-cancel-collections" onclick="cancelCollectionConfigChanges()">取消變更</button>
               <button class="btn btn-gold sort-save-btn" id="btn-save-collections" onclick="saveCollectionConfig()">儲存</button>
             </div>
           </div>
@@ -1101,13 +1108,18 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       <details class="disc" id="role-disc" data-disc-id="role-disc">
         <summary><div class="disc-head"><span>身份組權限</span><span class="disc-head-actions"></span></div></summary>
         <div class="disc-body">
-          <div class="tag-man-add">
-            <input type="text" class="fc" id="role-new" placeholder="新增身份組" onkeydown="if(event.key==='Enter'){event.preventDefault();addRoleConfigRow()}">
+          <div class="manage-block-head">
+            <div class="manage-head-copy">
+              <div class="tag-man-add">
+                <input type="text" class="fc" id="role-new" placeholder="新增身份組" onkeydown="if(event.key==='Enter'){event.preventDefault();addRoleConfigRow()}">
+              </div>
+            </div>
+            <div class="manage-actions">
+              <button class="btn btn-out" id="btn-cancel-role-config" onclick="cancelRoleConfigChanges()">取消變更</button>
+              <button class="btn btn-gold sort-save-btn" id="btn-save-role-config" onclick="saveRoleConfig()">儲存</button>
+            </div>
           </div>
           <div class="role-grid" id="role-config-list"></div>
-          <div class="manage-actions">
-            <button class="btn btn-gold sort-save-btn" id="btn-save-role-config" onclick="saveRoleConfig()">儲存</button>
-          </div>
         </div>
       </details>
       <div class="sh">類別庫</div>
@@ -1650,6 +1662,8 @@ function ensureMasterCategory(v) {
 }
 function refreshManageSnapshots() {
   S.saved = {
+    collections: JSON.parse(JSON.stringify(S.collections || [])),
+    roleConfig: JSON.parse(JSON.stringify(S.roleConfig || {})),
     categories: [...(S.cat.categories || [])],
     categoryMap: Object.fromEntries((S.cat.items || []).map(item => [item.id, [...getItemCategories(item)]])),
     tags: [...(S.cat.tags || [])],
@@ -1699,6 +1713,8 @@ function decorateStaticIcons() {
   setLabeled('#btn-save-order', 'save', '儲存');
   setLabeled('#btn-save-cats', 'save', '儲存');
   setLabeled('#btn-save-tags', 'save', '儲存');
+  setLabeled('#btn-cancel-collections', 'close', '取消變更');
+  setLabeled('#btn-cancel-role-config', 'close', '取消變更');
   setLabeled('#btn-cancel-order', 'close', '取消變更');
   setLabeled('#btn-cancel-cats', 'close', '取消變更');
   setLabeled('#btn-cancel-tags', 'close', '取消變更');
@@ -3576,6 +3592,7 @@ function renderCollectionConfigPanel() {
       <div class="collection-row">
         <input type="number" class="fc ord-inp" value="${idx + 1}" min="1" max="${S.collections.length}" ${canManage ? '' : 'disabled'}
           onclick="event.stopPropagation()" onfocus="primeInlineOrderInput(event,this,${idx + 1})" onkeydown="handleInlineOrderEnter(event)" onblur="commitCollectionOrderInput(this,${idx})">
+        <span class="collection-grip dh" title="${canManage ? '拖曳排序' : '你沒有排序權限'}" style="${canManage ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
         <input type="text" class="fc" value="${esc(item.label || '')}" placeholder="頁籤名稱" ${canManage ? '' : 'disabled'} oninput="updateCollectionConfigField(${idx},'label',this.value)">
         <span class="tag" title="模式（建立後不可變更）">模式：${item.mode === 'image' ? '圖庫' : '資料'}</span>
         <div class="field-inline field-inline-perm">
@@ -3704,6 +3721,7 @@ async function loadCollectionConfig() {
     S.collections = S.collections.map(item => ({ ...item, permission: normalizePermissionValue(item.permission || 'public') }));
     S.collection = sanitizeCollectionKey(S.collection);
     setCollectionStorage(S.collection);
+    refreshManageSnapshots();
     renderCollectionConfigPanel();
     renderCollectionNav();
   } catch (e) {
@@ -3742,6 +3760,7 @@ async function saveCollectionConfig() {
     S.collections = Array.isArray(data?.collections) && data.collections.length ? data.collections : collections;
     S.collection = sanitizeCollectionKey(S.collection);
     setCollectionStorage(S.collection);
+    refreshManageSnapshots();
     renderCollectionConfigPanel();
     applyCollectionUI();
     loadCfgForm();
@@ -3750,6 +3769,11 @@ async function saveCollectionConfig() {
     renderMan();
     toast('資料夾設定已儲存', 'ok');
   } catch (e) { hideLdg(); toast(e.message, 'err'); }
+}
+
+function cancelCollectionConfigChanges() {
+  S.collections = JSON.parse(JSON.stringify(S.saved.collections || S.collections || []));
+  renderCollectionConfigPanel();
 }
 
 function applyRoleLabels() {
@@ -3866,6 +3890,7 @@ async function loadRoleConfig() {
     S.currentAuthUser = data.currentUser || S.currentAuthUser;
     S.roleConfig = data.roleConfig || null;
     await loadCollectionConfig();
+    refreshManageSnapshots();
     renderRoleConfigPanel();
     renderAuthUserList();
     applyRoleLabels();
@@ -3883,6 +3908,7 @@ async function saveRoleConfig() {
     const data = await api('PUT', '/api/role-config', { roleConfig: S.roleConfig });
     hideLdg();
     S.roleConfig = data.roleConfig || S.roleConfig;
+    refreshManageSnapshots();
     renderRoleConfigPanel();
     renderAuthUserList();
     applyRoleLabels();
@@ -3890,6 +3916,14 @@ async function saveRoleConfig() {
     renderMan();
     toast('身份組設定已儲存', 'ok');
   } catch (e) { hideLdg(); toast(e.message, 'err'); }
+}
+
+function cancelRoleConfigChanges() {
+  S.roleConfig = JSON.parse(JSON.stringify(S.saved.roleConfig || S.roleConfig || {}));
+  renderRoleConfigPanel();
+  renderAuthUserList();
+  applyRoleLabels();
+  applyRolePermissionUI();
 }
 
 function applyRolePermissionUI() {
@@ -3916,6 +3950,7 @@ function applyRolePermissionUI() {
   ['c-t','c-s','c-f'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
   document.getElementById('btn-save-site')?.toggleAttribute('disabled', !canEditSite);
   ['collection-new-label','collection-new-mode','collection-new-permission','btn-save-collections'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !(canEditSite || canManageCollections)));
+  document.getElementById('btn-cancel-collections')?.toggleAttribute('disabled', !(canEditSite || canManageCollections));
   document.getElementById('cat-new')?.toggleAttribute('disabled', !canEditCats);
   document.getElementById('btn-save-cats')?.toggleAttribute('disabled', !canEditCats);
   document.getElementById('btn-cancel-cats')?.toggleAttribute('disabled', !canEditCats);
@@ -3924,6 +3959,7 @@ function applyRolePermissionUI() {
   document.getElementById('btn-cancel-tags')?.toggleAttribute('disabled', !canEditTags);
   document.getElementById('btn-save-order')?.toggleAttribute('disabled', !canEditOrder);
   document.getElementById('btn-cancel-order')?.toggleAttribute('disabled', !canEditOrder);
+  document.getElementById('btn-cancel-role-config')?.toggleAttribute('disabled', !(S.currentAuthUser?.role === 'owner' || currentRoleCanRenameSelfRole()));
   document.getElementById('btn-man-page-save')?.toggleAttribute('disabled', !canEditOrder);
   document.getElementById('btn-man-page-cancel')?.toggleAttribute('disabled', !canEditOrder);
   document.querySelector('#tab-man .disc-page-btn')?.toggleAttribute('disabled', !canEditOrder);
@@ -4796,9 +4832,8 @@ async function doUp() {
   xhr.onload = async () => {
     setProgress(100); setStat('');
     try {
-      if (xhr.status === 200) {
+      if (xhr.status >= 200 && xhr.status < 300) {
         setConnState('online', true);
-        JSON.parse(xhr.responseText || '{}');
         await loadCat();
         refreshManageSnapshots();
         renderGallery();
@@ -4811,11 +4846,10 @@ async function doUp() {
         confirmClrForm();
         setTab('up');
       } else {
-        const err = JSON.parse(xhr.responseText || '{}');
-        toast('上傳失敗：' + (err.error || xhr.status), 'err');
+        toast('上傳失敗：' + readResponseErrorText(xhr.responseText, xhr.status), 'err');
       }
     } catch (err) {
-      toast('上傳完成，但前端更新失敗：' + (err?.message || 'unknown error'), 'err');
+      toast('上傳完成，但前端更新失敗：' + readResponseErrorText(err?.message, 'unknown error'), 'err');
     }
   };
   xhr.onerror = () => { setConnState('offline'); setStat(''); setProgress(0); toast('目前無法連上後台', 'err'); };
@@ -6463,8 +6497,10 @@ async function saveEdit() {
         headers: { Authorization: `Bearer ${getToken()}` },
         body: previewsFd
       });
-      const prevData = await prevResp.json().catch(() => ({}));
-      if (!prevResp.ok) throw new Error(prevData.error || '預覽圖片更新失敗');
+      const prevText = await prevResp.text();
+      let prevData = {};
+      try { prevData = prevText ? JSON.parse(prevText) : {}; } catch {}
+      if (!prevResp.ok) throw new Error(prevData.error || readResponseErrorText(prevText, '預覽圖片更新失敗'));
       Object.assign(item, prevData.item || {});
     }
     const originalDownloadOrder = getItemDownloadFiles(item).map(file => `existing|${file.key}`);
@@ -6494,8 +6530,10 @@ async function saveEdit() {
         headers: { Authorization: `Bearer ${getToken()}` },
         body: fd
       });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data.error || '下載檔案更新失敗');
+      const text = await resp.text();
+      let data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch {}
+      if (!resp.ok) throw new Error(data.error || readResponseErrorText(text, '下載檔案更新失敗'));
       Object.assign(item, data.item || {});
     }
     Object.assign(item, body);
@@ -6528,6 +6566,16 @@ function fmtSz(b) {
   if (b < 1024) return b + 'B';
   if (b < 1048576) return (b/1024).toFixed(1) + 'KB';
   return (b/1048576).toFixed(1) + 'MB';
+}
+function readResponseErrorText(text, fallback = 'unknown error') {
+  const raw = String(text || '').trim();
+  if (!raw) return String(fallback || 'unknown error');
+  try {
+    const data = JSON.parse(raw);
+    return data?.error || String(fallback || 'unknown error');
+  } catch {
+    return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || String(fallback || 'unknown error');
+  }
 }
 
 let _tt = null;

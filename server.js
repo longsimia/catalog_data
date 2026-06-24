@@ -220,10 +220,16 @@ function normalizeCollectionsConfig(rawCollections = []) {
   const source = Array.isArray(rawCollections) && rawCollections.length ? rawCollections : getDefaultCollectionsConfig();
   const list = [];
   const usedKeys = new Set();
-  source.forEach((entry, idx) => {
+  const scenarioSource = source.find(entry => String(entry?.key || '').trim().toLowerCase() === 'scenario')
+    || source.find(entry => normalizeCollectionMode(entry?.mode) === 'scenario')
+    || { key: 'scenario', label: '劇本庫', mode: 'scenario', permission: 'public' };
+  source.forEach(entry => {
+    const rawKey = String(entry?.key || '').trim().toLowerCase();
     const requestedMode = normalizeCollectionMode(entry?.mode);
-    const mode = idx === 0 ? 'scenario' : requestedMode;
-    const preferredKey = idx === 0 && mode === 'scenario'
+    const mode = rawKey === 'scenario'
+      ? 'scenario'
+      : requestedMode;
+    const preferredKey = mode === 'scenario' && rawKey === 'scenario'
       ? 'scenario'
       : makeCollectionKey(entry?.key || entry?.label, mode);
     let key = preferredKey;
@@ -237,6 +243,14 @@ function normalizeCollectionsConfig(rawCollections = []) {
       permission: normalizeItemPermission(entry?.permission)
     });
   });
+  if (!usedKeys.has('scenario')) {
+    list.unshift({
+      key: 'scenario',
+      label: normalizeCollectionLabel(scenarioSource?.label, 'scenario'),
+      mode: 'scenario',
+      permission: normalizeItemPermission(scenarioSource?.permission)
+    });
+  }
   if (!list.length) list.push({ key: 'scenario', label: '劇本庫', mode: 'scenario', permission: 'public' });
   return list;
 }
@@ -2979,8 +2993,7 @@ app.put('/api/collections-config', auth, (req, res) => {
     const incoming = Array.isArray(req.body?.collections) ? req.body.collections : [];
     const nextCollections = normalizeCollectionsConfig(incoming);
     if (!nextCollections.length) return res.status(400).json({ error: '至少需要保留一個資料庫頁籤' });
-    if (nextCollections[0]?.key !== 'scenario') return res.status(400).json({ error: '第一個資料庫必須固定為劇本庫' });
-    if (nextCollections[0]?.mode !== 'scenario') return res.status(400).json({ error: '第一個資料庫模式必須固定為劇本' });
+    if (!nextCollections.some(item => item.key === 'scenario')) return res.status(400).json({ error: '至少需要保留劇本庫頁籤' });
     const currentCollections = getCollectionsConfig(cfg);
     const currentMap = new Map(currentCollections.map(item => [item.key, item]));
     const invalidModeChange = nextCollections.find(item => currentMap.has(item.key) && currentMap.get(item.key).mode !== item.mode);
@@ -3063,63 +3076,67 @@ app.post('/api/upload/:itemId', auth,
   upload.fields([
     { name: 'previews', maxCount: 30 },
     { name: 'file',     maxCount: 1  },
-    { name: 'files',    maxCount: 30 }
+    { name: 'files',    maxCount: 500 }
   ]),
   (req, res) => {
-    if (!hasRolePermission(req.authUser, 'uploadItems')) return res.status(403).json({ error: '你沒有權限使用上傳功能' });
-    const collection = getC(req);
-    const id  = req.params.itemId;
-    const prs = req.files?.previews || [];
-    const relativePaths = Array.isArray(req.body?.['relativePaths[]'])
-      ? req.body['relativePaths[]']
-      : (Array.isArray(req.body?.relativePaths) ? req.body.relativePaths : (req.body?.['relativePaths[]'] ? [req.body['relativePaths[]']] : (req.body?.relativePaths ? [req.body.relativePaths] : [])));
-    const dlFiles = [...(req.files?.files || []), ...(req.files?.file || [])].map((file, idx) => ({
-      key: buildStoredKey(collection, id, file.filename),
-      path: file.path,
-      name: file.originalname,
-      size: file.size,
-      relativePath: relativePaths[idx] || file.originalname
-    }));
-    const previewKeys = prs.map(f => buildStoredKey(collection, id, f.filename));
-    const subtitle = String(req.body.subtitle || req.body.translatedTitle || '').trim();
-    const creator = String(req.body.creator || req.body.author || '').trim();
-    const sourceUrl = String(req.body.sourceUrl || req.body.originalUrl || '').trim();
-    const download = persistDownloadFiles(id, dlFiles, subtitle || req.body.title || 'download', collection);
+    try {
+      if (!hasRolePermission(req.authUser, 'uploadItems')) return res.status(403).json({ error: '你沒有權限使用上傳功能' });
+      const collection = getC(req);
+      const id  = req.params.itemId;
+      const prs = req.files?.previews || [];
+      const relativePaths = Array.isArray(req.body?.['relativePaths[]'])
+        ? req.body['relativePaths[]']
+        : (Array.isArray(req.body?.relativePaths) ? req.body.relativePaths : (req.body?.['relativePaths[]'] ? [req.body['relativePaths[]']] : (req.body?.relativePaths ? [req.body.relativePaths] : [])));
+      const dlFiles = [...(req.files?.files || []), ...(req.files?.file || [])].map((file, idx) => ({
+        key: buildStoredKey(collection, id, file.filename),
+        path: file.path,
+        name: file.originalname,
+        size: file.size,
+        relativePath: relativePaths[idx] || file.originalname
+      }));
+      const previewKeys = prs.map(f => buildStoredKey(collection, id, f.filename));
+      const subtitle = String(req.body.subtitle || req.body.translatedTitle || '').trim();
+      const creator = String(req.body.creator || req.body.author || '').trim();
+      const sourceUrl = String(req.body.sourceUrl || req.body.originalUrl || '').trim();
+      const download = persistDownloadFiles(id, dlFiles, subtitle || req.body.title || 'download', collection);
 
-    let tags = [];
-    try { tags = JSON.parse(req.body.tags || '[]'); } catch {}
-    let categories = [];
-    try { categories = JSON.parse(req.body.categories || '[]'); } catch {}
-    if (!Array.isArray(categories)) categories = [];
-    categories = categories.filter(v => typeof v === 'string').map(v => v.trim()).filter(Boolean);
+      let tags = [];
+      try { tags = JSON.parse(req.body.tags || '[]'); } catch {}
+      let categories = [];
+      try { categories = JSON.parse(req.body.categories || '[]'); } catch {}
+      if (!Array.isArray(categories)) categories = [];
+      categories = categories.filter(v => typeof v === 'string').map(v => v.trim()).filter(Boolean);
 
-    const item = {
-      id,
-      title:       req.body.title       || '',
-      creator,
-      author:      creator,
-      subtitle,
-      translatedTitle: subtitle,
-      permission: normalizeItemPermission(req.body.permission),
-      categories,
-      category:    categories[0] || req.body.category || '',
-      tags,
-      description: req.body.description || '',
-      sourceUrl,
-      originalUrl: sourceUrl,
-      coverKey:    previewKeys[0] || null,
-      previewKeys,
-      downloadKey: download.downloadKey,
-      downloadName: download.downloadName,
-      downloadFiles: download.downloadFiles,
-      downloadUrl: download.downloadKey ? null : (req.body.downloadUrl || null),
-      createdAt:   new Date().toISOString()
-    };
+      const item = {
+        id,
+        title:       req.body.title       || '',
+        creator,
+        author:      creator,
+        subtitle,
+        translatedTitle: subtitle,
+        permission: normalizeItemPermission(req.body.permission),
+        categories,
+        category:    categories[0] || req.body.category || '',
+        tags,
+        description: req.body.description || '',
+        sourceUrl,
+        originalUrl: sourceUrl,
+        coverKey:    previewKeys[0] || null,
+        previewKeys,
+        downloadKey: download.downloadKey,
+        downloadName: download.downloadName,
+        downloadFiles: download.downloadFiles,
+        downloadUrl: download.downloadKey ? null : (req.body.downloadUrl || null),
+        createdAt:   new Date().toISOString()
+      };
 
-    const cat = readCat(collection);
-    cat.items.push(item);
-    saveCat(cat, collection);
-    res.json({ ok: true, item });
+      const cat = readCat(collection);
+      cat.items.push(item);
+      saveCat(cat, collection);
+      res.json({ ok: true, item });
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+    }
   }
 );
 
@@ -3211,7 +3228,7 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), (req, re
 
 app.post('/api/items/:id/file', auth, upload.fields([
   { name: 'file',  maxCount: 1  },
-  { name: 'files', maxCount: 30 }
+  { name: 'files', maxCount: 500 }
 ]), (req, res) => {
   try {
     if (!hasRolePermission(req.authUser, 'editItemInfo')) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
@@ -3463,6 +3480,17 @@ app.put('/api/order', auth, (req, res) => {
     saveCat(cat, collection);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.use((err, req, res, next) => {
+  if (!err) return next();
+  if (err instanceof multer.MulterError) {
+    const msg = err.code === 'LIMIT_UNEXPECTED_FILE'
+      ? '上傳檔案數量超出限制'
+      : (err.code === 'LIMIT_FILE_SIZE' ? '單一檔案大小超出限制' : err.message);
+    return res.status(400).json({ error: msg });
+  }
+  return res.status(500).json({ error: err.message || 'Upload failed' });
 });
 
 // ── 啟動 ──────────────────────────────────────────
