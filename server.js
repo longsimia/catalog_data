@@ -8,6 +8,7 @@ const os      = require('os');
 const crypto  = require('crypto');
 const zlib    = require('zlib');
 const { TextDecoder } = require('util');
+const { OAuth2Client } = require('google-auth-library');
 const iconv   = require('iconv-lite');
 
 const app      = express();
@@ -515,7 +516,8 @@ function normalizeAuthUsers(rawUsers = [], fallbackPwdHash = '') {
       id: typeof user?.id === 'string' && user.id.trim() ? user.id.trim() : `usr-legacy-${idx + 1}`,
       username: typeof user?.username === 'string' ? user.username.trim() : '',
       passwordHash: typeof user?.passwordHash === 'string' ? user.passwordHash : '',
-      role: sanitizeRoleKey(user?.role) || (idx === 0 ? 'owner' : 'admin')
+      role: sanitizeRoleKey(user?.role) || (idx === 0 ? 'owner' : 'admin'),
+      googleEmail: typeof user?.googleEmail === 'string' ? user.googleEmail.trim().toLowerCase() : ''
     }))
     .filter(user => user.username);
   if (normalized.some(user => user.passwordHash)) return normalized;
@@ -661,11 +663,29 @@ const readCfg = () => {
     users: [],
     roleConfig: getDefaultRoleConfig(),
     collections: getDefaultCollectionsConfig(),
-    userUiPrefs: {}
+    userUiPrefs: {},
+    googleClientId: '',
+    uploadOrigin: ''
   });
   let dirty = false;
   if (typeof cfg.pwdHash !== 'string') {
     cfg.pwdHash = '';
+    dirty = true;
+  }
+  if (typeof cfg.googleClientId !== 'string') {
+    cfg.googleClientId = '';
+    dirty = true;
+  }
+  const rawUploadOrigin = String(cfg.uploadOrigin || '').trim();
+  let normalizedUploadOrigin = '';
+  if (rawUploadOrigin) {
+    try {
+      const url = new URL(rawUploadOrigin);
+      if (/^https?:$/.test(url.protocol)) normalizedUploadOrigin = url.origin;
+    } catch {}
+  }
+  if (cfg.uploadOrigin !== normalizedUploadOrigin) {
+    cfg.uploadOrigin = normalizedUploadOrigin;
     dirty = true;
   }
   if (!cfg.authSecret) {
@@ -2317,9 +2337,61 @@ app.get('/api/catalog', (req, res) => {
   res.json(filterCatalogForViewer(cat, role));
 });
 
-// 登入
 app.get('/api/ping', (req, res) => {
   res.json({ ok: true });
+});
+
+app.get('/api/cfg-public', (req, res) => {
+  try {
+    const cfg = readCfg();
+    res.json({
+      googleClientId: cfg.googleClientId || null,
+      uploadOrigin: cfg.uploadOrigin || null
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/cfg-upload-origin', auth, (req, res) => {
+  try {
+    if (req.authUser?.role !== 'owner') return res.status(403).json({ error: '只有站主可以設定上傳網域' });
+    const rawUploadOrigin = String(req.body?.uploadOrigin || '').trim();
+    let uploadOrigin = '';
+    if (rawUploadOrigin) {
+      try {
+        const url = new URL(rawUploadOrigin);
+        if (!/^https?:$/.test(url.protocol)) throw new Error('invalid-protocol');
+        uploadOrigin = url.origin;
+      } catch {
+        return res.status(400).json({ error: '上傳網域格式錯誤，請填入完整網址，例如 https://upload.example.com' });
+      }
+    }
+    saveCfg({ uploadOrigin });
+    res.json({ ok: true, uploadOrigin: uploadOrigin || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const cfg = readCfg();
+    const clientId = cfg.googleClientId;
+    if (!clientId) return res.status(503).json({ error: '尚未設定 Google Client ID，請站主至後台設定頁填入' });
+
+    const client = new OAuth2Client(clientId);
+    const ticket = await client.verifyIdToken({ idToken: req.body.credential, audience: clientId });
+    const payload = ticket.getPayload();
+    const googleEmail = (payload?.email || '').toLowerCase();
+    if (!googleEmail) return res.status(401).json({ error: '無法取得 Google 帳號信箱' });
+
+    const allUsers = normalizeAuthUsers(cfg.users, cfg.pwdHash);
+    const user = allUsers.find(u => u.googleEmail && u.googleEmail === googleEmail);
+    if (!user) return res.status(401).json({ error: `此 Google 帳號（${googleEmail}）尚未綁定任何使用者，請站主至後台帳號管理填入對應信箱` });
+
+    res.json({
+      token: makeToken(user),
+      expiresInMs: TOKEN_TTL_MS,
+      user: { id: user.id, username: user.username, role: user.role }
+    });
+  } catch (e) { res.status(401).json({ error: 'Google 驗證失敗：' + e.message }); }
 });
 
 app.post('/api/login', (req, res) => {
@@ -2842,7 +2914,8 @@ app.get('/api/auth-users', auth, (req, res) => {
       username: user.username,
       role: user.role,
       roleLabel: roleConfig[user.role]?.label || user.role,
-      hasPassword: !!user.passwordHash
+      hasPassword: !!user.passwordHash,
+      googleEmail: user.googleEmail || ''
     }));
     res.json({
       users,
@@ -2879,7 +2952,8 @@ app.put('/api/auth-users', auth, (req, res) => {
           id,
           username,
           passwordHash,
-          role
+          role,
+          googleEmail: String(entry?.googleEmail || '').trim().toLowerCase()
         };
       });
       if (nextUsers[0]?.role !== 'owner') throw new Error('第一組帳號必須固定為群主');
@@ -2900,7 +2974,8 @@ app.put('/api/auth-users', auth, (req, res) => {
       nextUsers = existingUsers.map(user => user.id === self.id ? {
         ...user,
         username,
-        passwordHash
+        passwordHash,
+        googleEmail: String(entry?.googleEmail || '').trim().toLowerCase()
       } : user);
     }
     cfg.users = nextUsers;
@@ -2908,7 +2983,7 @@ app.put('/api/auth-users', auth, (req, res) => {
     const currentUser = nextUsers.find(user => user.id === req.authUser?.id) || null;
     res.json({
       ok: true,
-      users: (req.authUser?.role === 'owner' ? nextUsers : nextUsers.filter(user => user.id === req.authUser?.id)).map(user => ({ id: user.id, username: user.username, role: user.role, roleLabel: roleConfig[user.role]?.label || user.role, hasPassword: !!user.passwordHash })),
+      users: (req.authUser?.role === 'owner' ? nextUsers : nextUsers.filter(user => user.id === req.authUser?.id)).map(user => ({ id: user.id, username: user.username, role: user.role, roleLabel: roleConfig[user.role]?.label || user.role, hasPassword: !!user.passwordHash, googleEmail: user.googleEmail || '' })),
       currentUser: currentUser ? { id: currentUser.id, username: currentUser.username, role: currentUser.role } : null
     });
   } catch (e) { res.status(400).json({ error: e.message }); }
@@ -3041,6 +3116,15 @@ app.put('/api/site', auth, (req, res) => {
     const cat = readCat(collection);
     cat.sc = req.body;
     saveCat(cat, collection);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/cfg-google', auth, (req, res) => {
+  try {
+    if (req.authUser?.role !== 'owner') return res.status(403).json({ error: '只有站主可以設定 Google Client ID' });
+    const googleClientId = String(req.body?.googleClientId || '').trim();
+    saveCfg({ googleClientId });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -801,6 +801,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   .adm{width:100vw}
 }
 </style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -942,6 +943,13 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <input type="password" class="fc" id="pwd-in" placeholder="密碼"
           onkeydown="if(event.key==='Enter')doLogin()" style="margin-bottom:.65rem">
         <button class="btn btn-gold btn-w" onclick="doLogin()">登入</button>
+        <div id="g-divider" style="display:none;align-items:center;gap:.5rem;margin:.75rem 0">
+          <hr style="flex:1;border:none;border-top:1px solid var(--border)">
+          <span style="font-size:.74rem;color:var(--muted)">或</span>
+          <hr style="flex:1;border:none;border-top:1px solid var(--border)">
+        </div>
+        <div id="g-signin-btn"></div>
+        <p id="g-signin-err" style="display:none;font-size:.72rem;color:var(--muted);text-align:center;margin-top:.4rem"></p>
       </div>
     </div>
 
@@ -968,6 +976,19 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       <div class="fg">
         <label>頁尾文字</label>
         <input type="text" class="fc" id="c-f" placeholder="CATALOG · Archived by Username">
+      </div>
+      <div class="fg">
+        <label>Google Client ID</label>
+        <input type="text" class="fc" id="cfg-google-client-id"
+          placeholder="xxxxxx.apps.googleusercontent.com（Google Cloud Console 取得）">
+        <p style="font-size:.74rem;color:var(--muted);margin:.3rem 0 0">
+          填入後，可在帳號管理中為每位使用者綁定 Google 信箱，即可使用 Google 登入。
+        </p>
+      </div>
+      <div class="fg">
+        <label>上傳網域</label>
+        <input type="text" class="fc" id="cfg-upload-origin"
+          placeholder="https://upload.yourdomain.com（留空則使用目前網站網域）">
       </div>
       <button class="btn btn-out btn-w" id="btn-save-site" onclick="saveSite()" style="margin-bottom:.8rem">儲存外觀設定</button>
       </div>
@@ -1038,6 +1059,8 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <p id="u-preview-hint"><span>點擊</span>或拖曳上傳圖片 / 音訊 / 影片<br>（可多張；會自動將最左項作為封面）</p>
       </div>
       <input type="file" id="fi-p" accept="image/*,audio/*,video/*" multiple style="display:none" onchange="onPrev(this.files)">
+      <button type="button" class="btn btn-out" style="margin-top:.35rem;width:100%" onclick="openUpPickPrev()">從附件挑選預覽圖</button>
+      <div id="up-pick-prev-panel"></div>
       <div class="pg" id="pg"></div>
 
       <div id="u-file-wrap">
@@ -1249,6 +1272,8 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       <p id="e-preview-hint"><span>點擊</span>或拖曳圖片 / 音訊 / 影片<br>（可多張；會自動將最左項作為封面）</p>
     </div>
     <input type="file" id="e-fi-p" accept="image/*,audio/*,video/*" multiple style="display:none" onchange="onEditPrev(this.files)">
+    <button type="button" class="btn btn-out" style="margin-top:.35rem;width:100%" onclick="openEditPickPrev()">從附件挑選預覽圖</button>
+    <div id="edit-pick-prev-panel"></div>
     <div class="pg" id="e-pg"></div>
     <div class="fg" style="margin-top:1.45rem" id="e-file-wrap">
       <div class="sh" id="e-file-title">資料檔案</div>
@@ -1311,8 +1336,6 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 </div>
 
 <script>
-const UPLOAD_ORIGIN = 'https://longsimiaupload.rikastudio.com';
-
 // ════════════════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════════════════
@@ -1441,6 +1464,10 @@ const S = {
   saveTrashIds: [],
   batchDeleteIds: []
 };
+const IMG_EXTS = new Set(['jpg','jpeg','png','gif','webp','avif','bmp','svg']);
+function isImageFile(name) {
+  return IMG_EXTS.has(String(name || '').split('.').pop().toLowerCase());
+}
 S.cat.tags = [];
 S.cat.categories = [];
 S.tagDragIdx = null;
@@ -1488,6 +1515,16 @@ function cUrl(url = '') {
   if (!isCollectionScopedUrl(url)) return url;
   const collection = sanitizeCollectionKey(S.collection);
   return `${url}${url.includes('?') ? '&' : '?'}c=${encodeURIComponent(collection)}`;
+}
+
+function getUploadOrigin() {
+  const raw = String(window.UPLOAD_ORIGIN || '').trim();
+  return raw ? raw.replace(/\/+$/, '') : window.location.origin;
+}
+
+function uploadUrl(path = '') {
+  const apiPath = path.startsWith('/') ? path : `/${path}`;
+  return `${getUploadOrigin()}${cUrl(apiPath)}`;
 }
 
 function icon(name) {
@@ -2303,7 +2340,9 @@ function buildFileUploadBatches(entries, fileGetter, sizeGetter) {
   return batches;
 }
 async function appendFilesInBatches(itemId, entries, options = {}) {
-  const endpoint = options.endpoint || `${UPLOAD_ORIGIN}/api/items/${itemId}/file`;
+  const endpoint = options.endpoint
+    ? (/^https?:\/\//i.test(options.endpoint) ? options.endpoint : cUrl(options.endpoint))
+    : uploadUrl(`/api/items/${itemId}/file`);
   const token = getToken();
   const fileGetter = options.fileGetter || (entry => entry?.file || entry);
   const pathGetter = options.pathGetter || (entry => getEntryRelativeFilePath(entry));
@@ -2322,7 +2361,7 @@ async function appendFilesInBatches(itemId, entries, options = {}) {
       fd.append('files', file);
       fd.append('relativePaths[]', pathGetter(entry) || file.name || 'download.bin');
     });
-    const resp = await fetch(cUrl(endpoint), {
+    const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: fd
@@ -2351,7 +2390,7 @@ async function appendFilesInBatches(itemId, entries, options = {}) {
 async function reorderItemDownloadFiles(itemId, orderKeys = []) {
   const fd = new FormData();
   fd.append('order', JSON.stringify(orderKeys.map(key => ({ type: 'key', value: key }))));
-  const resp = await fetch(`${UPLOAD_ORIGIN}/api/items/${itemId}/file`, {
+  const resp = await fetch(uploadUrl(`/api/items/${itemId}/file`), {
     method: 'POST',
     headers: { Authorization: `Bearer ${getToken()}` },
     body: fd
@@ -2623,6 +2662,8 @@ async function setCollection(next) {
 //  INIT
 // ════════════════════════════════════════════════════
 async function init() {
+  const _cfgPublic = await api('GET', '/api/cfg-public').catch(() => ({}));
+  window.UPLOAD_ORIGIN = String(_cfgPublic.uploadOrigin || '').trim().replace(/\/+$/, '');
   applyTheme(getTheme());
   decorateStaticIcons();
   applyGalleryView(getGalleryView());
@@ -2644,6 +2685,7 @@ window.addEventListener('offline', () => setConnState('offline'));
       releaseManagePageLock(true).catch(() => {});
     }
   });
+  initGoogleSignIn();
   await loadCatalog(true);
 }
 
@@ -2673,8 +2715,15 @@ function filtered() {
       (i.description || '').toLowerCase().includes(lq)
     );
   }
-  if (cats.length) items = items.filter(i => cats.some(cat => getItemCategories(i).includes(cat)));
-  if (tags.length) items = items.filter(i => tags.every(t => (i.tags||[]).includes(t)));
+  if (cats.length || tags.length) {
+    items = items.filter(i => {
+      const itemCats = getItemCategories(i);
+      const itemTags = i.tags || [];
+      const catMatch = cats.length > 0 && cats.some(c => itemCats.includes(c));
+      const tagMatch = tags.length > 0 && tags.some(t => itemTags.includes(t));
+      return catMatch || tagMatch;
+    });
+  }
   return items;
 }
 
@@ -3080,7 +3129,7 @@ async function downloadFromUrl(url, fallbackName) {
     return;
   }
   try {
-    showLdg('準備下載…');
+    showLdg('\u6e96\u5099\u4e0b\u8f09\u2026');
     const resp = await fetch(cUrl(url), {
       headers: { Authorization: `Bearer ${getToken()}` }
     });
@@ -3606,7 +3655,7 @@ async function doLogin() {
   const username = document.getElementById('user-in').value;
   const pwd = document.getElementById('pwd-in').value;
   try {
-    showLdg('驗證中…');
+    showLdg('\u9a57\u8b49\u4e2d\u2026');
     const { token, user } = await api('POST', '/api/login', { username, password: pwd });
     hideLdg();
     setToken(token);
@@ -3615,6 +3664,42 @@ async function doLogin() {
     showAdmBody();
   } catch(e) {
     hideLdg();
+    toast(e.message, 'err');
+  }
+}
+
+function initGoogleSignIn() {
+  api('GET', '/api/cfg-public').then(d => {
+    const clientId = d?.googleClientId;
+    const btn = document.getElementById('g-signin-btn');
+    const divider = document.getElementById('g-divider');
+    if (!clientId || !btn) return;
+    const tryRender = () => {
+      if (!window.google?.accounts?.id) { setTimeout(tryRender, 500); return; }
+      window.google.accounts.id.initialize({ client_id: clientId, callback: handleGoogleCredential });
+      btn.innerHTML = '';
+      window.google.accounts.id.renderButton(btn, {
+        theme: 'outline', size: 'large', width: 270, text: 'signin_with', locale: 'zh-TW'
+      });
+      if (divider) divider.style.display = 'flex';
+    };
+    tryRender();
+  }).catch(() => {});
+}
+
+async function handleGoogleCredential(response) {
+  try {
+    showLdg('Google \u9a57\u8b49\u4e2d\u2026');
+    const { token, user } = await api('POST', '/api/auth/google', { credential: response.credential });
+    hideLdg();
+    setToken(token);
+    setAuthUsername(user?.username || '');
+    S.currentAuthUser = user || null;
+    showAdmBody();
+  } catch(e) {
+    hideLdg();
+    const err = document.getElementById('g-signin-err');
+    if (err) { err.textContent = e.message; err.style.display = ''; setTimeout(() => { err.style.display = 'none'; }, 5000); }
     toast(e.message, 'err');
   }
 }
@@ -3665,6 +3750,12 @@ function loadCfgForm() {
   document.getElementById('c-t').value = sc.title    || '';
   document.getElementById('c-s').value = sc.subtitle || '';
   document.getElementById('c-f').value = sc.footer   || '';
+  api('GET', '/api/cfg-public').then(d => {
+    const googleEl = document.getElementById('cfg-google-client-id');
+    if (googleEl) googleEl.value = d?.googleClientId || '';
+    const uploadEl = document.getElementById('cfg-upload-origin');
+    if (uploadEl) uploadEl.value = d?.uploadOrigin || '';
+  }).catch(() => {});
 }
 
 function renderCollectionConfigPanel() {
@@ -3843,7 +3934,7 @@ async function saveCollectionConfig() {
     seen.add(item.label);
   }
   try {
-    showLdg('儲存資料夾設定…');
+    showLdg('\u5132\u5b58\u8cc7\u6599\u593e\u8a2d\u5b9a\u2026');
     const data = await api('PUT', '/api/collections-config', { collections });
     hideLdg();
     S.collections = Array.isArray(data?.collections) && data.collections.length ? data.collections : collections;
@@ -3993,7 +4084,7 @@ async function loadRoleConfig() {
 async function saveRoleConfig() {
   if (!S.roleConfig) return;
   try {
-    showLdg('儲存身份組權限…');
+    showLdg('\u5132\u5b58\u8eab\u4efd\u7d44\u6b0a\u9650\u2026');
     const data = await api('PUT', '/api/role-config', { roleConfig: S.roleConfig });
     hideLdg();
     S.roleConfig = data.roleConfig || S.roleConfig;
@@ -4036,7 +4127,7 @@ function applyRolePermissionUI() {
   ['u-t','u-a','u-alt','u-url','u-ti','u-ci','u-d','u-perm','fi-p'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canUpload));
   document.getElementById('fi-f')?.toggleAttribute('disabled', !canUpload || !canEditAttachments);
   document.getElementById('e-fi-f')?.toggleAttribute('disabled', !canEditAttachments);
-  ['c-t','c-s','c-f'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
+  ['c-t','c-s','c-f','cfg-google-client-id','cfg-upload-origin'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
   document.getElementById('btn-save-site')?.toggleAttribute('disabled', !canEditSite);
   ['collection-new-label','collection-new-mode','collection-new-permission','btn-save-collections'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !(canEditSite || canManageCollections)));
   document.getElementById('btn-cancel-collections')?.toggleAttribute('disabled', !(canEditSite || canManageCollections));
@@ -4064,13 +4155,16 @@ function renderAuthUserList() {
     addBtn?.setAttribute('disabled', 'disabled');
     addBtn && (addBtn.style.display = 'none');
     saveBtn?.removeAttribute('disabled');
-    const self = S.authUsers[0] || { id: '', username: '', role: S.currentAuthUser?.role || 'admin', password: '' };
+    const self = S.authUsers[0] || { id: '', username: '', role: S.currentAuthUser?.role || 'admin', password: '', googleEmail: '' };
     box.innerHTML = `
       <p style="color:var(--muted);font-size:.78rem;margin:0 0 .55rem">你可以在這裡修改自己的用戶名與密碼。</p>
       <div class="auth-user-row">
         <input type="text" class="fc" value="${esc(self.username || '')}" placeholder="用戶名" oninput="updateAuthUserField(0,'username',this.value)">
         <input type="text" class="fc" value="${esc(getRoleLabel(self.role === 'owner' ? 'owner' : 'admin'))}" disabled>
         <input type="password" class="fc" value="" placeholder="留空則維持原密碼" oninput="updateAuthUserField(0,'password',this.value)">
+        <input type="email" class="fc" value="${esc(self.googleEmail || '')}"
+          placeholder="Google 登入信箱（選填）"
+          oninput="updateAuthUserField(0,'googleEmail',this.value)">
       </div>
     `;
     return;
@@ -4087,6 +4181,9 @@ function renderAuthUserList() {
         ${(i === 0 ? ['owner'] : getRoleKeys().filter(role => role !== 'owner')).map(role => `<option value="${esc(role)}"${user.role === role ? ' selected' : ''}${role === 'owner' && ownerCount >= 1 && user.role !== 'owner' ? ' disabled' : ''}>${esc(getRoleLabel(role))}</option>`).join('')}
       </select>
       <input type="password" class="fc" value="" placeholder="${user.id ? '留空則維持原密碼' : '密碼'}" oninput="updateAuthUserField(${i},'password',this.value)">
+      <input type="email" class="fc" value="${esc(user.googleEmail || '')}"
+        placeholder="Google 登入信箱（選填）"
+        oninput="updateAuthUserField(${i},'googleEmail',this.value)">
       <button class="ib del" type="button" onclick="removeAuthUserRow(${i})" title="刪除此帳號">${icon('trash')}</button>
     </div>
     `).join('')}
@@ -4100,7 +4197,7 @@ function updateAuthUserField(i, field, value) {
 }
 
 function addAuthUserRow() {
-  S.authUsers.push({ id: '', username: '', role: 'admin', password: '' });
+  S.authUsers.push({ id: '', username: '', role: 'admin', password: '', googleEmail: '' });
   renderAuthUserList();
 }
 
@@ -4118,7 +4215,13 @@ async function loadAuthUsers() {
     const data = await api('GET', '/api/auth-users');
     S.currentAuthUser = data.currentUser || null;
     if (data.currentUser?.username) setAuthUsername(data.currentUser.username);
-    S.authUsers = (data.users || []).map(user => ({ id: user.id || '', username: user.username || '', role: user.role || 'admin', password: '' }));
+    S.authUsers = (data.users || []).map(user => ({
+      id: user.id || '',
+      username: user.username || '',
+      role: user.role || 'admin',
+      password: '',
+      googleEmail: user.googleEmail || ''
+    }));
     renderAuthUserList();
   } catch (e) {
     toast(e.message, 'err');
@@ -4134,10 +4237,17 @@ async function saveSite() {
     subtitle: document.getElementById('c-s').value.trim(),
     footer:   document.getElementById('c-f').value.trim() || `${siteTitle} · Archived by Username`
   };
+  const googleClientId = (document.getElementById('cfg-google-client-id')?.value || '').trim();
+  const uploadOrigin = (document.getElementById('cfg-upload-origin')?.value || '').trim();
   try {
     showLdg('儲存…');
-    await api('PUT', '/api/site', sc);
+    await Promise.all([
+      api('PUT', '/api/site', sc),
+      api('PUT', '/api/cfg-google', { googleClientId }),
+      api('PUT', '/api/cfg-upload-origin', { uploadOrigin })
+    ]);
     S.cat.sc = sc; applyUI();
+    window.UPLOAD_ORIGIN = uploadOrigin.replace(/\/+$/, '');
     hideLdg(); toast('外觀設定已儲存', 'ok');
   } catch(e) { hideLdg(); toast(e.message, 'err'); }
 }
@@ -4148,7 +4258,8 @@ async function saveAuthUsers() {
     id: user.id || '',
     username: String(user.username || '').trim(),
     role: String(user.role || 'admin'),
-    password: String(user.password || '')
+    password: String(user.password || ''),
+    googleEmail: String(user.googleEmail || '').trim().toLowerCase()
   }));
   if (!users.length) { toast('至少要保留一組登入帳號', 'err'); return; }
   if (isOwner && users[0]) users[0].role = 'owner';
@@ -4160,7 +4271,7 @@ async function saveAuthUsers() {
     seenNames.add(user.username);
   }
   try {
-    showLdg('儲存帳號設定…');
+    showLdg('\u5132\u5b58\u5e33\u865f\u8a2d\u5b9a\u2026');
     const data = await api('PUT', '/api/auth-users', { users });
     hideLdg();
     if (!data.currentUser) {
@@ -4177,7 +4288,13 @@ async function saveAuthUsers() {
     }
     S.currentAuthUser = data.currentUser || S.currentAuthUser;
     if (data.currentUser?.username) setAuthUsername(data.currentUser.username);
-    S.authUsers = (data.users || []).map(user => ({ id: user.id || '', username: user.username || '', role: user.role || 'admin', password: '' }));
+    S.authUsers = (data.users || []).map(user => ({
+      id: user.id || '',
+      username: user.username || '',
+      role: user.role || 'admin',
+      password: '',
+      googleEmail: user.googleEmail || ''
+    }));
     renderAuthUserList();
     toast('帳號設定已儲存', 'ok');
   } catch(e) { hideLdg(); toast(e.message, 'err'); }
@@ -4264,6 +4381,29 @@ function onPrev(files) {
   S.up.prevs = [...S.up.prevs, ...Array.from(files)];
   renderPrevGrid();
 }
+function openUpPickPrev() {
+  const panel = document.getElementById('up-pick-prev-panel');
+  if (!panel) return;
+  if (panel.innerHTML) { panel.innerHTML = ''; return; }
+  const candidates = S.up.files.filter(f => isImageFile(f.name));
+  if (!candidates.length) { toast('附件中沒有圖片檔案', ''); return; }
+  panel.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:.35rem;margin-top:.4rem;padding:.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
+    ${candidates.map((f, i) => `<div style="cursor:pointer" onclick="pickUpPrev(${i})" title="${esc(f.name)}">
+      <img src="${URL.createObjectURL(f)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
+      <div style="font-size:.62rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(f.name)}</div>
+    </div>`).join('')}
+  </div>`;
+  panel._candidates = candidates;
+}
+function pickUpPrev(i) {
+  const panel = document.getElementById('up-pick-prev-panel');
+  const file = (panel?._candidates || [])[i];
+  if (!file) return;
+  const dup = S.up.prevs.some(f => f.name === file.name && f.size === file.size);
+  if (!dup) { S.up.prevs.push(file); renderPrevGrid(); }
+  panel.innerHTML = ''; panel._candidates = null;
+  toast(dup ? '已在預覽清單中' : `已加入預覽：${file.name}`, dup ? '' : 'ok');
+}
 function onEditPrev(files) {
   if (!files?.length) return;
   const items = Array.from(files).map((file, i) => ({
@@ -4274,6 +4414,46 @@ function onEditPrev(files) {
   }));
   S.ePrevs = [...S.ePrevs, ...items];
   renderEditPrevGrid();
+}
+function openEditPickPrev() {
+  const panel = document.getElementById('edit-pick-prev-panel');
+  if (!panel) return;
+  if (panel.innerHTML) { panel.innerHTML = ''; return; }
+  const candidates = S.eDownloadEntries.filter(entry => {
+    const name = entry.kind === 'existing' ? (entry.originalName || entry.key || '') : (entry.file?.name || '');
+    return isImageFile(name);
+  });
+  if (!candidates.length) { toast('附件中沒有圖片檔案', ''); return; }
+  const usedKeys = new Set(S.ePrevs.map(p => p.kind === 'existing' ? p.key : (p.tempId || '')).filter(Boolean));
+  panel.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:.35rem;margin-top:.4rem;padding:.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
+    ${candidates.map((entry, i) => {
+      const name = entry.kind === 'existing' ? (entry.originalName || entry.key) : entry.file?.name;
+      const src  = entry.kind === 'existing' ? cUrl('/uploads/' + entry.key) : URL.createObjectURL(entry.file);
+      const uid  = entry.kind === 'existing' ? entry.key : (entry.tempId || '');
+      const used = usedKeys.has(uid);
+      return `<div style="cursor:pointer;opacity:${used ? .4 : 1}" onclick="pickEditPrev(${i})" title="${esc(name)}">
+        <img src="${esc(src)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
+        <div style="font-size:.62rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${used ? '✓ 已加入' : esc(name)}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+  panel._candidates = candidates;
+}
+function pickEditPrev(i) {
+  const panel = document.getElementById('edit-pick-prev-panel');
+  const entry = (panel?._candidates || [])[i];
+  if (!entry) return;
+  let dup = false;
+  if (entry.kind === 'existing') {
+    dup = S.ePrevs.some(p => p.kind === 'existing' && p.key === entry.key);
+    if (!dup) S.ePrevs.push({ kind: 'existing', key: entry.key, src: cUrl('/uploads/' + entry.key), originalName: entry.originalName || entry.key });
+  } else {
+    dup = S.ePrevs.some(p => p.kind === 'new' && p.tempId === entry.tempId);
+    if (!dup) S.ePrevs.push({ kind: 'new', file: entry.file, tempId: entry.tempId, src: URL.createObjectURL(entry.file) });
+  }
+  if (!dup) renderEditPrevGrid();
+  panel.innerHTML = ''; panel._candidates = null;
+  toast(dup ? '已在預覽清單中' : '已加入預覽', dup ? '' : 'ok');
 }
 function onFile(files) {
   if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
@@ -4907,7 +5087,7 @@ async function doUp() {
 
   // XHR for upload progress
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', `${UPLOAD_ORIGIN}/api/upload/${id}`);
+  xhr.open('POST', uploadUrl(`/api/upload/${id}`));
   xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
   xhr.upload.onprogress = e => {
@@ -5256,10 +5436,10 @@ function catDragEnd(e) { e.currentTarget.classList.remove('drag'); S.catDragIdx 
 async function saveCategories() {
   if (!canRolePermission('editCategories')) { toast('你沒有權限編輯類別庫', 'err'); return; }
   try {
-    showLdg('儲存類別中...');
+    showLdg('\u5132\u5b58\u985e\u5225\u4e2d...');
     await api('PUT', '/api/categories', { categories: S.cat.categories, items: S.cat.items.map(item => ({ id: item.id, categories: [...getItemCategories(item)] })) });
     refreshManageSnapshots();
-    hideLdg(); toast('類別順序已儲存', 'ok');
+    hideLdg(); toast('\u985e\u5225\u9806\u5e8f\u5df2\u5132\u5b58', 'ok');
   } catch (e) { hideLdg(); toast(e.message, 'err'); }
 }
 function cancelCategoryChanges() {
@@ -5363,10 +5543,10 @@ function tagDragEnd(e) { e.currentTarget.classList.remove('drag'); S.tagDragIdx 
 async function saveTags() {
   if (!canRolePermission('editTags')) { toast('你沒有權限編輯標籤庫', 'err'); return; }
   try {
-    showLdg('儲存標籤中...');
+    showLdg('\u5132\u5b58\u6a19\u7c64\u4e2d...');
     await api('PUT', '/api/tags', { tags: S.cat.tags, items: S.cat.items.map(({ id, tags }) => ({ id, tags: tags || [] })) });
     refreshManageSnapshots();
-    hideLdg(); toast('標籤順序已儲存', 'ok');
+    hideLdg(); toast('\u6a19\u7c64\u9806\u5e8f\u5df2\u5132\u5b58', 'ok');
   } catch (e) { hideLdg(); toast(e.message, 'err'); }
 }
 function cancelTagChanges() {
@@ -5531,8 +5711,15 @@ function getManFilteredItems() {
     (item.tags || []).some(t => t.toLowerCase().includes(q))
     );
   }
-  if (cats.length) items = items.filter(item => cats.some(cat => getItemCategories(item).includes(cat)));
-  if (tags.length) items = items.filter(item => tags.every(tag => (item.tags || []).includes(tag)));
+  if (cats.length || tags.length) {
+    items = items.filter(item => {
+      const itemCats = getItemCategories(item);
+      const itemTags = item.tags || [];
+      const catMatch = cats.length > 0 && cats.some(c => itemCats.includes(c));
+      const tagMatch = tags.length > 0 && tags.some(t => itemTags.includes(t));
+      return catMatch || tagMatch;
+    });
+  }
   if (S.manSortDir === 'desc') items.reverse();
   return items;
 }
@@ -6092,7 +6279,7 @@ async function confirmBatchDeleteAction() {
   if (!ids.length) return;
   try {
     closeBatchDeleteConfirm();
-    showLdg('刪除中…');
+    showLdg('\u522a\u9664\u4e2d\u2026');
     await api('POST', '/api/items/batch-delete', { ids });
     ids.forEach(id => {
       const idx = S.cat.items.findIndex(i => i.id === id);
@@ -6430,7 +6617,7 @@ async function cancelOrderChanges() {
   const pendingIds = [...S.manPendingTrash];
   try {
     if (pendingIds.length) {
-      showLdg('還原變更…');
+      showLdg('\u9084\u539f\u8b8a\u66f4\u2026');
       await api('POST', '/api/trash/restore', { ids: pendingIds });
       S.manPendingTrash.clear();
       S.trashSel.clear();
@@ -6484,11 +6671,11 @@ async function confirmDeleteAction() {
   if (!id) return;
   try {
     closeDeleteConfirm();
-    showLdg('移至回收桶…');
+    showLdg('\u79fb\u81f3\u56de\u6536\u6876\u2026');
     await api('DELETE', `/api/items/${id}`);
     S.cat.items = S.cat.items.filter(i => i.id !== id);
     S.manPendingTrash.add(id);
-    hideLdg(); toast('已移至回收桶', 'ok');
+    hideLdg(); toast('\u5df2\u79fb\u81f3\u56de\u6536\u6876', 'ok');
     normalizeCat();
     renderMan(); renderGallery(); renderPills(); updateCatSel(); renderCategoryManager(); updCatDl();
   } catch(e) { hideLdg(); toast(e.message, 'err'); }
@@ -6597,7 +6784,7 @@ async function saveEdit() {
     }
     if (hasPreviewMutation) {
       previewsFd.append('order', JSON.stringify(previewOrder));
-      const prevResp = await fetch(`${UPLOAD_ORIGIN}/api/items/${S.eId}/previews`, {
+      const prevResp = await fetch(uploadUrl(`/api/items/${S.eId}/previews`), {
         method: 'POST',
         headers: { Authorization: `Bearer ${getToken()}` },
         body: previewsFd
@@ -6618,7 +6805,7 @@ async function saveEdit() {
     if (downloadFilesChanged) {
       const newEntries = S.eDownloadEntries.filter(entry => entry.kind === 'new');
       if (newEntries.length) {
-        showLdg('儲存附檔…');
+        showLdg('\u5132\u5b58\u9644\u6a94\u2026');
         const existingKeys = S.eDownloadEntries.filter(entry => entry.kind === 'existing').map(entry => entry.key);
         const uploadResult = await appendFilesInBatches(S.eId, newEntries, {
           fileGetter: entry => entry.file,
@@ -6658,7 +6845,7 @@ async function saveEdit() {
         syncLightboxDownload(item, downloadData, previewData);
       }
     }
-    hideLdg(); toast('已儲存', 'ok');
+    hideLdg(); toast('\u5df2\u5132\u5b58', 'ok');
     closeEdit();
     renderGallery(); renderPills(); renderCategoryFilter(); renderMan(); renderCategoryManager(); renderTagManager(); updCatDl();
   } catch(e) { hideLdg(); toast(e.message, 'err'); }
