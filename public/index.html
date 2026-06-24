@@ -173,9 +173,9 @@ select.fs:focus{border-color:var(--gold)}
 .tf{position:relative}
 .tf-btn{min-width:140px;min-height:42px;justify-content:space-between}
 .tf-btn .lab{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tf-btn .arr{width:.82rem;height:.82rem;opacity:.8;transition:transform .18s;flex-shrink:0;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8a98' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:center;background-size:contain}
+.tf-btn .arr{display:inline-flex;align-items:center;justify-content:center;width:.92rem;height:.92rem;opacity:.8;flex-shrink:0;
+  transition:transform .2s ease}
+.tf-btn .arr .ico{width:100%;height:100%}
 .tf.on .tf-btn .arr{transform:rotate(180deg)}
 .tf-panel{display:none;position:absolute;top:calc(100% + .45rem);left:0;right:auto;width:100%;min-width:100%;max-width:100%;
   max-height:280px;overflow-x:hidden;overflow-y:auto;padding:.5rem;background:var(--card);border:1px solid var(--border);border-radius:var(--r);
@@ -258,13 +258,13 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 /* ── LIGHTBOX ── */
 .lb{display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.96)}
 .lb.on{display:flex}
-.lb-x{position:fixed;top:1rem;right:1.5rem;width:44px;height:44px;background:rgba(0,0,0,.6);
+.lb-x{width:44px;height:44px;background:rgba(0,0,0,.6);
   border:none;outline:1px solid rgba(255,255,255,.12);border-radius:50%;
   color:#fff;font-size:1.5rem;cursor:pointer;display:flex;align-items:center;
-  justify-content:center;z-index:510;transition:all .2s;line-height:1}
+  justify-content:center;transition:all .2s;line-height:1;flex:0 0 auto}
 .lb-x:hover{outline-color:var(--gold);background:rgba(50,38,10,.7)}
 .lb-inner{display:flex;width:100%;height:100%}
-.lb-vis{flex:1;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.lb-vis{flex:6;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .lb-tw{flex:1;overflow:hidden;position:relative}
 .lb-track{display:flex;height:100%;transition:transform .32s var(--ease)}
 .lb-slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:3rem 4rem}
@@ -281,11 +281,14 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .lb-dots{position:absolute;bottom:1.1rem;left:50%;transform:translateX(-50%);display:flex;gap:.45rem}
 .lb-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.22);cursor:pointer;transition:all .2s}
 .lb-dot.on{background:var(--gold);transform:scale(1.35)}
-.lb-info{width:300px;flex-shrink:0;background:var(--panel);border-left:1px solid var(--border);
-  padding:4rem 1.4rem 1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:.7rem}
+.lb-info{flex:4;min-width:0;background:var(--panel);border-left:1px solid var(--border);
+  padding:2rem 1.4rem 1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:.7rem}
+.lb-head{position:sticky;top:-2rem;z-index:3;display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;
+  margin:-2rem -1.4rem 0;padding:2rem 1.4rem .85rem;background:var(--panel)}
 .lb-t{font-family:'Noto Serif TC',serif;font-size:1.15rem;color:var(--gold);line-height:1.45}
 .lb-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem}
-.lb-a{font-size:.83rem;color:var(--muted)}
+.lb-title-main{min-width:0;flex:1}
+.lb-a{font-size:.83rem;color:var(--muted);line-height:1.2}
 .lb-tg{display:flex;flex-wrap:wrap;gap:.28rem}
 .lb-desc{font-size:.85rem;color:var(--text);line-height:1.75;opacity:.82;flex:1;white-space:pre-line}
 .lb-acts{display:flex;flex-direction:column;gap:.5rem;margin-top:auto;padding-top:.8rem}
@@ -334,8 +337,12 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .collection-add-row{display:flex;align-items:center;gap:.5rem;flex-wrap:nowrap}
 .collection-add-row .fc{flex:0 1 170px;min-width:0;max-width:170px;margin:0}
 .collection-add-row .btn{flex:0 0 auto;white-space:nowrap}
-.collection-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(150px,190px) auto;gap:.5rem;align-items:center}
-.collection-row .tag{white-space:nowrap;justify-self:start}
+.collection-row{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(150px,190px) 42px auto;gap:.5rem;align-items:center}
+.collection-row > .fc:not(.ord-inp){grid-column:1}
+.collection-row .tag{grid-column:2;white-space:nowrap;justify-self:start}
+.collection-row .field-inline-perm{grid-column:3}
+.collection-row .ord-inp{grid-column:4;justify-self:end}
+.collection-row > .ib,.collection-row > button.ib{grid-column:5;justify-self:end}
 .field-inline{display:inline-flex;align-items:center;gap:.4rem;min-width:0;flex:0 0 auto}
 .field-inline .fs{flex:1 1 auto;min-width:0}
 .field-inline-perm .fs{width:118px}
@@ -641,9 +648,9 @@ textarea.fc{min-height:72px;resize:vertical}
   0%,27.2727%{border-color:var(--gold);background:color-mix(in srgb, var(--gglow) 65%, var(--bg2));box-shadow:0 0 0 1px var(--gglow),0 10px 22px rgba(0,0,0,.10)}
   100%{border-color:var(--border);background:var(--bg2);box-shadow:none}
 }
-.mi-ord{width:42px;flex:0 0 42px;text-align:center;padding:.34rem .25rem;font-size:.8rem;user-select:text}
-.mi-ord::-webkit-outer-spin-button,.mi-ord::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.mi-ord[type=number]{-moz-appearance:textfield;appearance:textfield}
+.mi-ord,.ord-inp{width:42px;flex:0 0 42px;text-align:center;padding:.34rem .25rem;font-size:.8rem;user-select:text}
+.mi-ord::-webkit-outer-spin-button,.mi-ord::-webkit-inner-spin-button,.ord-inp::-webkit-outer-spin-button,.ord-inp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.mi-ord[type=number],.ord-inp[type=number]{-moz-appearance:textfield;appearance:textfield}
 .mth{width:46px;height:46px;object-fit:cover;border-radius:3px;border:1px solid var(--border);
   flex-shrink:0;background:var(--border)}
 .mi-info{flex:1;min-width:0}
@@ -697,6 +704,19 @@ body[data-theme="light"] .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;ba
 .preview-help{margin:0 0 .95rem;color:var(--muted);font-size:.82rem;line-height:1.7}
 .preview-toolbar{display:flex;justify-content:flex-end;gap:.55rem;flex-wrap:wrap;margin:0 0 .95rem}
 .preview-list{display:grid;gap:.7rem}
+.preview-tree{display:grid;gap:.45rem}
+.preview-tree-node{display:grid;gap:.35rem}
+.preview-entry{display:flex;align-items:center;gap:.5rem;width:100%;padding:.58rem .72rem;border:1px solid var(--border);border-radius:var(--r);
+  background:transparent;color:var(--text);font:inherit;text-decoration:none;text-align:left}
+.preview-entry:hover{border-color:var(--gold);background:var(--gglow);color:var(--gold)}
+.preview-entry.folder{cursor:pointer}
+.preview-entry .meta{display:flex;align-items:center;gap:.45rem;min-width:0;flex:1}
+.preview-entry .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.preview-entry .arr{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;flex:0 0 auto;transition:transform .2s ease}
+.preview-entry.open .arr{transform:rotate(90deg)}
+.preview-entry .arr .ico,.preview-entry .folder-ico .ico{width:1rem;height:1rem}
+.preview-entry .folder-ico{display:inline-flex;align-items:center;justify-content:center;color:var(--gold)}
+.preview-children{display:grid;gap:.35rem;padding-left:1.15rem;border-left:1px solid var(--border);margin-left:.5rem}
 .preview-item{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);text-decoration:none;color:inherit;transition:transform .18s var(--ease),border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
 .preview-item:hover{transform:translateY(-1px);border-color:var(--gold);box-shadow:var(--toast-shadow);background:var(--bg2)}
 .preview-item-btn{width:100%;font-family:inherit;text-align:left;cursor:pointer}
@@ -755,6 +775,10 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   .lb-vis{flex:0 0 54vh}
   .lb-slide{padding:1.8rem 2.5rem}
   .lb-info{width:100%;border-left:none;border-top:1px solid var(--border);padding:1rem 1.2rem 1.2rem}
+  .lb-head{top:-1rem;margin:-1rem -1.2rem 0;padding:1rem 1.2rem .75rem}
+  .mp-view-btns{flex-wrap:wrap;justify-content:flex-end}
+  .adm-tabs{flex-wrap:wrap;gap:.3rem}
+  .adm-tabs .atb{flex:1 0 auto;justify-content:center;font-size:.78rem}
   .adm{width:100vw}
 }
 </style>
@@ -832,7 +856,6 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 
 <!-- Lightbox -->
 <div class="lb" id="lb">
-  <button class="lb-x" id="lb-close" onclick="closeLb()"></button>
   <div class="lb-inner">
     <div class="lb-vis">
       <div class="lb-tw">
@@ -843,7 +866,12 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       <div class="lb-dots" id="lb-dots"></div>
     </div>
     <div class="lb-info">
-      <h2 class="lb-t" id="lb-t"></h2>
+      <div class="lb-head">
+        <div class="lb-title-main">
+          <h2 class="lb-t" id="lb-t"></h2>
+        </div>
+        <button class="lb-x" id="lb-close" onclick="closeLb()"></button>
+      </div>
       <p class="lb-a" id="lb-alt"></p>
       <p class="lb-a" id="lb-a"></p>
       <div class="lb-tg" id="lb-tg"></div>
@@ -998,7 +1026,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           <div class="di" id="dz-f-ico"></div>
           <p id="u-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
         </div>
-        <input type="file" id="fi-f" multiple style="display:none" onchange="onFile(this.files)">
+        <input type="file" id="fi-f" webkitdirectory mozdirectory multiple style="display:none" onchange="onFile(this.files)">
         <div id="fi-picked"></div>
         <div id="fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
       </div>
@@ -1188,7 +1216,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <div class="di" id="e-dz-f-ico"></div>
         <p id="e-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
       </div>
-      <input type="file" id="e-fi-f" multiple style="display:none" onchange="onEditFile(this.files)">
+      <input type="file" id="e-fi-f" webkitdirectory mozdirectory multiple style="display:none" onchange="onEditFile(this.files)">
       <div id="e-fi-picked"></div>
       <div id="e-fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
     </div>
@@ -1319,6 +1347,8 @@ const S = {
   eTags:  [], eCatsPicked: [], eId: null, ePrevs: [], eDownloadEntries: [],
   authUsers: [], currentAuthUser: null, roleConfig: null,
   downloadModalData: null,
+  previewModalState: null,
+  previewTreeOpen: {},
   dragIdx: null, dragOverIdx: null, dragOverPos: null, justMovedId: null, _tx: 0, manPageOpen: false,
   tagEditIdx: null, catEditIdx: null, prevDragIdx: null, ePrevDragIdx: null, tagSuggestIdx: -1, authorSuggestIdx: -1,
   tagDragOverIdx: null, tagDragOverPos: null, tagJustMoved: null,
@@ -1435,6 +1465,7 @@ function icon(name) {
     link: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14 8 16a3 3 0 0 1-4-4l3-3a3 3 0 0 1 4 0"/><path d="M14 10l2-2a3 3 0 1 1 4 4l-3 3a3 3 0 0 1-4 0"/><path d="m9 15 6-6"/></svg></span>',
     trash: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/><path d="M10 11v6M14 11v6"/></svg></span>',
     back: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8 5 12l4 4"/><path d="M5 12h8a6 6 0 0 0 6-6"/></svg></span>',
+    chevronDown: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>',
     chevronLeft: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span>',
     chevronRight: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>',
     empty: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/><path d="M8 9h8M8 13h5"/></svg></span>',
@@ -1570,7 +1601,7 @@ function permissionBadgeHtml(permission) {
 }
 function getItemCategoryLabel(item) {
   const cats = getItemCategories(item);
-  return cats.length ? cats.join('、') : '未分類';
+  return cats.length ? cats.join(', ') : '';
 }
 function getItemMetaLabel(item) {
   const parts = [];
@@ -2166,27 +2197,38 @@ function getItemDownloadFiles(item) {
   if (files.length) return files.map(file => ({
     key: file.key,
     name: file.name || (file.key ? file.key.split('/').pop() : 'download'),
-    size: file.size || null
+    size: file.size || null,
+    relativePath: file.relativePath || file.name || (file.key ? file.key.split('/').pop() : 'download')
   }));
   if (item?.downloadKey) {
     return [{
       key: item.downloadKey,
       name: item.downloadName || item.downloadKey.split('/').pop(),
-      size: null
+      size: null,
+      relativePath: item.downloadName || item.downloadKey.split('/').pop()
     }];
   }
   if (getCollectionEntry().mode === 'image') {
     const previewFiles = (item?.previewKeys || []).filter(Boolean).map(key => ({
       key,
       name: key.split('/').pop(),
-      size: null
+      size: null,
+      relativePath: key.split('/').pop()
     }));
     if (previewFiles.length) return previewFiles;
   }
   return [];
 }
+function getRelativeFilePath(file) {
+  return (file?.webkitRelativePath || file?.relativePath || file?.name || '').replace(/\\/g, '/');
+}
+function getEntryRelativeFilePath(entry) {
+  if (!entry) return '';
+  if (entry.kind === 'existing') return (entry.relativePath || entry.name || '').replace(/\\/g, '/');
+  return getRelativeFilePath(entry.file || entry);
+}
 function makeUploadFileKey(file) {
-  return file ? [file.name || '', file.size || 0, file.lastModified || 0].join('|') : '';
+  return file ? [getRelativeFilePath(file), file.size || 0, file.lastModified || 0].join('|') : '';
 }
 function makeEditDownloadEntryKey(entry) {
   if (!entry) return '';
@@ -2199,7 +2241,8 @@ function buildEditDownloadEntries(item) {
     kind: 'existing',
     key: file.key,
     name: file.name,
-    size: file.size || null
+    size: file.size || null,
+    relativePath: file.relativePath || file.name
   }));
 }
 function getEditPreviewState(item) {
@@ -2644,7 +2687,7 @@ function renderPills() {
   document.getElementById('pills').innerHTML =
     `<button class="btn btn-out tf-btn" type="button" onclick="toggleTagFilter(event)">
       <span class="lab">${esc(label)}</span>
-      <span class="arr" aria-hidden="true"></span>
+      <span class="arr" aria-hidden="true">${icon('chevronDown')}</span>
     </button>
     <div class="tf-panel" onclick="event.stopPropagation()">
       <div class="tf-actions"><button class="tf-clear" type="button" onclick="clearTagFilter()">清除選取</button></div>
@@ -2665,7 +2708,7 @@ function renderManTagFilter() {
   wrap.innerHTML =
     `<button class="btn btn-out tf-btn" type="button" onclick="toggleManTagFilter(event)">
       <span class="lab">${esc(label)}</span>
-      <span class="arr" aria-hidden="true"></span>
+      <span class="arr" aria-hidden="true">${icon('chevronDown')}</span>
     </button>
     <div class="tf-panel" onclick="event.stopPropagation()">
       <div class="tf-actions"><button class="tf-clear" type="button" onclick="clearManTagFilter()">清除選取</button></div>
@@ -2683,7 +2726,7 @@ function renderCategoryFilter() {
   document.getElementById('cat-filter').innerHTML =
     `<button class="btn btn-out tf-btn" type="button" onclick="toggleCategoryFilter(event)">
       <span class="lab">${esc(label)}</span>
-      <span class="arr" aria-hidden="true"></span>
+      <span class="arr" aria-hidden="true">${icon('chevronDown')}</span>
     </button>
     <div class="tf-panel" onclick="event.stopPropagation()">
       <div class="tf-actions"><button class="tf-clear" type="button" onclick="clearCategoryFilter()">清除選取</button></div>
@@ -2704,7 +2747,7 @@ function renderManCategoryFilter() {
   wrap.innerHTML =
     `<button class="btn btn-out tf-btn" type="button" onclick="toggleManCategoryFilter(event)">
       <span class="lab">${esc(label)}</span>
-      <span class="arr" aria-hidden="true"></span>
+      <span class="arr" aria-hidden="true">${icon('chevronDown')}</span>
     </button>
     <div class="tf-panel" onclick="event.stopPropagation()">
       <div class="tf-actions"><button class="tf-clear" type="button" onclick="clearManCategoryFilter()">清除選取</button></div>
@@ -3079,8 +3122,8 @@ function syncLightboxDownload(item, downloadData, previewData) {
   previewBtn.style.display = previewData?.supported ? 'inline-flex' : 'none';
   previewBtn.onclick = previewData?.supported
     ? () => {
-        const files = Array.isArray(previewData?.files) ? previewData.files : [];
-        if (files.length === 1 && files[0]?.url) {
+      const files = Array.isArray(previewData?.files) ? previewData.files : [];
+        if (files.length === 1 && files[0]?.url && !String(files[0]?.relativePath || '').includes('/')) {
           window.open(files[0].url, '_blank', 'noopener');
           return;
         }
@@ -3113,65 +3156,6 @@ function syncLightboxDownload(item, downloadData, previewData) {
   bottomActions.classList.toggle('single', !(showEdit && showDownload));
 }
 
-function renderPreviewModalContent(data) {
-  const title = document.getElementById('preview-title');
-  const body = document.getElementById('preview-body');
-  if (!body || !title) return;
-  title.textContent = '線上閱覽清單';
-  const files = Array.isArray(data?.files) ? data.files : [];
-  body.innerHTML = files.length
-    ? `
-      <p class="preview-help">請選擇欲開啟線上閱覽的附件。</p>
-      <div class="preview-list">
-        ${files.map(file => {
-          const kind = getMediaKindFromName(file.name || file.url || '');
-          const iconName = kind === 'audio' ? 'audio' : (kind === 'video' ? 'video' : 'file');
-          return `<a class="preview-item" href="${esc(file.url)}" target="_blank" rel="noopener"><span class="meta"><span class="ico" aria-hidden="true">${icon(iconName)}</span><span class="name">${esc(file.name || '未命名附件')}</span></span></a>`;
-        }).join('')}
-      </div>
-    `
-    : `<p class="preview-help">目前沒有可線上閱覽的附件。</p>`;
-}
-
-function renderDownloadModalContent(item, data) {
-  const title = document.getElementById('preview-title');
-  const body = document.getElementById('preview-body');
-  if (!body || !title) return;
-  title.textContent = '下載檔案';
-  const files = Array.isArray(data?.files) ? data.files : [];
-  const allUrl = data?.allUrl || '';
-  const allName = data?.allName || item?.downloadName || item?.title || 'download';
-  body.innerHTML = files.length || allUrl
-    ? `
-      <p class="preview-help">請選擇要下載單一附件，或直接下載全部檔案。</p>
-      ${allUrl ? `<div class="preview-toolbar"><button class="btn btn-gold" type="button" onclick="downloadAllFromModal()">全部下載</button></div>` : ''}
-      <div class="preview-list">
-        ${files.map((file, index) => {
-          const kind = getMediaKindFromName(file.name || file.url || '');
-          const iconName = kind === 'audio' ? 'audio' : (kind === 'video' ? 'video' : (kind === 'image' ? 'image' : 'file'));
-          return `<button class="preview-item preview-item-btn" type="button" onclick="downloadModalFile(${index})"><span class="meta"><span class="ico" aria-hidden="true">${icon(iconName)}</span><span class="name">${esc(file.name || '未命名附件')}</span></span><span class="subact">下載</span></button>`;
-        }).join('')}
-      </div>
-    `
-    : `<p class="preview-help">目前沒有可下載的附件。</p>`;
-}
-
-function openPreviewModal(data) {
-  const modal = document.getElementById('preview-modal');
-  if (!modal) return;
-  S.downloadModalData = null;
-  renderPreviewModalContent(data);
-  modal.classList.add('on');
-}
-
-function openDownloadModal(item, data) {
-  const modal = document.getElementById('preview-modal');
-  if (!modal) return;
-  S.downloadModalData = { item, data };
-  renderDownloadModalContent(item, data);
-  modal.classList.add('on');
-}
-
 async function downloadModalFile(index) {
   const data = S.downloadModalData?.data;
   const file = Array.isArray(data?.files) ? data.files[index] : null;
@@ -3186,16 +3170,122 @@ async function downloadAllFromModal() {
   await downloadFromUrl(data.allUrl, data.allName || item?.downloadName || item?.title || 'download');
 }
 
+function buildPreviewFileTree(files) {
+  const root = { folders: new Map(), files: [] };
+  (Array.isArray(files) ? files : []).forEach((file, index) => {
+    const rel = String(file?.relativePath || file?.name || `file-${index + 1}`).replace(/\\/g, '/');
+    const parts = rel.split('/').filter(Boolean);
+    const name = parts.pop() || (file?.name || `file-${index + 1}`);
+    let node = root;
+    let currentPath = '';
+    parts.forEach(part => {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      if (!node.folders.has(part)) node.folders.set(part, { folders: new Map(), files: [], path: currentPath, name: part });
+      node = node.folders.get(part);
+    });
+    node.files.push({ ...file, treeName: name, treePath: rel, treeIndex: index });
+  });
+  return root;
+}
+function getPreviewTreeIconName(file) {
+  const kind = getMediaKindFromName(file?.name || file?.url || '');
+  if (kind === 'audio') return 'audio';
+  if (kind === 'video') return 'video';
+  if (kind === 'image') return 'image';
+  return 'file';
+}
+function renderPreviewTreeNodes(node, mode = 'preview') {
+  const folderHtml = Array.from(node.folders.values()).map(folder => {
+    const isOpen = !!S.previewTreeOpen[folder.path];
+    return `<div class="preview-tree-node">
+      <button class="preview-entry folder${isOpen ? ' open' : ''}" type="button" onclick="togglePreviewTreeFolder('${encodeURIComponent(folder.path)}')">
+        <span class="arr" aria-hidden="true">${icon(isOpen ? 'chevronDown' : 'chevronRight')}</span>
+        <span class="meta"><span class="folder-ico" aria-hidden="true">${icon('folder')}</span><span class="name">${esc(folder.name)}</span></span>
+      </button>
+      ${isOpen ? `<div class="preview-children">${renderPreviewTreeNodes(folder, mode)}</div>` : ''}
+    </div>`;
+  }).join('');
+  const fileHtml = node.files.map(file => {
+    const iconHtml = `<span class="ico" aria-hidden="true">${icon(getPreviewTreeIconName(file))}</span>`;
+    if (mode === 'download') {
+      return `<button class="preview-entry" type="button" onclick="downloadModalFile(${file.treeIndex})"><span class="meta">${iconHtml}<span class="name">${esc(file.treeName || file.name || '未命名附件')}</span></span><span class="subact">下載</span></button>`;
+    }
+    return `<a class="preview-entry" href="${esc(file.url)}" target="_blank" rel="noopener"><span class="meta">${iconHtml}<span class="name">${esc(file.treeName || file.name || '未命名附件')}</span></span></a>`;
+  }).join('');
+  return `${folderHtml}${fileHtml}`;
+}
+function renderPreviewFileTree(files, mode = 'preview') {
+  const tree = buildPreviewFileTree(files);
+  const html = renderPreviewTreeNodes(tree, mode);
+  return html ? `<div class="preview-tree">${html}</div>` : '';
+}
+function togglePreviewTreeFolder(path) {
+  const key = decodeURIComponent(path || '');
+  S.previewTreeOpen[key] = !S.previewTreeOpen[key];
+  const state = S.previewModalState;
+  if (!state) return;
+  if (state.type === 'download') renderDownloadModalContent(state.item, state.data);
+  else renderPreviewModalContent(state.data);
+}
+function renderPreviewModalContent(data) {
+  const title = document.getElementById('preview-title');
+  const body = document.getElementById('preview-body');
+  if (!body || !title) return;
+  title.textContent = '線上閱覽清單';
+  const files = Array.isArray(data?.files) ? data.files : [];
+  body.innerHTML = files.length
+    ? `
+      <p class="preview-help">請選擇欲開啟線上閱覽的附件。</p>
+      ${renderPreviewFileTree(files, 'preview')}
+    `
+    : `<p class="preview-help">目前沒有可線上閱覽的附件。</p>`;
+}
+function renderDownloadModalContent(item, data) {
+  const title = document.getElementById('preview-title');
+  const body = document.getElementById('preview-body');
+  if (!body || !title) return;
+  title.textContent = '下載檔案';
+  const files = Array.isArray(data?.files) ? data.files : [];
+  const allUrl = data?.allUrl || '';
+  const allName = data?.allName || item?.downloadName || item?.title || 'download';
+  body.innerHTML = files.length || allUrl
+    ? `
+      <p class="preview-help">請選擇要下載單一附件，或直接下載全部檔案。</p>
+      ${allUrl ? `<div class="preview-toolbar"><button class="btn btn-gold" type="button" onclick="downloadAllFromModal()">全部下載</button></div>` : ''}
+      ${renderPreviewFileTree(files, 'download')}
+    `
+    : `<p class="preview-help">目前沒有可下載的附件。</p>`;
+  if (allUrl && !data.allName) data.allName = allName;
+}
+function openPreviewModal(data) {
+  const modal = document.getElementById('preview-modal');
+  if (!modal) return;
+  S.downloadModalData = null;
+  S.previewModalState = { type: 'preview', data };
+  S.previewTreeOpen = {};
+  renderPreviewModalContent(data);
+  modal.classList.add('on');
+}
+function openDownloadModal(item, data) {
+  const modal = document.getElementById('preview-modal');
+  if (!modal) return;
+  S.downloadModalData = { item, data };
+  S.previewModalState = { type: 'download', item, data };
+  S.previewTreeOpen = {};
+  renderDownloadModalContent(item, data);
+  modal.classList.add('on');
+}
+function onPreviewModalBackdrop(event) {
+  if (event.target?.id === 'preview-modal') closePreviewModal();
+}
 function closePreviewModal() {
   const modal = document.getElementById('preview-modal');
   if (modal) modal.classList.remove('on');
   const body = document.getElementById('preview-body');
   if (body) body.innerHTML = '';
   S.downloadModalData = null;
-}
-
-function onPreviewModalBackdrop(event) {
-  if (event.target?.id === 'preview-modal') closePreviewModal();
+  S.previewModalState = null;
+  S.previewTreeOpen = {};
 }
 
 function stopLightboxMediaPlayback() {
@@ -3403,9 +3493,11 @@ function renderCollectionConfigPanel() {
     .map((item, idx) => ({ item, idx }))
     .filter(({ item }) => canCurrentUserAccessCollectionConfigItem(item));
   box.innerHTML = visibleEntries.map(({ item, idx }) => `
-    <div class="role-card" draggable="${canManage ? 'true' : 'false'}" data-collection-idx="${idx}"
-      ${canManage ? `ondragstart="collectionCardDragStart(event, ${idx})" ondragover="collectionCardDragOver(event, ${idx})" ondrop="collectionCardDrop(event, ${idx})" ondragend="collectionCardDragEnd(event)"` : ''}>
+    <div class="role-card" draggable="${canManage && item.key !== 'scenario' ? 'true' : 'false'}" data-collection-idx="${idx}" data-collection-key="${esc(item.key)}"
+      ${canManage && item.key !== 'scenario' ? `ondragstart="collectionCardDragStart(event, ${idx})" ondragover="collectionCardDragOver(event, ${idx})" ondrop="collectionCardDrop(event, ${idx})" ondragend="collectionCardDragEnd(event)"` : ''}>
       <div class="collection-row">
+        <input type="number" class="fc ord-inp" value="${idx + 1}" min="1" max="${S.collections.length}" ${canManage && item.key !== 'scenario' ? '' : 'disabled'}
+          onclick="event.stopPropagation()" onfocus="primeInlineOrderInput(event,this,${idx + 1})" onkeydown="handleInlineOrderEnter(event)" onblur="commitCollectionOrderInput(this,${idx})">
         <input type="text" class="fc" value="${esc(item.label || '')}" placeholder="頁籤名稱" ${canManage ? '' : 'disabled'} oninput="updateCollectionConfigField(${idx},'label',this.value)">
         <span class="tag" title="模式（建立後不可變更）">模式：${item.mode === 'image' ? '圖庫' : '資料'}</span>
         <div class="field-inline field-inline-perm">
@@ -3431,6 +3523,7 @@ function clearCollectionCardDropState() {
 
 function collectionCardDragStart(e, idx) {
   if (!canRolePermission('manageCollections')) return;
+  if (S.collections[idx]?.key === 'scenario') return;
   S.collectionDragIdx = idx;
   e.currentTarget.classList.add('drag');
   e.dataTransfer.effectAllowed = 'move';
@@ -3439,6 +3532,7 @@ function collectionCardDragStart(e, idx) {
 function collectionCardDragOver(e, idx) {
   e.preventDefault();
   if (S.collectionDragIdx === null || S.collectionDragIdx === undefined) return;
+  if (S.collections[idx]?.key === 'scenario') return;
   const rect = e.currentTarget.getBoundingClientRect();
   const pos = e.clientY >= rect.top + rect.height / 2 ? 'after' : 'before';
   if (S.collectionDragOverIdx === idx && S.collectionDragOverPos === pos) return;
@@ -3451,6 +3545,12 @@ function collectionCardDragOver(e, idx) {
 function collectionCardDrop(e, idx) {
   e.preventDefault();
   if (S.collectionDragIdx === null || S.collectionDragIdx === undefined) return;
+  if (S.collections[idx]?.key === 'scenario') {
+    clearCollectionCardDropState();
+    S.collectionDragIdx = null;
+    renderCollectionConfigPanel();
+    return;
+  }
   const rect = e.currentTarget.getBoundingClientRect();
   const pos = S.collectionDragOverIdx === idx && S.collectionDragOverPos ? S.collectionDragOverPos : (e.clientY >= rect.top + rect.height / 2 ? 'after' : 'before');
   let insertIdx = idx + (pos === 'after' ? 1 : 0);
@@ -3940,7 +4040,8 @@ function onEditFile(files) {
   const entries = Array.from(files).map((file, i) => ({
     kind: 'new',
     tempId: `new-file-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`,
-    file
+    file,
+    relativePath: getRelativeFilePath(file)
   }));
   S.eDownloadEntries = [...S.eDownloadEntries, ...entries];
   document.getElementById('e-fi-f').value = '';
@@ -4062,54 +4163,6 @@ function editFileDragEnd(e) {
   clearFileDragIndicator('edit');
   renderEditFilePicked();
 }
-function renderUploadFilePicked() {
-  const box = document.getElementById('fi-picked');
-  const info = document.getElementById('fi-info');
-  if (!box || !info) return;
-  if (!S.up.files.length) {
-    box.innerHTML = '';
-    info.textContent = '';
-    return;
-  }
-  box.innerHTML = S.up.files.map((file, i) => `<div class="file-picked${S.fileJustMovedKey === makeUploadFileKey(file) ? ' moved' : ''}${S.fileDragOverIdx === i && S.fileDragOverPos === 'before' ? ' drop-before' : ''}${S.fileDragOverIdx === i && S.fileDragOverPos === 'after' ? ' drop-after' : ''}" draggable="true" data-i="${i}"
-    ondragstart="uploadFileDragStart(event,${i})" ondragover="uploadFileDragOver(event)"
-    ondrop="uploadFileDrop(event,${i})" ondragend="uploadFileDragEnd(event)">
-    <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon('file')}<span class="name">${esc(file.name)}（${fmtSz(file.size)}）</span></div>
-    <button class="ib del" type="button" onclick="removeUploadFileAt(${i})" title="刪除此檔">${icon('trash')}</button>
-  </div>`).join('');
-  info.textContent = S.up.files.length > 1 ? '上傳後會自動打包成一個 ZIP 下載檔。' : '';
-}
-function removeUploadFileAt(i) {
-  if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
-  S.up.files.splice(i, 1);
-  renderUploadFilePicked();
-}
-function renderEditFilePicked() {
-  const box = document.getElementById('e-fi-picked');
-  const info = document.getElementById('e-fi-info');
-  if (!box || !info) return;
-  box.innerHTML = S.eDownloadEntries.map((entry, i) => {
-    const name = entry.kind === 'existing' ? entry.name : entry.file?.name;
-    const size = entry.kind === 'existing' ? entry.size : entry.file?.size;
-    return `<div class="file-picked${S.eFileJustMovedKey === makeEditDownloadEntryKey(entry) ? ' moved' : ''}${S.eFileDragOverIdx === i && S.eFileDragOverPos === 'before' ? ' drop-before' : ''}${S.eFileDragOverIdx === i && S.eFileDragOverPos === 'after' ? ' drop-after' : ''}" draggable="true" data-i="${i}"
-      ondragstart="editFileDragStart(event,${i})" ondragover="editFileDragOver(event)"
-      ondrop="editFileDrop(event,${i})" ondragend="editFileDragEnd(event)">
-      <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon('file')}<span class="name">${esc(name || '未命名附件')}${size ? `（${fmtSz(size)}）` : ''}</span></div>
-      <button class="ib del" type="button" onclick="removeEditFileAt(${i})" title="刪除此檔">${icon('trash')}</button>
-    </div>`;
-  }).join('');
-  if (!box.innerHTML) {
-    info.textContent = '目前未設定下載檔案';
-    return;
-  }
-  const totalFiles = S.eDownloadEntries.length;
-  info.textContent = totalFiles > 1 ? '儲存後會將目前保留與新增的檔案一起打包成 ZIP。' : '儲存後會維持單一下載檔案。';
-}
-function removeEditFileAt(i) {
-  S.eDownloadEntries.splice(i, 1);
-  renderEditFilePicked();
-}
-
 function renderPrevGrid() {
   const wrap = document.getElementById('pg');
   if (!wrap) return;
@@ -4122,6 +4175,53 @@ function renderPrevGrid() {
       <button class="prev-del" type="button" onclick="removePrevAt(${i});event.stopPropagation()" title="刪除此圖">${icon('trash')}</button>
       <span class="prev-order">${i + 1}</span>
     </div>`).join('');
+}
+function renderUploadFilePicked() {
+  const box = document.getElementById('fi-picked');
+  const info = document.getElementById('fi-info');
+  if (!box || !info) return;
+  if (!S.up.files.length) {
+    box.innerHTML = '';
+    info.textContent = '';
+    return;
+  }
+  box.innerHTML = S.up.files.map((file, i) => `<div class="file-picked${S.fileJustMovedKey === makeUploadFileKey(file) ? ' moved' : ''}${S.fileDragOverIdx === i && S.fileDragOverPos === 'before' ? ' drop-before' : ''}${S.fileDragOverIdx === i && S.fileDragOverPos === 'after' ? ' drop-after' : ''}" draggable="true" data-i="${i}"
+    ondragstart="uploadFileDragStart(event,${i})" ondragover="uploadFileDragOver(event)"
+    ondrop="uploadFileDrop(event,${i})" ondragend="uploadFileDragEnd(event)">
+    <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon('file')}<span class="name">${esc(getRelativeFilePath(file) || file.name)}${file.size ? ` (${fmtSz(file.size)})` : ''}</span></div>
+    <button class="ib del" type="button" onclick="removeUploadFileAt(${i})" title="刪除此檔">${icon('trash')}</button>
+  </div>`).join('');
+  info.textContent = S.up.files.length > 1 ? '多個檔案會依目前順序打包成 ZIP。' : '';
+}
+function renderEditFilePicked() {
+  const box = document.getElementById('e-fi-picked');
+  const info = document.getElementById('e-fi-info');
+  if (!box || !info) return;
+  if (!S.eDownloadEntries.length) {
+    box.innerHTML = '';
+    info.textContent = '目前沒有附件。';
+    return;
+  }
+  box.innerHTML = S.eDownloadEntries.map((entry, i) => {
+    const name = entry.kind === 'existing' ? (entry.relativePath || entry.name) : getEntryRelativeFilePath(entry);
+    const size = entry.kind === 'existing' ? entry.size : entry.file?.size;
+    return `<div class="file-picked${S.eFileJustMovedKey === makeEditDownloadEntryKey(entry) ? ' moved' : ''}${S.eFileDragOverIdx === i && S.eFileDragOverPos === 'before' ? ' drop-before' : ''}${S.eFileDragOverIdx === i && S.eFileDragOverPos === 'after' ? ' drop-after' : ''}" draggable="true" data-i="${i}"
+      ondragstart="editFileDragStart(event,${i})" ondragover="editFileDragOver(event)"
+      ondrop="editFileDrop(event,${i})" ondragend="editFileDragEnd(event)">
+      <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon('file')}<span class="name">${esc(name || '未命名附件')}${size ? ` (${fmtSz(size)})` : ''}</span></div>
+      <button class="ib del" type="button" onclick="removeEditFileAt(${i})" title="刪除此檔">${icon('trash')}</button>
+    </div>`;
+  }).join('');
+  info.textContent = S.eDownloadEntries.length > 1 ? '儲存後會依目前順序重新產生 ZIP。' : '儲存後會更新附件內容。';
+}
+function removeUploadFileAt(i) {
+  if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
+  S.up.files.splice(i, 1);
+  renderUploadFilePicked();
+}
+function removeEditFileAt(i) {
+  S.eDownloadEntries.splice(i, 1);
+  renderEditFilePicked();
 }
 function getUploadPrevKey(file) {
   return file ? [file.name || '', file.size || 0, file.lastModified || 0].join('|') : '';
@@ -4531,7 +4631,10 @@ async function doUp() {
 
   // Files
   S.up.prevs.forEach(f => fd.append('previews', f));
-  S.up.files.forEach(f => fd.append('files', f));
+  S.up.files.forEach(f => {
+    fd.append('files', f);
+    fd.append('relativePaths[]', getRelativeFilePath(f) || f.name);
+  });
 
   // XHR for upload progress
   const xhr = new XMLHttpRequest();
@@ -4691,6 +4794,8 @@ function renderTagManager() {
         ? `<input type="text" class="fc tag-row-edit" id="tag-edit-input" value="${esc(tag)}"
              onkeydown="if(event.key==='Enter'){event.preventDefault();commitTagRename(${i})} if(event.key==='Escape'){cancelTagRename()}">`
         : `<span class="tag-row-name">${esc(tag)}</span>`}
+      <input type="number" class="fc ord-inp" value="${i + 1}" min="1" max="${tags.length}" ${canEditTags ? '' : 'disabled'}
+        onclick="event.stopPropagation()" onfocus="primeInlineOrderInput(event,this,${i + 1})" onkeydown="handleInlineOrderEnter(event)" onblur="commitTagOrderInput(this,${i})">
       <div class="tag-row-acts">
         ${S.tagEditIdx === i
           ? `<button class="ib" type="button" ${canEditTags ? `onclick="commitTagRename(${i})"` : 'disabled'} title="儲存">${icon('save')}</button>
@@ -4719,6 +4824,8 @@ function renderCategoryManager() {
         ? `<input type="text" class="fc tag-row-edit" id="cat-edit-input" value="${esc(cat)}"
              onkeydown="if(event.key==='Enter'){event.preventDefault();commitCategoryRename(${i})} if(event.key==='Escape'){cancelCategoryRename()}">`
         : `<span class="tag-row-name">${esc(cat)}</span>`}
+      <input type="number" class="fc ord-inp" value="${i + 1}" min="1" max="${cats.length}" ${canEditCats ? '' : 'disabled'}
+        onclick="event.stopPropagation()" onfocus="primeInlineOrderInput(event,this,${i + 1})" onkeydown="handleInlineOrderEnter(event)" onblur="commitCategoryOrderInput(this,${i})">
       <div class="tag-row-acts">
         ${S.catEditIdx === i
           ? `<button class="ib" type="button" ${canEditCats ? `onclick="commitCategoryRename(${i})"` : 'disabled'} title="儲存">${icon('save')}</button>
@@ -5403,6 +5510,67 @@ function applyCardOrder(fromIdx, rawValue) {
   const [moved] = S.cat.items.splice(fromIdx, 1);
   S.cat.items.splice(target, 0, moved);
   renderMan();
+}
+function primeInlineOrderInput(e, input, currentOrder) {
+  e?.stopPropagation?.();
+  if (!input) return;
+  input.dataset.orderStart = String(currentOrder || input.value || '1');
+  requestAnimationFrame(() => {
+    input.focus();
+    input.select?.();
+  });
+}
+function handleInlineOrderEnter(e) {
+  e.stopPropagation();
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    e.currentTarget?.blur();
+  }
+}
+function clampInlineOrder(rawValue, total, fallback) {
+  return Math.min(total, Math.max(1, Number(rawValue) || fallback));
+}
+function applySimpleListOrder(list, fromIdx, rawValue, renderFn) {
+  const total = Array.isArray(list) ? list.length : 0;
+  if (!total || fromIdx < 0 || fromIdx >= total) {
+    renderFn?.();
+    return;
+  }
+  const fallback = fromIdx + 1;
+  const target = clampInlineOrder(rawValue, total, fallback) - 1;
+  if (target === fromIdx) {
+    renderFn?.();
+    return;
+  }
+  const [moved] = list.splice(fromIdx, 1);
+  list.splice(target, 0, moved);
+  renderFn?.();
+}
+function commitCategoryOrderInput(input, idx) {
+  applySimpleListOrder(S.cat.categories, idx, input?.value || input?.dataset?.orderStart, () => {
+    updateCatSel();
+    updCatDl();
+    renderCategoryManager();
+  });
+}
+function commitTagOrderInput(input, idx) {
+  applySimpleListOrder(S.cat.tags, idx, input?.value || input?.dataset?.orderStart, () => {
+    S.cat.items.forEach(item => { item.tags = sortTagsByLibrary(item.tags || []); });
+    S.up.tags = sortTagsByLibrary(S.up.tags);
+    S.eTags = sortTagsByLibrary(S.eTags);
+    renderTagManager();
+    renderTagPool('u');
+    renderTagPool('e');
+    renderPills();
+  });
+}
+function commitCollectionOrderInput(input, idx) {
+  const item = S.collections[idx];
+  if (!item || item.key === 'scenario') {
+    renderCollectionConfigPanel();
+    return;
+  }
+  applySimpleListOrder(S.collections, idx, input?.value || input?.dataset?.orderStart, renderCollectionConfigPanel);
 }
 
 function clearManDragIndicator() {
@@ -6159,6 +6327,7 @@ async function saveEdit() {
         }
         order.push({ type: 'new', value: newFileIndex });
         fd.append('files', entry.file);
+        fd.append('relativePaths[]', getEntryRelativeFilePath(entry) || entry.file?.name || `file-${newFileIndex + 1}`);
         newFileIndex += 1;
       });
       fd.append('order', JSON.stringify(order));

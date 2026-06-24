@@ -115,13 +115,17 @@ function normalizeDownloadFiles(item) {
     .map(entry => ({
       key: entry.key,
       name: sanitizeDownloadName(decodeUploadFilename(entry.name || path.basename(entry.key)), path.basename(entry.key)),
-      size: Number(entry.size) > 0 ? Number(entry.size) : undefined
+      size: Number(entry.size) > 0 ? Number(entry.size) : undefined,
+      relativePath: typeof entry.relativePath === 'string' && entry.relativePath.trim()
+        ? entry.relativePath.trim().replace(/\\/g, '/')
+        : undefined
     }));
 
   if (!normalized.length && item.downloadKey) {
     normalized.push({
       key: item.downloadKey,
-      name: sanitizeDownloadName(decodeUploadFilename(item.downloadName || path.basename(item.downloadKey)), path.basename(item.downloadKey))
+      name: sanitizeDownloadName(decodeUploadFilename(item.downloadName || path.basename(item.downloadKey)), path.basename(item.downloadKey)),
+      relativePath: path.basename(item.downloadKey)
     });
   }
 
@@ -134,6 +138,7 @@ function getImageDownloadFiles(item = {}) {
     .map(key => ({
       key,
       name: sanitizeDownloadName(path.basename(key), path.basename(key)),
+      relativePath: path.basename(key),
       abs: path.join(UPLOADS, key)
     }))
     .filter(file => fs.existsSync(file.abs));
@@ -162,6 +167,7 @@ function getDownloadableFilesForItem(item = {}, mode = 'scenario') {
       index,
       key: file.key,
       name: sanitizeDownloadName(file.name || path.basename(file.key), path.basename(file.key)),
+      relativePath: file.relativePath || path.basename(file.key),
       abs: file.abs
     }));
   }
@@ -170,6 +176,7 @@ function getDownloadableFilesForItem(item = {}, mode = 'scenario') {
       index,
       key: file.key,
       name: sanitizeDownloadName(file.name || path.basename(file.key), path.basename(file.key)),
+      relativePath: file.relativePath || path.basename(file.key),
       abs: path.join(UPLOADS, file.key)
     }))
     .filter(file => fs.existsSync(file.abs));
@@ -358,6 +365,32 @@ function buildStoredKey(collection = 'scenario', itemId = '', filename = '') {
   return key === 'scenario'
     ? `${itemId}/${filename}`
     : `${key}/${itemId}/${filename}`;
+}
+function normalizeRelativePath(relativePath, fallback = 'download.bin') {
+  const raw = String(relativePath || '').replace(/\\/g, '/').trim();
+  const source = raw || fallback;
+  if (/^[a-zA-Z]:/.test(source) || source.startsWith('/')) {
+    throw new Error('Invalid relative path');
+  }
+  const parts = source.split('/').filter(Boolean);
+  if (!parts.length) return sanitizeDownloadName(fallback, 'download.bin');
+  const safeParts = parts.map((part, idx) => {
+    const decoded = decodeUploadFilename(part);
+    if (decoded === '.' || decoded === '..') throw new Error('Invalid relative path');
+    const safe = sanitizeDownloadName(decoded, idx === parts.length - 1 ? fallback : 'folder').replace(/^\.+$/, '_');
+    return safe || (idx === parts.length - 1 ? sanitizeDownloadName(fallback, 'download.bin') : 'folder');
+  });
+  const normalized = path.posix.normalize(safeParts.join('/'));
+  if (!normalized || normalized === '.' || normalized === '..' || normalized.startsWith('../') || normalized.includes('/../')) {
+    throw new Error('Invalid relative path');
+  }
+  return normalized;
+}
+function resolveUploadTargetPath(uploadDir, relativePath) {
+  const destPath = path.resolve(uploadDir, relativePath.split('/').join(path.sep));
+  const rel = path.relative(uploadDir, destPath);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('Invalid relative path');
+  return destPath;
 }
 
 function withCollection(url, collection = 'scenario') {
@@ -2075,12 +2108,17 @@ function toDosDateTime(date) {
 function makeUniqueZipEntryNames(files) {
   const counts = new Map();
   return files.map((file, idx) => {
-    const parsed = path.parse(path.basename(file.originalname || `file-${idx + 1}.bin`));
+    const fallback = `file-${idx + 1}.bin`;
+    const normalized = normalizeRelativePath(file.relativePath || file.originalname || fallback, fallback);
+    const parsed = path.posix.parse(normalized);
     const base = sanitizeDownloadName(parsed.name, `file-${idx + 1}`);
     const ext = parsed.ext || '';
-    const seen = counts.get(`${base}${ext}`) || 0;
-    counts.set(`${base}${ext}`, seen + 1);
-    return seen ? `${base} (${seen + 1})${ext}` : `${base}${ext}`;
+    const dir = parsed.dir ? `${parsed.dir}/` : '';
+    const dedupeKey = `${dir}${base}${ext}`;
+    const seen = counts.get(dedupeKey) || 0;
+    counts.set(dedupeKey, seen + 1);
+    const name = seen ? `${base} (${seen + 1})${ext}` : `${base}${ext}`;
+    return `${dir}${name}`;
   });
 }
 
@@ -2153,23 +2191,46 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
   const dir = collUploadDir(collection, itemId);
   fs.mkdirSync(dir, { recursive: true });
 
-  const normalizedFiles = files.map((file, idx) => ({
-    key: file.key,
-    path: file.path || path.join(UPLOADS, file.key),
-    name: sanitizeDownloadName(decodeUploadFilename(file.name || file.originalname || path.basename(file.key || `file-${idx + 1}`)), `file-${idx + 1}`),
-    size: Number(file.size) > 0 ? Number(file.size) : (fs.existsSync(file.path || path.join(UPLOADS, file.key)) ? fs.statSync(file.path || path.join(UPLOADS, file.key)).size : undefined)
-  }));
+  const sourceFiles = files.map((file, idx) => {
+    const fallbackName = decodeUploadFilename(file.name || file.originalname || path.basename(file.key || `file-${idx + 1}.bin`));
+    return {
+      ...file,
+      relativePath: normalizeRelativePath(file.relativePath || fallbackName, fallbackName || `file-${idx + 1}.bin`)
+    };
+  });
+  const uniqueRelativePaths = makeUniqueZipEntryNames(sourceFiles.map(file => ({ relativePath: file.relativePath })));
+  const normalizedFiles = sourceFiles.map((file, idx) => {
+    const relativePath = uniqueRelativePaths[idx];
+    const finalKey = buildStoredKey(collection, itemId, relativePath);
+    const finalPath = resolveUploadTargetPath(dir, relativePath);
+    let currentPath = file.path || (file.key ? path.join(UPLOADS, file.key) : finalPath);
+    if (file.path) {
+      fs.mkdirSync(path.dirname(finalPath), { recursive: true });
+      if (path.resolve(currentPath) !== finalPath) {
+        if (fs.existsSync(finalPath)) fs.rmSync(finalPath, { force: true });
+        fs.renameSync(currentPath, finalPath);
+      }
+      currentPath = finalPath;
+    }
+    return {
+      key: file.path ? finalKey : (file.key || finalKey),
+      path: currentPath,
+      name: sanitizeDownloadName(decodeUploadFilename(path.posix.basename(relativePath)), `file-${idx + 1}`),
+      size: Number(file.size) > 0 ? Number(file.size) : (fs.existsSync(currentPath) ? fs.statSync(currentPath).size : undefined),
+      relativePath
+    };
+  });
 
   if (normalizedFiles.length === 1) {
     const file = normalizedFiles[0];
     return {
       downloadKey: file.key,
       downloadName: file.name,
-      downloadFiles: normalizedFiles.map(({ key, name, size }) => ({ key, name, size }))
+      downloadFiles: normalizedFiles.map(({ key, name, size, relativePath }) => ({ key, name, size, relativePath }))
     };
   }
 
-  const entryNames = makeUniqueZipEntryNames(normalizedFiles.map(file => ({ originalname: file.name })));
+  const entryNames = makeUniqueZipEntryNames(normalizedFiles.map(file => ({ relativePath: file.relativePath })));
   const zipPath = path.join(dir, 'dl.zip');
   const zipBase = sanitizeDownloadName(String(preferredBaseName || 'download').replace(/\.zip$/i, ''), 'download');
   const zipBuffer = buildZipBuffer(normalizedFiles.map((file, idx) => ({ path: file.path, name: entryNames[idx] })));
@@ -2177,7 +2238,7 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
   return {
     downloadKey: buildStoredKey(collection, itemId, 'dl.zip'),
     downloadName: `${zipBase}.zip`,
-    downloadFiles: normalizedFiles.map(({ key, name, size }) => ({ key, name, size }))
+    downloadFiles: normalizedFiles.map(({ key, name, size, relativePath }) => ({ key, name, size, relativePath }))
   };
 }
 
@@ -2388,6 +2449,7 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
   const files = getDownloadableFilesForItem(item, collCfg.mode).map(file => ({
     index: file.index,
     name: file.name,
+    relativePath: file.relativePath || file.name,
     url: withCollection(`/api/download/${item.id}/files/${file.index}`, collection)
   }));
 
@@ -2434,6 +2496,7 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
       files: files.map((file, index) => ({
         index,
         name: file?.name || path.basename(file?.key || 'document'),
+        relativePath: file?.relativePath || file?.name || path.basename(file?.key || 'document'),
         url: withCollection(`/preview-open/${item.id}/${index}`, collection)
       }))
     });
@@ -3007,11 +3070,15 @@ app.post('/api/upload/:itemId', auth,
     const collection = getC(req);
     const id  = req.params.itemId;
     const prs = req.files?.previews || [];
-    const dlFiles = [...(req.files?.files || []), ...(req.files?.file || [])].map(file => ({
+    const relativePaths = Array.isArray(req.body?.['relativePaths[]'])
+      ? req.body['relativePaths[]']
+      : (Array.isArray(req.body?.relativePaths) ? req.body.relativePaths : (req.body?.['relativePaths[]'] ? [req.body['relativePaths[]']] : (req.body?.relativePaths ? [req.body.relativePaths] : [])));
+    const dlFiles = [...(req.files?.files || []), ...(req.files?.file || [])].map((file, idx) => ({
       key: buildStoredKey(collection, id, file.filename),
       path: file.path,
       name: file.originalname,
-      size: file.size
+      size: file.size,
+      relativePath: relativePaths[idx] || file.originalname
     }));
     const previewKeys = prs.map(f => buildStoredKey(collection, id, f.filename));
     const subtitle = String(req.body.subtitle || req.body.translatedTitle || '').trim();
@@ -3159,13 +3226,17 @@ app.post('/api/items/:id/file', auth, upload.fields([
     let order = [];
     try { order = JSON.parse(req.body.order || '[]'); } catch {}
     if (!Array.isArray(order)) order = [];
+    const relativePaths = Array.isArray(req.body?.['relativePaths[]'])
+      ? req.body['relativePaths[]']
+      : (Array.isArray(req.body?.relativePaths) ? req.body.relativePaths : (req.body?.['relativePaths[]'] ? [req.body['relativePaths[]']] : (req.body?.relativePaths ? [req.body.relativePaths] : [])));
 
     const existingFiles = normalizeDownloadFiles(it);
-    const uploadFiles = [...(req.files?.files || []), ...(req.files?.file || [])].map(file => ({
+    const uploadFiles = [...(req.files?.files || []), ...(req.files?.file || [])].map((file, idx) => ({
       key: buildStoredKey(collection, req.params.id, file.filename),
       path: file.path,
       name: file.originalname,
-      size: file.size
+      size: file.size,
+      relativePath: relativePaths[idx] || file.originalname
     }));
     const existingMap = new Map(existingFiles.map(file => [file.key, file]));
     let nextFiles = [];
