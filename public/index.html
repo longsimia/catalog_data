@@ -4578,6 +4578,14 @@ function openEditPickPrev() {
   if (panel.innerHTML) { panel.innerHTML = ''; panel._candidates = null; return; }
   renderEditPickPrevPanel();
 }
+function closePickPreviewPanels() {
+  ['up-pick-prev-panel', 'edit-pick-prev-panel'].forEach(id => {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    panel.innerHTML = '';
+    panel._candidates = null;
+  });
+}
 function pickEditPrev(i) {
   const panel = document.getElementById('edit-pick-prev-panel');
   const entry = (panel?._candidates || [])[i];
@@ -5299,6 +5307,7 @@ function resetUploadFormState() {
   renderCategoryChips('u');
   setMd('up');
   setStat('');
+  closePickPreviewPanels();
   closeTagSuggest();
   closeAuthorSuggest('u');
 }
@@ -6873,6 +6882,7 @@ function closeEdit() {
   S.eDownloadEntries = [];
   S.ePrevs = [];
   S.eCatsPicked = [];
+  closePickPreviewPanels();
   S.editAdminWasOpen = false;
   S.editManagePageWasOpen = false;
 }
