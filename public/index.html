@@ -239,12 +239,6 @@ body[data-collection-mode="image"] .card-body{min-height:36px;padding:.24rem .8r
 body[data-collection-mode="image"] .card-body{display:flex;flex-direction:column;justify-content:center;align-items:stretch}
 body[data-collection-mode="image"] .card-title{margin-bottom:0;min-height:1.4em}
 body[data-collection-mode="image"] .card-title.empty{visibility:hidden}
-body[data-collection-mode="doc"] .card{display:grid;grid-template-columns:74px minmax(0,1fr);align-items:stretch}
-body[data-collection-mode="doc"] .card-cover,
-body[data-collection-mode="doc"] .card-ph{aspect-ratio:auto;height:100%;min-height:100%;display:flex;align-items:center;justify-content:center}
-body[data-collection-mode="doc"] .card-ph{font-size:2rem;color:var(--gold)}
-body[data-collection-mode="doc"] .card-body{min-height:0;padding:.75rem .8rem}
-body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-right:0}
 .tag{display:inline-block;padding:.14rem .48rem;border:1px solid var(--border);border-radius:100px;font-size:.69rem;color:var(--muted)}
 
 /* ── EMPTY ── */
@@ -291,6 +285,7 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .lb-dot.on{background:var(--gold);transform:scale(1.35)}
 .lb-info{flex:0 0 min(471px,100vw);width:min(471px,100vw);max-width:min(471px,100vw);min-width:0;background:var(--panel);border-left:1px solid var(--border);
   padding:2rem 1.4rem 1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:.7rem}
+body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(300px,100vw);max-width:min(300px,100vw)}
 .lb-head{position:sticky;top:-2rem;z-index:3;display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;
   margin:-2rem -1.4rem 0;padding:2rem 1.4rem .85rem;background:var(--panel)}
 .lb-x{transform:translateY(-10px)}
@@ -2832,20 +2827,6 @@ function galleryGridCardHtml(item, idx) {
           ${renderCardCover(coverEntry, item.title)}
           <div class="card-body">
             <div class="card-title${item.title ? '' : ' empty'}">${esc(item.title || '\u00A0')}</div>
-          </div>
-        </div>`;
-  }
-  if (entry.mode === 'doc') {
-    return `<div class="card" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
-          ${coverEntry ? renderCardCover(coverEntry, item.title) : `<div class="card-ph">${icon('file')}</div>`}
-          <div class="card-body">
-            <div class="card-head">
-              <div class="card-title">${esc(item.title)}</div>
-              <span class="card-badge">文</span>
-            </div>
-            <div class="card-subtitle">${esc(subtitle || def.subtitleLabel)}</div>
-            <div class="card-author${creator ? '' : ' empty'}">${esc(creator || def.creatorLabel)}</div>
-            <div class="card-tags">${tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>
           </div>
         </div>`;
   }
