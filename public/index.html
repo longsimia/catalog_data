@@ -4014,16 +4014,70 @@ function setMd(m) {
 
 function dzO(e, id) { e.preventDefault(); document.getElementById(id).classList.add('ov'); }
 function dzL(id) { document.getElementById(id).classList.remove('ov'); }
-function dzD(e, type) {
+async function readDroppedEntry(entry, basePath = '') {
+  if (!entry) return [];
+  if (entry.isFile) {
+    return new Promise(resolve => {
+      entry.file(file => {
+        const rel = `${basePath}${file.name || ''}`.replace(/^\/+/, '');
+        if (rel) file.relativePath = rel.replace(/\\/g, '/');
+        resolve([file]);
+      }, () => resolve([]));
+    });
+  }
+  if (!entry.isDirectory) return [];
+  return new Promise(resolve => {
+    const reader = entry.createReader();
+    const dirPath = `${basePath}${entry.name}/`;
+    const all = [];
+    const pump = () => {
+      reader.readEntries(async entries => {
+        if (!entries.length) {
+          resolve(all);
+          return;
+        }
+        for (const child of entries) {
+          all.push(...await readDroppedEntry(child, dirPath));
+        }
+        pump();
+      }, () => resolve(all));
+    };
+    pump();
+  });
+}
+async function getDroppedFiles(dataTransfer, preserveDirectories = false) {
+  const items = Array.from(dataTransfer?.items || []);
+  const supportsEntries = preserveDirectories && items.some(item => typeof item?.webkitGetAsEntry === 'function');
+  if (supportsEntries) {
+    const files = [];
+    for (const item of items) {
+      const entry = item.webkitGetAsEntry?.();
+      if (!entry) {
+        const fallback = item.getAsFile?.();
+        if (fallback) files.push(fallback);
+        continue;
+      }
+      files.push(...await readDroppedEntry(entry));
+    }
+    return files;
+  }
+  return Array.from(dataTransfer?.files || []);
+}
+async function dzD(e, type) {
   e.preventDefault();
   if ((type === 'prev' || type === 'file') && !canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
   if ((type === 'file' || type === 'efile') && !canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
   dzL({ prev:'dz-p', file:'dz-f', eprev:'e-dz-p', efile:'e-dz-f' }[type]);
-  const f = e.dataTransfer.files;
-  if (type === 'prev') onPrev(f);
-  else if (type === 'eprev') onEditPrev(f);
-  else if (type === 'efile') onEditFile(f);
-  else onFile(f);
+  try {
+    const keepTree = type === 'file' || type === 'efile';
+    const files = await getDroppedFiles(e.dataTransfer, keepTree);
+    if (type === 'prev') onPrev(files);
+    else if (type === 'eprev') onEditPrev(files);
+    else if (type === 'efile') onEditFile(files);
+    else onFile(files);
+  } catch (err) {
+    toast(err?.message || '無法讀取拖曳的資料夾或檔案', 'err');
+  }
 }
 
 function onPrev(files) {
