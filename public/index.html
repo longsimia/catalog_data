@@ -57,6 +57,14 @@ body[data-theme="light"] .manage-page-title h3{
   color:var(--admin-gold);
 }
 
+body[data-theme="light"] .btn-gold{
+  color:#5E4F36;
+}
+
+body[data-theme="light"] .btn-gold:hover{
+  color:#140f00;
+}
+
 body[data-theme="light"] .item-count,
 body[data-theme="light"] .site-sub,
 body[data-theme="light"] .card-author,
@@ -731,9 +739,14 @@ body[data-theme="light"] .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;ba
 .preview-toolbar{display:flex;justify-content:flex-end;gap:.55rem;flex-wrap:wrap;margin:0 0 .95rem}
 .preview-list{display:grid;gap:.7rem}
 .preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:.6rem}
-.preview-card{display:grid;gap:.34rem;padding:.42rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);text-decoration:none;color:inherit;transition:transform .18s var(--ease),border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
+.preview-card{display:grid;gap:.34rem;width:100%;padding:.42rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);text-decoration:none;color:inherit;font:inherit;text-align:left;transition:transform .18s var(--ease),border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
 .preview-card:hover{transform:translateY(-1px);border-color:var(--gold);box-shadow:var(--toast-shadow);background:var(--bg2)}
 .preview-card-thumb{width:100%;aspect-ratio:1;object-fit:cover;display:block;border-radius:4px;border:1px solid var(--border);background:var(--bg2)}
+.preview-card-media{width:100%;aspect-ratio:1;border-radius:4px;border:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:center;padding:.7rem;color:var(--gold);text-align:center}
+.preview-card-media.video{padding:0;background:#000;overflow:hidden}
+.preview-card-media.video video{width:100%;height:100%;object-fit:cover;display:block}
+.preview-card-media .ico{width:1.35rem;height:1.35rem}
+.preview-card-media span{display:block;font-size:.72rem;line-height:1.35;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .preview-card-name{font-size:.72rem;line-height:1.35;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .preview-tree{display:grid;gap:.45rem}
 .preview-tree-node{display:grid;gap:.35rem}
@@ -3454,11 +3467,11 @@ function renderPreviewTreeNodes(node, mode = 'preview') {
       ${isOpen ? `<div class="preview-children">${renderPreviewTreeNodes(folder, mode)}</div>` : ''}
     </div>`;
   }).join('');
+  if (mode === 'download') {
+    return `${folderHtml}${renderPreviewImageGrid(node.files, 'download')}`;
+  }
   const fileHtml = node.files.map(file => {
     const iconHtml = `<span class="ico" aria-hidden="true">${icon(getPreviewTreeIconName(file))}</span>`;
-    if (mode === 'download') {
-      return `<button class="preview-entry" type="button" onclick="downloadModalFile(${file.treeIndex})"><span class="meta">${iconHtml}<span class="name">${esc(file.treeName || file.name || '未命名附件')}</span></span><span class="subact">下載</span></button>`;
-    }
     return `<a class="preview-entry" href="${esc(file.url)}" target="_blank" rel="noopener"><span class="meta">${iconHtml}<span class="name">${esc(file.treeName || file.name || '未命名附件')}</span></span></a>`;
   }).join('');
   return `${folderHtml}${fileHtml}`;
@@ -3468,24 +3481,28 @@ function renderPreviewFileTree(files, mode = 'preview') {
   const html = renderPreviewTreeNodes(tree, mode);
   return html ? `<div class="preview-tree">${html}</div>` : '';
 }
-function shouldRenderPreviewImageGrid(files, mode = 'preview') {
-  if (mode !== 'preview') return false;
-  const list = Array.isArray(files) ? files.filter(Boolean) : [];
-  return !!list.length && list.every(file => getMediaKindFromName(file?.name || file?.url || '') === 'image');
+function renderPreviewGridThumb(file, label) {
+  const kind = getMediaKindFromName(file?.name || file?.url || '');
+  const src = file?.url || '';
+  if (kind === 'image') return `<img class="preview-card-thumb" src="${esc(src)}" alt="${esc(label)}" loading="lazy">`;
+  if (kind === 'video') return `<div class="preview-card-media video"><video src="${esc(src)}" muted playsinline preload="metadata" aria-label="${esc(label)}"></video></div>`;
+  if (kind === 'audio') return `<div class="preview-card-media">${icon('audio')}<span>${esc(label)}</span></div>`;
+  return `<div class="preview-card-media">${icon(getPreviewTreeIconName(file))}<span>${esc(label)}</span></div>`;
 }
 function renderPreviewImageGrid(files, mode = 'preview') {
   const list = Array.isArray(files) ? files : [];
   const html = list.map((file, index) => {
     const label = file?.treeName || file?.name || `image-${index + 1}`;
     const src = file?.url || '';
+    const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : index;
     if (mode === 'download') {
-      return `<button class="preview-card" type="button" onclick="downloadModalFile(${index})">
-        <img class="preview-card-thumb" src="${esc(src)}" alt="${esc(label)}" loading="lazy">
+      return `<button class="preview-card" type="button" onclick="downloadModalFile(${fileIndex})">
+        ${renderPreviewGridThumb(file, label)}
         <div class="preview-card-name">${esc(label)}</div>
       </button>`;
     }
     return `<a class="preview-card" href="${esc(src)}" target="_blank" rel="noopener">
-      <img class="preview-card-thumb" src="${esc(src)}" alt="${esc(label)}" loading="lazy">
+      ${renderPreviewGridThumb(file, label)}
       <div class="preview-card-name">${esc(label)}</div>
     </a>`;
   }).join('');
@@ -3508,7 +3525,7 @@ function renderPreviewModalContent(data) {
   body.innerHTML = files.length
     ? `
       <p class="preview-help">請選擇欲開啟線上閱覽的附件。</p>
-      ${shouldRenderPreviewImageGrid(files, 'preview') ? renderPreviewImageGrid(files, 'preview') : renderPreviewFileTree(files, 'preview')}
+      ${renderPreviewImageGrid(files, 'preview')}
     `
     : `<p class="preview-help">目前沒有可線上閱覽的附件。</p>`;
 }
