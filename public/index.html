@@ -333,7 +333,12 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
   justify-content:center;gap:.85rem;padding:2rem;text-align:center}
 #adm-login p{font-size:.86rem;color:var(--muted)}
 .auth-user-list{display:grid;gap:.6rem;margin-top:.6rem}
-.auth-user-row{display:grid;grid-template-columns:minmax(0,1fr) 130px minmax(0,1fr) auto;gap:.5rem;align-items:center;padding:.6rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel)}
+.auth-user-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:.5rem;align-items:center;padding:.6rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel)}
+.auth-user-row .auth-user-password{grid-column:2 / 4}
+.auth-user-row .auth-user-role{grid-column:1;grid-row:2}
+.auth-user-row .auth-user-google{grid-column:2;grid-row:2}
+.auth-user-row .auth-user-del{grid-column:3;grid-row:2;justify-self:start}
+.auth-user-list .auth-user-row:first-child .auth-user-del{display:none}
 .auth-user-row .ib{width:32px;height:32px}
 .collection-add-stack{display:grid;gap:.38rem;margin:.55rem 0}
 .collection-add-row{display:flex;align-items:center;gap:.45rem;flex-wrap:nowrap}
@@ -4160,9 +4165,9 @@ function renderAuthUserList() {
       <p style="color:var(--muted);font-size:.78rem;margin:0 0 .55rem">你可以在這裡修改自己的用戶名與密碼。</p>
       <div class="auth-user-row">
         <input type="text" class="fc" value="${esc(self.username || '')}" placeholder="用戶名" oninput="updateAuthUserField(0,'username',this.value)">
-        <input type="text" class="fc" value="${esc(getRoleLabel(self.role === 'owner' ? 'owner' : 'admin'))}" disabled>
-        <input type="password" class="fc" value="" placeholder="留空則維持原密碼" oninput="updateAuthUserField(0,'password',this.value)">
-        <input type="email" class="fc" value="${esc(self.googleEmail || '')}"
+        <input type="password" class="fc auth-user-password" value="" placeholder="留空則維持原密碼" oninput="updateAuthUserField(0,'password',this.value)">
+        <input type="text" class="fc auth-user-role" value="${esc(getRoleLabel(self.role || 'admin'))}" disabled>
+        <input type="email" class="fc auth-user-google" value="${esc(self.googleEmail || '')}"
           placeholder="Google 登入信箱（選填）"
           oninput="updateAuthUserField(0,'googleEmail',this.value)">
       </div>
@@ -4177,14 +4182,14 @@ function renderAuthUserList() {
     ${S.authUsers.map((user, i) => `
     <div class="auth-user-row">
       <input type="text" class="fc" value="${esc(user.username || '')}" placeholder="用戶名" oninput="updateAuthUserField(${i},'username',this.value)">
-      <select class="fs" ${i === 0 ? 'disabled' : ''} onchange="updateAuthUserField(${i},'role',this.value)">
+      <input type="password" class="fc auth-user-password" value="" placeholder="${user.id ? '留空則維持原密碼' : '密碼'}" oninput="updateAuthUserField(${i},'password',this.value)">
+      <select class="fs auth-user-role" ${i === 0 ? 'disabled' : ''} onchange="updateAuthUserField(${i},'role',this.value)">
         ${(i === 0 ? ['owner'] : getRoleKeys().filter(role => role !== 'owner')).map(role => `<option value="${esc(role)}"${user.role === role ? ' selected' : ''}${role === 'owner' && ownerCount >= 1 && user.role !== 'owner' ? ' disabled' : ''}>${esc(getRoleLabel(role))}</option>`).join('')}
       </select>
-      <input type="password" class="fc" value="" placeholder="${user.id ? '留空則維持原密碼' : '密碼'}" oninput="updateAuthUserField(${i},'password',this.value)">
-      <input type="email" class="fc" value="${esc(user.googleEmail || '')}"
+      <input type="email" class="fc auth-user-google" value="${esc(user.googleEmail || '')}"
         placeholder="Google 登入信箱（選填）"
         oninput="updateAuthUserField(${i},'googleEmail',this.value)">
-      <button class="ib del" type="button" onclick="removeAuthUserRow(${i})" title="刪除此帳號">${icon('trash')}</button>
+      <button class="ib del auth-user-del" type="button" onclick="removeAuthUserRow(${i})" title="刪除此帳號">${icon('trash')}</button>
     </div>
     `).join('')}
   `;
