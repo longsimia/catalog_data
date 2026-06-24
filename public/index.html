@@ -2466,18 +2466,23 @@ function buildEditDownloadEntries(item) {
     relativePath: file.relativePath || file.name
   }));
 }
+function makeExistingPreviewEntry(srcKind, value) {
+  if (!srcKind || !value) return null;
+  return {
+    kind: 'existing',
+    srcKind,
+    value,
+    src: srcKind === 'key' ? fileUrl(value) : value
+  };
+}
 function getEditPreviewState(item) {
   const list = [];
   const seen = new Set();
   const addExisting = (kind, value) => {
     if (!value || seen.has(`${kind}:${value}`)) return;
     seen.add(`${kind}:${value}`);
-    list.push({
-      kind: 'existing',
-      srcKind: kind,
-      value,
-      src: kind === 'key' ? fileUrl(value) : value
-    });
+    const entry = makeExistingPreviewEntry(kind, value);
+    if (entry) list.push(entry);
   };
   addExisting('key', item?.coverKey);
   (item?.previewKeys || []).forEach(key => addExisting('key', key));
@@ -4440,10 +4445,9 @@ function onPrev(files) {
   S.up.prevs = [...S.up.prevs, ...Array.from(files)];
   renderPrevGrid();
 }
-function openUpPickPrev() {
+function renderUpPickPrevPanel() {
   const panel = document.getElementById('up-pick-prev-panel');
   if (!panel) return;
-  if (panel.innerHTML) { panel.innerHTML = ''; return; }
   const candidates = S.up.files.filter(f => isImageFile(f.name));
   if (!candidates.length) { toast('附件中沒有圖片檔案', ''); return; }
   panel.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:.35rem;margin-top:.4rem;padding:.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
@@ -4454,13 +4458,19 @@ function openUpPickPrev() {
   </div>`;
   panel._candidates = candidates;
 }
+function openUpPickPrev() {
+  const panel = document.getElementById('up-pick-prev-panel');
+  if (!panel) return;
+  if (panel.innerHTML) { panel.innerHTML = ''; panel._candidates = null; return; }
+  renderUpPickPrevPanel();
+}
 function pickUpPrev(i) {
   const panel = document.getElementById('up-pick-prev-panel');
   const file = (panel?._candidates || [])[i];
   if (!file) return;
   const dup = S.up.prevs.some(f => f.name === file.name && f.size === file.size);
   if (!dup) { S.up.prevs.push(file); renderPrevGrid(); }
-  panel.innerHTML = ''; panel._candidates = null;
+  renderUpPickPrevPanel();
   toast(dup ? '已在預覽清單中' : `已加入預覽：${file.name}`, dup ? '' : 'ok');
 }
 function onEditPrev(files) {
@@ -4474,21 +4484,20 @@ function onEditPrev(files) {
   S.ePrevs = [...S.ePrevs, ...items];
   renderEditPrevGrid();
 }
-function openEditPickPrev() {
+function renderEditPickPrevPanel() {
   const panel = document.getElementById('edit-pick-prev-panel');
   if (!panel) return;
-  if (panel.innerHTML) { panel.innerHTML = ''; return; }
   const candidates = S.eDownloadEntries.filter(entry => {
     const name = entry.kind === 'existing' ? (entry.originalName || entry.key || '') : (entry.file?.name || '');
     return isImageFile(name);
   });
   if (!candidates.length) { toast('附件中沒有圖片檔案', ''); return; }
-  const usedKeys = new Set(S.ePrevs.map(p => p.kind === 'existing' ? p.key : (p.tempId || '')).filter(Boolean));
+  const usedKeys = new Set(S.ePrevs.map(item => getEditPrevKey(item)).filter(Boolean));
   panel.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:.35rem;margin-top:.4rem;padding:.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
     ${candidates.map((entry, i) => {
       const name = entry.kind === 'existing' ? (entry.originalName || entry.key) : entry.file?.name;
       const src  = entry.kind === 'existing' ? cUrl('/uploads/' + entry.key) : URL.createObjectURL(entry.file);
-      const uid  = entry.kind === 'existing' ? entry.key : (entry.tempId || '');
+      const uid  = entry.kind === 'existing' ? `existing|key|${entry.key || ''}` : (entry.tempId || '');
       const used = usedKeys.has(uid);
       return `<div style="cursor:pointer;opacity:${used ? .4 : 1}" onclick="pickEditPrev(${i})" title="${esc(name)}">
         <img src="${esc(src)}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
@@ -4498,20 +4507,29 @@ function openEditPickPrev() {
   </div>`;
   panel._candidates = candidates;
 }
+function openEditPickPrev() {
+  const panel = document.getElementById('edit-pick-prev-panel');
+  if (!panel) return;
+  if (panel.innerHTML) { panel.innerHTML = ''; panel._candidates = null; return; }
+  renderEditPickPrevPanel();
+}
 function pickEditPrev(i) {
   const panel = document.getElementById('edit-pick-prev-panel');
   const entry = (panel?._candidates || [])[i];
   if (!entry) return;
   let dup = false;
   if (entry.kind === 'existing') {
-    dup = S.ePrevs.some(p => p.kind === 'existing' && p.key === entry.key);
-    if (!dup) S.ePrevs.push({ kind: 'existing', key: entry.key, src: cUrl('/uploads/' + entry.key), originalName: entry.originalName || entry.key });
+    dup = S.ePrevs.some(p => p.kind === 'existing' && p.srcKind === 'key' && p.value === entry.key);
+    if (!dup) {
+      const previewEntry = makeExistingPreviewEntry('key', entry.key);
+      if (previewEntry) S.ePrevs.push(previewEntry);
+    }
   } else {
     dup = S.ePrevs.some(p => p.kind === 'new' && p.tempId === entry.tempId);
     if (!dup) S.ePrevs.push({ kind: 'new', file: entry.file, tempId: entry.tempId, src: URL.createObjectURL(entry.file) });
   }
   if (!dup) renderEditPrevGrid();
-  panel.innerHTML = ''; panel._candidates = null;
+  renderEditPickPrevPanel();
   toast(dup ? '已在預覽清單中' : '已加入預覽', dup ? '' : 'ok');
 }
 function onFile(files) {
@@ -4743,7 +4761,7 @@ function getEditPrevKey(item) {
   if (!item) return '';
   return item.kind === 'new'
     ? item.tempId
-    : `existing|${item.src || ''}|${item.value || ''}`;
+    : `existing|${item.srcKind || ''}|${item.value || ''}`;
 }
 function clearPrevDragIndicator(kind='upload') {
   if (kind === 'edit') {
