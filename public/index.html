@@ -194,7 +194,7 @@ select.fs:focus{border-color:var(--gold)}
 
 /* ── GALLERY ── */
 main{max-width:1340px;margin:0 auto;padding:2.2rem 1.3rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:1.3rem}
+.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1rem}
 body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justify-items:center}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
   overflow:hidden;cursor:pointer;position:relative;top:0;
@@ -210,14 +210,14 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justif
 .card-cover-audio .ico{width:1.4rem;height:1.4rem}
 .card-cover-audio span{font-size:.76rem;color:var(--muted)}
 .card-ph{width:100%;aspect-ratio:4/3;display:block;background:var(--bg2)}
-.card-body{padding:.85rem 1rem;display:flex;flex-direction:column;min-height:108px}
+.card-body{padding:.68rem .8rem;display:flex;flex-direction:column;min-height:86px}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.45rem;margin-bottom:.22rem}
-.card-title{font-family:'Noto Serif TC',serif;font-size:.94rem;color:var(--gold);line-height:1.4;margin-bottom:.22rem;
+.card-title{font-family:'Noto Serif TC',serif;font-size:.86rem;color:var(--gold);line-height:1.35;margin-bottom:.18rem;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card-head .card-title{margin-bottom:0;flex:1;min-width:0}
-.card-subtitle{font-size:.76rem;color:var(--muted);line-height:1.45;margin-bottom:.28rem;
+.card-subtitle{font-size:.72rem;color:var(--muted);line-height:1.35;margin-bottom:.2rem;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card-author{font-size:.78rem;color:var(--muted);margin-bottom:.2rem;
+.card-author{font-size:.74rem;color:var(--muted);margin-bottom:.16rem;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card-author.empty{visibility:hidden;margin-bottom:0}
 .card-tags{display:flex;flex-wrap:nowrap;gap:.25rem;overflow:hidden;width:calc(100% + 16px);margin-left:-6px;margin-right:-10px}
@@ -227,15 +227,15 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justif
 body[data-gallery-view="list"] .gallery-list-row{margin-bottom:0;cursor:pointer}
 body[data-gallery-view="list"] .gallery-list-row{width:min(100%,760px)}
 body[data-gallery-view="list"] .gallery-list-row:hover{border-color:var(--gdim)}
-body[data-collection-mode="image"] .card-body{min-height:44px;padding:.32rem 1rem}
+body[data-collection-mode="image"] .card-body{min-height:36px;padding:.24rem .8rem}
 body[data-collection-mode="image"] .card-body{display:flex;flex-direction:column;justify-content:center;align-items:stretch}
 body[data-collection-mode="image"] .card-title{margin-bottom:0;min-height:1.4em}
 body[data-collection-mode="image"] .card-title.empty{visibility:hidden}
-body[data-collection-mode="doc"] .card{display:grid;grid-template-columns:92px minmax(0,1fr);align-items:stretch}
+body[data-collection-mode="doc"] .card{display:grid;grid-template-columns:74px minmax(0,1fr);align-items:stretch}
 body[data-collection-mode="doc"] .card-cover,
 body[data-collection-mode="doc"] .card-ph{aspect-ratio:auto;height:100%;min-height:100%;display:flex;align-items:center;justify-content:center}
 body[data-collection-mode="doc"] .card-ph{font-size:2rem;color:var(--gold)}
-body[data-collection-mode="doc"] .card-body{min-height:0;padding:.95rem 1rem}
+body[data-collection-mode="doc"] .card-body{min-height:0;padding:.75rem .8rem}
 body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-right:0}
 .tag{display:inline-block;padding:.14rem .48rem;border:1px solid var(--border);border-radius:100px;font-size:.69rem;color:var(--muted)}
 
@@ -281,16 +281,18 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .lb-dots{position:absolute;bottom:1.1rem;left:50%;transform:translateX(-50%);display:flex;gap:.45rem}
 .lb-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.22);cursor:pointer;transition:all .2s}
 .lb-dot.on{background:var(--gold);transform:scale(1.35)}
-.lb-info{flex:2.5;min-width:0;background:var(--panel);border-left:1px solid var(--border);
+.lb-info{flex:3.5;min-width:0;background:var(--panel);border-left:1px solid var(--border);
   padding:2rem 1.4rem 1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:.7rem}
 .lb-head{position:sticky;top:-2rem;z-index:3;display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;
   margin:-2rem -1.4rem 0;padding:2rem 1.4rem .85rem;background:var(--panel)}
+.lb-x{transform:translateY(-10px)}
 .lb-t{font-family:'Noto Serif TC',serif;font-size:1.15rem;color:var(--gold);line-height:1.45}
 .lb-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem}
 .lb-title-main{min-width:0;flex:1}
-.lb-a{font-size:.83rem;color:var(--muted);line-height:1.2}
+.lb-meta{display:flex;flex-direction:column;gap:.7rem;margin-top:-10px;flex:1}
+.lb-a{font-size:.83rem;color:var(--muted);line-height:1.2;margin:0}
 .lb-tg{display:flex;flex-wrap:wrap;gap:.28rem}
-.lb-desc{font-size:.85rem;color:var(--text);line-height:1.75;opacity:.82;flex:1;white-space:pre-line}
+.lb-desc{font-size:.85rem;color:var(--text);line-height:1.75;opacity:.82;white-space:pre-line;margin:0}
 .lb-acts{display:flex;flex-direction:column;gap:.5rem;margin-top:auto;padding-top:.8rem}
 .lb-acts-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
 .lb-acts-row .btn,.lb-acts-row a{width:100%}
@@ -573,7 +575,7 @@ textarea.fc{min-height:72px;resize:vertical}
 #man-list-page .mi.sel{border-color:var(--gold);background:color-mix(in srgb, var(--gglow) 65%, var(--bg2));box-shadow:0 0 0 1px var(--gglow)}
 #man-list-page .mi.sel .mi-chk,#man-list-page .mi:hover .mi-chk{opacity:1}
 .mi-chk{position:absolute;top:50%;left:.44rem;transform:translateY(-50%);width:14px;height:14px;accent-color:var(--gold);cursor:pointer;opacity:0;transition:opacity .14s;z-index:2}
-.mp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:8px;padding-bottom:.75rem;align-content:start}
+.mp-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding-bottom:.75rem;align-content:start}
 .mp-gc{position:relative;border:1.5px solid var(--border);border-radius:var(--r);background:var(--bg2);cursor:default;overflow:hidden;transition:border-color .18s var(--ease)}
 .mp-gc:hover{border-color:var(--gdim)}
 .mp-gc.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gglow);background:color-mix(in srgb, var(--gglow) 55%, var(--bg2))}
@@ -588,9 +590,9 @@ textarea.fc{min-height:72px;resize:vertical}
 .mp-gc-grip{position:absolute;top:.35rem;right:.35rem;z-index:2;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(0,0,0,.42);color:#fff;backdrop-filter:blur(8px);cursor:grab}
 .mp-gc-img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--border);min-height:80px}
 .mp-gc-no-img{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.4rem;background:var(--border);min-height:80px}
-.mp-gc-info{padding:.34rem .44rem .38rem}
-.mp-gc-t{font-size:.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mp-gc-m{font-size:.67rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-gc-info{padding:.26rem .34rem .3rem}
+.mp-gc-t{font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-gc-m{font-size:.62rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mp-gc-chk{position:absolute;top:.35rem;left:.35rem;width:15px;height:15px;accent-color:var(--gold);cursor:pointer;opacity:0;transition:opacity .14s;z-index:2}
 .mp-gc:hover .mp-gc-chk,.mp-gc.sel .mp-gc-chk{opacity:1}
 .mp-trash-panel{position:absolute;top:0;right:0;bottom:0;left:auto;width:min(520px,100%);max-width:100%;z-index:15;background:linear-gradient(180deg,var(--panel),var(--bg2));border-left:1px solid var(--border);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .3s var(--ease);pointer-events:none;box-shadow:-16px 0 40px rgba(0,0,0,.28)}
@@ -885,11 +887,13 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         </div>
         <button class="lb-x" id="lb-close" onclick="closeLb()"></button>
       </div>
-      <p class="lb-a" id="lb-alt"></p>
-      <p class="lb-a" id="lb-a"></p>
-      <div class="lb-tg" id="lb-tg"></div>
-      <p class="lb-desc" id="lb-d"></p>
-        <div class="lb-acts">
+      <div class="lb-meta" id="lb-meta">
+        <p class="lb-a" id="lb-alt"></p>
+        <p class="lb-a" id="lb-a"></p>
+        <div class="lb-tg" id="lb-tg"></div>
+        <p class="lb-desc" id="lb-d"></p>
+      </div>
+      <div class="lb-acts">
         <a class="btn btn-out" id="lb-src" href="#" target="_blank" rel="noopener">原文連結</a>
         <button class="btn btn-out" id="lb-preview" type="button">線上閱覽</button>
         <div class="lb-acts-row" id="lb-bottom-actions">
@@ -2252,6 +2256,47 @@ function getEntryRelativeFilePath(entry) {
   if (entry.kind === 'existing') return (entry.relativePath || entry.name || '').replace(/\\/g, '/');
   return getRelativeFilePath(entry.file || entry);
 }
+function getGroupedUploadItems(list, relGetter, keyGetter) {
+  const groups = [];
+  let cursor = 0;
+  while (cursor < list.length) {
+    const entry = list[cursor];
+    const rel = relGetter(entry);
+    const top = rel.includes('/') ? rel.split('/')[0] : '';
+    if (!top) {
+      groups.push({
+        kind: 'file',
+        label: rel || '未命名附件',
+        start: cursor,
+        count: 1,
+        size: Number(entry?.size || entry?.file?.size || 0) || 0,
+        key: keyGetter(entry, cursor)
+      });
+      cursor += 1;
+      continue;
+    }
+    const files = [];
+    let totalSize = 0;
+    const start = cursor;
+    while (cursor < list.length) {
+      const current = list[cursor];
+      const currentRel = relGetter(current);
+      if ((currentRel.split('/')[0] || '') !== top) break;
+      files.push(current);
+      totalSize += Number(current?.size || current?.file?.size || 0) || 0;
+      cursor += 1;
+    }
+    groups.push({
+      kind: 'folder',
+      label: `${top}/`,
+      start,
+      count: files.length,
+      size: totalSize,
+      key: `folder|${top}`
+    });
+  }
+  return groups;
+}
 function makeUploadFileKey(file) {
   return file ? [getRelativeFilePath(file), file.size || 0, file.lastModified || 0].join('|') : '';
 }
@@ -3125,10 +3170,18 @@ function syncLightboxItem(item, options = {}) {
     : '';
 
   document.getElementById('lb-t').textContent = item.title  || '';
-  document.getElementById('lb-a').textContent = (item.creator || item.author) ? `${def.lightboxCreatorPrefix}：${item.creator || item.author}` : '';
-  document.getElementById('lb-alt').textContent = (item.subtitle || item.translatedTitle) ? `${def.lightboxSubtitlePrefix}：${item.subtitle || item.translatedTitle}` : '';
-  document.getElementById('lb-tg').innerHTML  = (item.tags||[]).map(t => `<span class="tag">${esc(t)}</span>`).join('');
-  document.getElementById('lb-d').textContent = item.description || '';
+  const lbAlt = document.getElementById('lb-alt');
+  const lbAuthor = document.getElementById('lb-a');
+  const lbTags = document.getElementById('lb-tg');
+  const lbDesc = document.getElementById('lb-d');
+  const subtitleText = (item.subtitle || item.translatedTitle) ? `${def.lightboxSubtitlePrefix}：${item.subtitle || item.translatedTitle}` : '';
+  const authorText = (item.creator || item.author) ? `${def.lightboxCreatorPrefix}：${item.creator || item.author}` : '';
+  lbAlt.textContent = subtitleText;
+  lbAlt.hidden = !subtitleText;
+  lbAuthor.textContent = authorText;
+  lbAuthor.hidden = !authorText;
+  lbTags.innerHTML = (item.tags||[]).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+  lbDesc.textContent = item.description || '';
   lbSync();
 }
 
@@ -4129,6 +4182,19 @@ function clearFileDragIndicator(kind='upload') {
     document.querySelectorAll('#fi-picked .file-picked.drop-before,#fi-picked .file-picked.drop-after').forEach(el => el.classList.remove('drop-before', 'drop-after'));
   }
 }
+function moveGroupedFileSlice(list, groups, fromGroupIdx, targetGroupIdx, pos) {
+  const fromGroup = groups[fromGroupIdx];
+  const targetGroup = groups[targetGroupIdx];
+  if (!fromGroup || !targetGroup) return false;
+  const moved = list.splice(fromGroup.start, fromGroup.count);
+  const targetStart = targetGroup.start > fromGroup.start ? (targetGroup.start - fromGroup.count) : targetGroup.start;
+  const insertIdx = pos === 'after'
+    ? targetStart + (targetGroup.start > fromGroup.start ? targetGroup.count : targetGroup.count)
+    : targetStart;
+  const finalIdx = Math.max(0, Math.min(list.length, insertIdx));
+  list.splice(finalIdx, 0, ...moved);
+  return moved[0] || null;
+}
 function setFileDragIndicator(kind, idx, pos) {
   if (kind === 'edit') {
     if (S.eFileDragOverIdx === idx && S.eFileDragOverPos === pos) return;
@@ -4160,18 +4226,21 @@ function uploadFileDragOver(e) {
 function uploadFileDrop(e, targetIdx) {
   e.preventDefault();
   if (S.fileDragIdx === null) return;
+  const groups = getGroupedUploadItems(S.up.files, getRelativeFilePath, makeUploadFileKey);
   const pos = S.fileDragOverIdx === targetIdx ? S.fileDragOverPos : getSimpleRowDropPos(e);
-  let insertIdx = targetIdx + (pos === 'after' ? 1 : 0);
-  const fromIdx = S.fileDragIdx;
-  if (insertIdx > fromIdx) insertIdx -= 1;
-  if (insertIdx === fromIdx) {
+  if (S.fileDragIdx === targetIdx) {
     clearFileDragIndicator('upload');
     S.fileDragIdx = null;
     renderUploadFilePicked();
     return;
   }
-  const [moved] = S.up.files.splice(fromIdx, 1);
-  S.up.files.splice(insertIdx, 0, moved);
+  const moved = moveGroupedFileSlice(S.up.files, groups, S.fileDragIdx, targetIdx, pos);
+  if (!moved) {
+    clearFileDragIndicator('upload');
+    S.fileDragIdx = null;
+    renderUploadFilePicked();
+    return;
+  }
   S.fileJustMovedKey = makeUploadFileKey(moved);
   S.fileDragIdx = null;
   clearFileDragIndicator('upload');
@@ -4205,18 +4274,21 @@ function editFileDragOver(e) {
 function editFileDrop(e, targetIdx) {
   e.preventDefault();
   if (S.eFileDragIdx === null) return;
+  const groups = getGroupedUploadItems(S.eDownloadEntries, getEntryRelativeFilePath, makeEditDownloadEntryKey);
   const pos = S.eFileDragOverIdx === targetIdx ? S.eFileDragOverPos : getSimpleRowDropPos(e);
-  let insertIdx = targetIdx + (pos === 'after' ? 1 : 0);
-  const fromIdx = S.eFileDragIdx;
-  if (insertIdx > fromIdx) insertIdx -= 1;
-  if (insertIdx === fromIdx) {
+  if (S.eFileDragIdx === targetIdx) {
     clearFileDragIndicator('edit');
     S.eFileDragIdx = null;
     renderEditFilePicked();
     return;
   }
-  const [moved] = S.eDownloadEntries.splice(fromIdx, 1);
-  S.eDownloadEntries.splice(insertIdx, 0, moved);
+  const moved = moveGroupedFileSlice(S.eDownloadEntries, groups, S.eFileDragIdx, targetIdx, pos);
+  if (!moved) {
+    clearFileDragIndicator('edit');
+    S.eFileDragIdx = null;
+    renderEditFilePicked();
+    return;
+  }
   S.eFileJustMovedKey = makeEditDownloadEntryKey(moved);
   S.eFileDragIdx = null;
   clearFileDragIndicator('edit');
@@ -4256,13 +4328,17 @@ function renderUploadFilePicked() {
     info.textContent = '';
     return;
   }
-  box.innerHTML = S.up.files.map((file, i) => `<div class="file-picked${S.fileJustMovedKey === makeUploadFileKey(file) ? ' moved' : ''}${S.fileDragOverIdx === i && S.fileDragOverPos === 'before' ? ' drop-before' : ''}${S.fileDragOverIdx === i && S.fileDragOverPos === 'after' ? ' drop-after' : ''}" draggable="true" data-i="${i}"
+  const groups = getGroupedUploadItems(S.up.files, getRelativeFilePath, makeUploadFileKey);
+  box.innerHTML = groups.map((group, i) => `<div class="file-picked${S.fileJustMovedKey === group.key ? ' moved' : ''}${S.fileDragOverIdx === i && S.fileDragOverPos === 'before' ? ' drop-before' : ''}${S.fileDragOverIdx === i && S.fileDragOverPos === 'after' ? ' drop-after' : ''}" draggable="true" data-i="${i}"
     ondragstart="uploadFileDragStart(event,${i})" ondragover="uploadFileDragOver(event)"
     ondrop="uploadFileDrop(event,${i})" ondragend="uploadFileDragEnd(event)">
-    <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon('file')}<span class="name">${esc(getRelativeFilePath(file) || file.name)}${file.size ? ` (${fmtSz(file.size)})` : ''}</span></div>
-    <button class="ib del" type="button" onclick="removeUploadFileAt(${i})" title="刪除此檔">${icon('trash')}</button>
+    <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon(group.kind === 'folder' ? 'folder' : 'file')}<span class="name">${esc(group.label)}${group.size ? ` (${fmtSz(group.size)})` : ''}${group.kind === 'folder' ? ` ・ ${group.count} 個項目` : ''}</span></div>
+    <button class="ib del" type="button" onclick="removeUploadFileAt(${group.start},${group.count})" title="${group.kind === 'folder' ? '移除整個資料夾' : '刪除此檔'}">${icon('trash')}</button>
   </div>`).join('');
-  info.textContent = S.up.files.length > 1 ? '多個檔案會依目前順序打包成 ZIP。' : '';
+  const hasFolder = groups.some(group => group.kind === 'folder');
+  info.textContent = hasFolder
+    ? '資料夾會保留資料夾結構上傳，並依目前順序打包成 ZIP。'
+    : (S.up.files.length > 1 ? '多個檔案會依目前順序打包成 ZIP。' : '');
 }
 function renderEditFilePicked() {
   const box = document.getElementById('e-fi-picked');
@@ -4273,25 +4349,27 @@ function renderEditFilePicked() {
     info.textContent = '目前沒有附件。';
     return;
   }
-  box.innerHTML = S.eDownloadEntries.map((entry, i) => {
-    const name = entry.kind === 'existing' ? (entry.relativePath || entry.name) : getEntryRelativeFilePath(entry);
-    const size = entry.kind === 'existing' ? entry.size : entry.file?.size;
-    return `<div class="file-picked${S.eFileJustMovedKey === makeEditDownloadEntryKey(entry) ? ' moved' : ''}${S.eFileDragOverIdx === i && S.eFileDragOverPos === 'before' ? ' drop-before' : ''}${S.eFileDragOverIdx === i && S.eFileDragOverPos === 'after' ? ' drop-after' : ''}" draggable="true" data-i="${i}"
+  const groups = getGroupedUploadItems(S.eDownloadEntries, getEntryRelativeFilePath, makeEditDownloadEntryKey);
+  box.innerHTML = groups.map((group, i) => {
+    return `<div class="file-picked${S.eFileJustMovedKey === group.key ? ' moved' : ''}${S.eFileDragOverIdx === i && S.eFileDragOverPos === 'before' ? ' drop-before' : ''}${S.eFileDragOverIdx === i && S.eFileDragOverPos === 'after' ? ' drop-after' : ''}" draggable="true" data-i="${i}"
       ondragstart="editFileDragStart(event,${i})" ondragover="editFileDragOver(event)"
       ondrop="editFileDrop(event,${i})" ondragend="editFileDragEnd(event)">
-      <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon('file')}<span class="name">${esc(name || '未命名附件')}${size ? ` (${fmtSz(size)})` : ''}</span></div>
-      <button class="ib del" type="button" onclick="removeEditFileAt(${i})" title="刪除此檔">${icon('trash')}</button>
+      <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon(group.kind === 'folder' ? 'folder' : 'file')}<span class="name">${esc(group.label || '未命名附件')}${group.size ? ` (${fmtSz(group.size)})` : ''}${group.kind === 'folder' ? ` ・ ${group.count} 個項目` : ''}</span></div>
+      <button class="ib del" type="button" onclick="removeEditFileAt(${group.start},${group.count})" title="${group.kind === 'folder' ? '移除整個資料夾' : '刪除此檔'}">${icon('trash')}</button>
     </div>`;
   }).join('');
-  info.textContent = S.eDownloadEntries.length > 1 ? '儲存後會依目前順序重新產生 ZIP。' : '儲存後會更新附件內容。';
+  const hasFolder = groups.some(group => group.kind === 'folder');
+  info.textContent = hasFolder
+    ? '儲存後會保留資料夾結構，並依目前順序重新產生 ZIP。'
+    : (S.eDownloadEntries.length > 1 ? '儲存後會依目前順序重新產生 ZIP。' : '儲存後會更新附件內容。');
 }
-function removeUploadFileAt(i) {
+function removeUploadFileAt(i, count = 1) {
   if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
-  S.up.files.splice(i, 1);
+  S.up.files.splice(i, count);
   renderUploadFilePicked();
 }
-function removeEditFileAt(i) {
-  S.eDownloadEntries.splice(i, 1);
+function removeEditFileAt(i, count = 1) {
+  S.eDownloadEntries.splice(i, count);
   renderEditFilePicked();
 }
 function getUploadPrevKey(file) {
@@ -4715,20 +4793,29 @@ async function doUp() {
   xhr.upload.onprogress = e => {
     if (e.lengthComputable) setProgress(Math.round(e.loaded / e.total * 92));
   };
-  xhr.onload = () => {
+  xhr.onload = async () => {
     setProgress(100); setStat('');
-    if (xhr.status === 200) {
-      setConnState('online', true);
-      const data = JSON.parse(xhr.responseText);
-      S.cat.items.push(data.item);
-      normalizeCat();
-      refreshManageSnapshots();
-      renderGallery(); renderPills(); updateCatSel(); renderCategoryManager(); renderTagManager(); updCatDl();
-      toast(`「${title || '未命名項目'}」已上傳成功 ✓`, 'ok');
-      confirmClrForm(); setTab('up');
-    } else {
-      const err = JSON.parse(xhr.responseText || '{}');
-      toast('上傳失敗：' + (err.error || xhr.status), 'err');
+    try {
+      if (xhr.status === 200) {
+        setConnState('online', true);
+        JSON.parse(xhr.responseText || '{}');
+        await loadCat();
+        refreshManageSnapshots();
+        renderGallery();
+        renderPills();
+        updateCatSel();
+        renderCategoryManager();
+        renderTagManager();
+        updCatDl();
+        toast(`「${title || '未命名項目'}」已上傳成功 ✓`, 'ok');
+        confirmClrForm();
+        setTab('up');
+      } else {
+        const err = JSON.parse(xhr.responseText || '{}');
+        toast('上傳失敗：' + (err.error || xhr.status), 'err');
+      }
+    } catch (err) {
+      toast('上傳完成，但前端更新失敗：' + (err?.message || 'unknown error'), 'err');
     }
   };
   xhr.onerror = () => { setConnState('offline'); setStat(''); setProgress(0); toast('目前無法連上後台', 'err'); };
