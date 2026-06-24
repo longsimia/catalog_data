@@ -264,7 +264,8 @@ function getCollectionsConfig(cfg = null) {
 function sanitizeCollectionKey(value, cfg = null) {
   const key = String(value || '').trim().toLowerCase();
   const collections = getCollectionsConfig(cfg);
-  return collections.some(item => item.key === key) ? key : (collections[0]?.key || 'scenario');
+  if (collections.some(item => item.key === key)) return key;
+  return collections.find(item => item.key === 'scenario')?.key || (collections[0]?.key || 'scenario');
 }
 
 function getCollectionEntry(collection = 'scenario', cfg = null) {

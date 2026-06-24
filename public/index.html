@@ -335,8 +335,8 @@ body[data-collection-mode="doc"] .card-tags{width:100%;margin-left:0;margin-righ
 .auth-user-list{display:grid;gap:.6rem;margin-top:.6rem}
 .auth-user-row{display:grid;grid-template-columns:minmax(0,1fr) 130px minmax(0,1fr) auto;gap:.5rem;align-items:center;padding:.6rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel)}
 .auth-user-row .ib{width:32px;height:32px}
-.collection-add-stack{display:grid;gap:.7rem;margin:.7rem 0}
-.collection-add-row{display:flex;align-items:center;gap:.5rem;flex-wrap:nowrap}
+.collection-add-stack{display:grid;gap:.38rem;margin:.55rem 0}
+.collection-add-row{display:flex;align-items:center;gap:.45rem;flex-wrap:nowrap}
 .collection-add-row .fc{flex:0 1 170px;min-width:0;max-width:170px;margin:0}
 .collection-add-row .btn{flex:0 0 auto;white-space:nowrap}
 .collection-row{display:grid;grid-template-columns:42px 28px minmax(0,1fr) auto auto auto;gap:.5rem;align-items:center}
@@ -1076,7 +1076,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           <div class="manage-block-head">
             <div class="manage-head-copy">
               <div class="collection-add-stack">
-                <p class="role-note" style="margin:0">建立頁籤後僅能再調整頁籤名稱與權限，不得變更模式。</p>
+                <p class="role-note" style="margin:0">頁籤建立後不得再變更模式。</p>
                 <div class="collection-add-row">
                   <input type="text" class="fc" id="collection-new-label" placeholder="新增頁籤"
                     onkeydown="if(event.key==='Enter'){event.preventDefault();addCollectionConfigRow()}">
@@ -1464,7 +1464,8 @@ function normalizeCollectionMode(value) {
 
 function sanitizeCollectionKey(value) {
   const key = String(value || '').trim().toLowerCase();
-  return S.collections.some(item => item.key === key) ? key : (S.collections[0]?.key || 'scenario');
+  if (S.collections.some(item => item.key === key)) return key;
+  return S.collections.find(item => item.key === 'scenario')?.key || (S.collections[0]?.key || 'scenario');
 }
 
 function getCollectionEntry(key = S.collection) {
@@ -1484,7 +1485,6 @@ function isCollectionScopedUrl(url = '') {
 function cUrl(url = '') {
   if (!isCollectionScopedUrl(url)) return url;
   const collection = sanitizeCollectionKey(S.collection);
-  if (collection === 'scenario') return url;
   return `${url}${url.includes('?') ? '&' : '?'}c=${encodeURIComponent(collection)}`;
 }
 
@@ -2271,6 +2271,78 @@ function getEntryRelativeFilePath(entry) {
   if (!entry) return '';
   if (entry.kind === 'existing') return (entry.relativePath || entry.name || '').replace(/\\/g, '/');
   return getRelativeFilePath(entry.file || entry);
+}
+function parseJsonText(text, fallback = {}) {
+  try {
+    return text ? JSON.parse(text) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function buildFileUploadBatches(entries, fileGetter, sizeGetter) {
+  const batches = [];
+  const maxFiles = 12;
+  const maxBytes = 768 * 1024;
+  let current = [];
+  let currentBytes = 0;
+  (entries || []).forEach(entry => {
+    const file = fileGetter(entry);
+    if (!file) return;
+    const size = Math.max(0, Number(sizeGetter(entry)) || 0);
+    if (current.length && (current.length >= maxFiles || currentBytes + size > maxBytes)) {
+      batches.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(entry);
+    currentBytes += size;
+  });
+  if (current.length) batches.push(current);
+  return batches;
+}
+async function appendFilesInBatches(itemId, entries, options = {}) {
+  const endpoint = options.endpoint || `/api/items/${itemId}/file`;
+  const token = getToken();
+  const fileGetter = options.fileGetter || (entry => entry?.file || entry);
+  const pathGetter = options.pathGetter || (entry => getEntryRelativeFilePath(entry));
+  const sizeGetter = options.sizeGetter || (entry => fileGetter(entry)?.size || 0);
+  const batches = buildFileUploadBatches(entries, fileGetter, sizeGetter);
+  let lastItem = null;
+  let done = 0;
+  for (const batch of batches) {
+    const fd = new FormData();
+    batch.forEach(entry => {
+      const file = fileGetter(entry);
+      if (!file) return;
+      fd.append('files', file);
+      fd.append('relativePaths[]', pathGetter(entry) || file.name || 'download.bin');
+    });
+    const resp = await fetch(cUrl(endpoint), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd
+    });
+    const text = await resp.text();
+    const data = parseJsonText(text, {});
+    if (!resp.ok) throw new Error(data.error || readResponseErrorText(text, '附檔上傳失敗'));
+    lastItem = data.item || lastItem;
+    done += batch.length;
+    if (typeof options.onProgress === 'function') options.onProgress(done, entries.length);
+  }
+  return lastItem;
+}
+async function reorderItemDownloadFiles(itemId, orderKeys = []) {
+  const fd = new FormData();
+  fd.append('order', JSON.stringify(orderKeys.map(key => ({ type: 'key', value: key }))));
+  const resp = await fetch(cUrl(`/api/items/${itemId}/file`), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken()}` },
+    body: fd
+  });
+  const text = await resp.text();
+  const data = parseJsonText(text, {});
+  if (!resp.ok) throw new Error(data.error || readResponseErrorText(text, '附檔排序更新失敗'));
+  return data.item || null;
 }
 function getGroupedUploadItems(list, relGetter, keyGetter) {
   const groups = [];
@@ -4794,7 +4866,6 @@ async function doUp() {
   const token = getToken();
   if (!token) { toast('請先登入後台', 'err'); return; }
   if (!(await checkConn(false))) return;
-  const mode = getCollectionEntry().mode;
   const title = document.getElementById('u-t').value.trim();
 
   const id = 'itm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
@@ -4816,10 +4887,6 @@ async function doUp() {
 
   // Files
   S.up.prevs.forEach(f => fd.append('previews', f));
-  S.up.files.forEach(f => {
-    fd.append('files', f);
-    fd.append('relativePaths[]', getRelativeFilePath(f) || f.name);
-  });
 
   // XHR for upload progress
   const xhr = new XMLHttpRequest();
@@ -4834,7 +4901,25 @@ async function doUp() {
     try {
       if (xhr.status >= 200 && xhr.status < 300) {
         setConnState('online', true);
-        await loadCat();
+        let createdItem = parseJsonText(xhr.responseText, {}).item || null;
+        if (S.up.files.length) {
+          setStat('附檔上傳中…');
+          createdItem = await appendFilesInBatches(id, S.up.files, {
+            fileGetter: file => file,
+            pathGetter: file => getRelativeFilePath(file) || file.name,
+            sizeGetter: file => file?.size || 0,
+            onProgress: (done, total) => {
+              const progress = 92 + Math.round((done / Math.max(total, 1)) * 8);
+              setProgress(Math.min(progress, 100));
+              setStat(`附檔上傳中… (${done}/${total})`);
+            }
+          }) || createdItem;
+        }
+        await loadCatalog();
+        if (createdItem) {
+          const localItem = S.cat.items.find(entry => entry.id === createdItem.id);
+          if (localItem) Object.assign(localItem, createdItem);
+        }
         refreshManageSnapshots();
         renderGallery();
         renderPills();
@@ -6511,30 +6596,25 @@ async function saveEdit() {
       S.eDownloadEntries.some(entry => entry.kind === 'new');
 
     if (downloadFilesChanged) {
-      const fd = new FormData();
-      const order = [];
-      let newFileIndex = 0;
-      S.eDownloadEntries.forEach(entry => {
-        if (entry.kind === 'existing') {
-          order.push({ type: 'key', value: entry.key });
-          return;
-        }
-        order.push({ type: 'new', value: newFileIndex });
-        fd.append('files', entry.file);
-        fd.append('relativePaths[]', getEntryRelativeFilePath(entry) || entry.file?.name || `file-${newFileIndex + 1}`);
-        newFileIndex += 1;
-      });
-      fd.append('order', JSON.stringify(order));
-      const resp = await fetch(cUrl(`/api/items/${S.eId}/file`), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
-        body: fd
-      });
-      const text = await resp.text();
-      let data = {};
-      try { data = text ? JSON.parse(text) : {}; } catch {}
-      if (!resp.ok) throw new Error(data.error || readResponseErrorText(text, '下載檔案更新失敗'));
-      Object.assign(item, data.item || {});
+      const newEntries = S.eDownloadEntries.filter(entry => entry.kind === 'new');
+      if (newEntries.length) {
+        showLdg('儲存附檔…');
+        const uploadedItem = await appendFilesInBatches(S.eId, newEntries, {
+          fileGetter: entry => entry.file,
+          pathGetter: entry => getEntryRelativeFilePath(entry) || entry.file?.name || 'download.bin',
+          sizeGetter: entry => entry.file?.size || 0,
+          onProgress: (done, total) => showLdg(`儲存附檔… (${done}/${total})`)
+        });
+        Object.assign(item, uploadedItem || {});
+      }
+      const allFiles = getItemDownloadFiles(item);
+      const uploadedKeys = allFiles.slice(-newEntries.length).map(file => file.key);
+      const newKeyMap = new Map(newEntries.map((entry, idx) => [entry.tempId, uploadedKeys[idx]]));
+      const finalOrderKeys = S.eDownloadEntries
+        .map(entry => entry.kind === 'existing' ? entry.key : newKeyMap.get(entry.tempId))
+        .filter(Boolean);
+      const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderKeys);
+      Object.assign(item, reorderedItem || {});
     }
     Object.assign(item, body);
     syncItemCategoryFields(item);
