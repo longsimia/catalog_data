@@ -723,6 +723,10 @@ function hasRolePermission(user, permissionKey, collection = 'scenario') {
   return !!roleConfig[user.role]?.permissions?.[permissionKey];
 }
 
+function canEditTxtPreview(user, collection = 'scenario') {
+  return hasRolePermission(user, 'editTxtAttachments', collection);
+}
+
 function getViewerRole(req) {
   const authUser = req?.authUser || verifyToken(getTokenFromReq(req));
   return authUser?.role || 'public';
@@ -2927,6 +2931,7 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
       return res.send(preview.text || '');
     }
     const textEditMeta = preview.file?.ext === '.txt' ? getTextEditMeta(item, preview.file.key, preview.file.abs) : null;
+    const canEditTxt = preview.file?.ext === '.txt' && canEditTxtPreview(req.authUser, collection);
     const previewSavePath = withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}`, collection);
     preview.html = preview.file?.ext === '.docx'
       ? renderDocxPreviewPage(item, preview.file, preview.blocks || [])
@@ -2935,7 +2940,7 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
           createdAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.createdAt) : '',
           updatedAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.savedAt) : '',
           updatedByLabel: textEditMeta?.savedBy || '',
-      canEditTxt: hasRolePermission(req.authUser, 'editTxtAttachments', collection)
+      canEditTxt
         });
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(preview.html);
@@ -2947,7 +2952,7 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
 app.put('/api/preview/:id/:index', auth, (req, res) => {
   try {
     const collection = getC(req);
-    if (!hasRolePermission(req.authUser, 'editTxtAttachments', collection)) return res.status(403).json({ error: '你沒有權限編輯 TXT 附件' });
+    if (!canEditTxtPreview(req.authUser, collection)) return res.status(403).json({ error: '你沒有權限編輯 TXT 附件' });
     const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
     if (collectionDenied) return res.status(403).json(collectionDenied);
     const cat = readCat(collection);
