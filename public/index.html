@@ -1538,6 +1538,47 @@ function cUrl(url = '') {
   return `${url}${url.includes('?') ? '&' : '?'}c=${encodeURIComponent(collection)}`;
 }
 
+function getShareUrlState() {
+  const url = new URL(window.location.href);
+  return {
+    url,
+    itemId: String(url.searchParams.get('item') || '').trim(),
+    collection: String(url.searchParams.get('c') || '').trim()
+  };
+}
+
+function updateShareUrl(itemId, collection = S.collection) {
+  const safeItemId = String(itemId || '').trim();
+  if (!safeItemId) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('item', safeItemId);
+  url.searchParams.set('c', sanitizeCollectionKey(collection));
+  history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function clearShareUrl() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('item') && !url.searchParams.has('c')) return;
+  url.searchParams.delete('item');
+  url.searchParams.delete('c');
+  history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+async function openSharedLightboxFromUrl() {
+  const share = getShareUrlState();
+  if (!share.itemId) return false;
+  if (share.collection) {
+    const targetCollection = sanitizeCollectionKey(share.collection);
+    if (targetCollection !== S.collection) {
+      await setCollection(targetCollection, { preserveShareUrl: true });
+    }
+  }
+  const target = (S.cat.items || []).find(item => item.id === share.itemId);
+  if (!target) return false;
+  await openLb(share.itemId);
+  return true;
+}
+
 function getUploadOrigin() {
   const raw = String(window.UPLOAD_ORIGIN || '').trim();
   return raw ? raw.replace(/\/+$/, '') : window.location.origin;
@@ -2679,9 +2720,10 @@ async function loadCatalog(showLoading = true) {
   }
 }
 
-async function setCollection(next) {
+async function setCollection(next, options = {}) {
   const target = sanitizeCollectionKey(next);
   if (target === S.collection) return;
+  if (!options.preserveShareUrl) clearShareUrl();
   closeCollectionMenu();
   closeAdminCollectionMenu();
   closePreviewModal();
@@ -2727,6 +2769,7 @@ window.addEventListener('offline', () => setConnState('offline'));
   });
   initGoogleSignIn();
   await loadCatalog(true);
+  await openSharedLightboxFromUrl();
 }
 
 function applyUI() {
@@ -3313,6 +3356,7 @@ async function openLb(id, options = {}) {
   syncLightboxItem(item, options);
   document.getElementById('lb').classList.add('on');
   document.body.style.overflow = 'hidden';
+  updateShareUrl(id);
 
   const vis = document.querySelector('.lb-vis');
   vis.ontouchstart = e => { S._tx = e.touches[0].clientX; };
@@ -3598,7 +3642,14 @@ function stopLightboxMediaPlayback() {
     try { media.currentTime = 0; } catch {}
   });
 }
-function closeLb() { stopLightboxMediaPlayback(); closePreviewModal(); document.getElementById('lb').classList.remove('on'); document.body.style.overflow = ''; S.lbItemId = null; }
+function closeLb() {
+  stopLightboxMediaPlayback();
+  closePreviewModal();
+  document.getElementById('lb').classList.remove('on');
+  document.body.style.overflow = '';
+  S.lbItemId = null;
+  clearShareUrl();
+}
 function lbN(d)    { const n = S.lbImgs.length; if (n <= 1) return; S.lbSlide = (S.lbSlide + d + n) % n; lbSync(); }
 function lbTo(i)   { S.lbSlide = i; lbSync(); }
 function lbStepItem(d) {
@@ -3734,6 +3785,8 @@ async function doLogin() {
     setAuthUsername(user?.username || '');
     S.currentAuthUser = user || null;
     showAdmBody();
+    await loadCatalog(true);
+    await openSharedLightboxFromUrl();
   } catch(e) {
     hideLdg();
     toast(e.message, 'err');
@@ -3768,6 +3821,8 @@ async function handleGoogleCredential(response) {
     setAuthUsername(user?.username || '');
     S.currentAuthUser = user || null;
     showAdmBody();
+    await loadCatalog(true);
+    await openSharedLightboxFromUrl();
   } catch(e) {
     hideLdg();
     const err = document.getElementById('g-signin-err');
@@ -3783,6 +3838,8 @@ async function skipLogin() {
     setAuthUsername(user?.username || '');
     S.currentAuthUser = user || null;
     showAdmBody();
+    await loadCatalog(true);
+    await openSharedLightboxFromUrl();
   } catch(e) {
     toast('需要用戶名與密碼，請輸入', 'err');
   }
