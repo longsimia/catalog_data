@@ -1529,7 +1529,7 @@ function getCollectionDef(key = S.collection) {
 }
 
 function isCollectionScopedUrl(url = '') {
-  return !/^\/api\/(?:login|logout|auth-users|role-config|ping)\b/.test(url);
+  return !/^\/api\/(?:login|logout|auth-users|ping)\b/.test(url);
 }
 
 function cUrl(url = '') {
@@ -1545,6 +1545,10 @@ function getShareUrlState() {
     itemId: String(url.searchParams.get('item') || '').trim(),
     collection: String(url.searchParams.get('c') || '').trim()
   };
+}
+
+function normalizeShareCollectionKey(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function updateShareUrl(itemId, collection = S.collection) {
@@ -1568,13 +1572,22 @@ async function openSharedLightboxFromUrl() {
   const share = getShareUrlState();
   if (!share.itemId) return false;
   if (share.collection) {
-    const targetCollection = sanitizeCollectionKey(share.collection);
+    const requestedCollection = normalizeShareCollectionKey(share.collection);
+    const targetEntry = S.collections.find(item => item.key === requestedCollection);
+    if (!targetEntry) {
+      toast('這個分享連結指定的頁籤你沒有權限查看', 'err');
+      return false;
+    }
+    const targetCollection = targetEntry.key;
     if (targetCollection !== S.collection) {
       await setCollection(targetCollection, { preserveShareUrl: true });
     }
   }
   const target = (S.cat.items || []).find(item => item.id === share.itemId);
-  if (!target) return false;
+  if (!target) {
+    toast('這個分享連結指定的項目不存在，或你沒有權限查看', 'err');
+    return false;
+  }
   await openLb(share.itemId);
   return true;
 }
