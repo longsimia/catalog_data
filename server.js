@@ -24,8 +24,20 @@ const UPLOADS  = path.join(DATA, 'uploads');
 const CAT_FILE = path.join(DATA, 'catalog.json');
 const CFG_FILE = path.join(DATA, 'config.json');
 const VALID_COLLECTION_MODES = new Set(['scenario', 'image']);
+const ROLE_PERMISSION_KEYS = [
+  'downloadFiles',
+  'uploadItems',
+  'editCategories',
+  'editTags',
+  'editItemOrder',
+  'editItemInfo',
+  'editTxtAttachments',
+  'deleteItems',
+  'manageCollections',
+  'deleteCollections'
+];
 const DEFAULT_COLLECTIONS = [
-  { key: 'scenario', label: '劇本庫', mode: 'scenario' },
+  { key: 'scenario', label: '資料庫', mode: 'scenario' },
   { key: 'image', label: '圖庫', mode: 'image' }
 ];
 const MANAGE_LOCK_TTL_MS = 45 * 1000;
@@ -202,7 +214,7 @@ function normalizeCollectionLabel(value, mode = 'scenario') {
   const label = String(value || '').trim();
   if (label) return label;
   if (mode === 'image') return '圖庫';
-  return '劇本庫';
+  return '資料庫';
 }
 
 function makeCollectionKey(value, fallbackMode = 'scenario') {
@@ -225,7 +237,7 @@ function normalizeCollectionsConfig(rawCollections = []) {
   const usedKeys = new Set();
   const scenarioSource = source.find(entry => String(entry?.key || '').trim().toLowerCase() === 'scenario')
     || source.find(entry => normalizeCollectionMode(entry?.mode) === 'scenario')
-    || { key: 'scenario', label: '劇本庫', mode: 'scenario', permission: 'public' };
+    || { key: 'scenario', label: '資料庫', mode: 'scenario', permission: 'public' };
   source.forEach(entry => {
     const rawKey = String(entry?.key || '').trim().toLowerCase();
     const requestedMode = normalizeCollectionMode(entry?.mode);
@@ -254,7 +266,7 @@ function normalizeCollectionsConfig(rawCollections = []) {
       permission: normalizeItemPermission(scenarioSource?.permission)
     });
   }
-  if (!list.length) list.push({ key: 'scenario', label: '劇本庫', mode: 'scenario', permission: 'public' });
+  if (!list.length) list.push({ key: 'scenario', label: '資料庫', mode: 'scenario', permission: 'public' });
   return list;
 }
 
@@ -274,7 +286,7 @@ function sanitizeCollectionKey(value, cfg = null) {
 function getCollectionEntry(collection = 'scenario', cfg = null) {
   const collections = getCollectionsConfig(cfg);
   const key = sanitizeCollectionKey(collection, { collections });
-  return collections.find(item => item.key === key) || collections[0] || { key: 'scenario', label: '劇本庫', mode: 'scenario' };
+  return collections.find(item => item.key === key) || collections[0] || { key: 'scenario', label: '資料庫', mode: 'scenario' };
 }
 
 function getCollectionConfig(collection = 'scenario', cfg = null) {
@@ -611,6 +623,23 @@ function sanitizeRoleKey(value) {
     .replace(/^-+|-+$/g, '');
 }
 
+function normalizeRolePermissions(srcPermissions = {}, fallbackPermissions = getDefaultRoleConfig().admin.permissions) {
+  return {
+    downloadFiles: srcPermissions?.downloadFiles === undefined ? fallbackPermissions.downloadFiles : !!srcPermissions.downloadFiles,
+    uploadItems: srcPermissions?.uploadItems === undefined ? fallbackPermissions.uploadItems : !!srcPermissions.uploadItems,
+    editCategories: srcPermissions?.editCategories === undefined ? fallbackPermissions.editCategories : !!srcPermissions.editCategories,
+    editTags: srcPermissions?.editTags === undefined ? fallbackPermissions.editTags : !!srcPermissions.editTags,
+    editItemOrder: srcPermissions?.editItemOrder === undefined ? fallbackPermissions.editItemOrder : !!srcPermissions.editItemOrder,
+    editItemInfo: srcPermissions?.editItemInfo === undefined ? fallbackPermissions.editItemInfo : !!srcPermissions.editItemInfo,
+    editTxtAttachments: srcPermissions?.editTxtAttachments === undefined ? fallbackPermissions.editTxtAttachments : !!srcPermissions.editTxtAttachments,
+    deleteItems: srcPermissions?.deleteItems === undefined ? fallbackPermissions.deleteItems : !!srcPermissions.deleteItems,
+    manageCollections: srcPermissions?.manageCollections === undefined ? fallbackPermissions.manageCollections : !!srcPermissions.manageCollections,
+    deleteCollections: srcPermissions?.deleteCollections === undefined
+      ? (srcPermissions?.manageCollections === undefined ? fallbackPermissions.deleteCollections : !!srcPermissions.manageCollections)
+      : !!srcPermissions.deleteCollections
+  };
+}
+
 function normalizeRoleConfig(rawConfig = {}) {
   const defaults = getDefaultRoleConfig();
   const buildRole = (key, fallbackDef = defaults.admin) => {
@@ -618,20 +647,7 @@ function normalizeRoleConfig(rawConfig = {}) {
     const def = defaults[key] || fallbackDef;
     return {
       label: typeof src.label === 'string' && src.label.trim() ? src.label.trim() : def.label,
-      permissions: {
-        downloadFiles: src.permissions?.downloadFiles === undefined ? def.permissions.downloadFiles : !!src.permissions.downloadFiles,
-        uploadItems: src.permissions?.uploadItems === undefined ? def.permissions.uploadItems : !!src.permissions.uploadItems,
-        editCategories: src.permissions?.editCategories === undefined ? def.permissions.editCategories : !!src.permissions.editCategories,
-        editTags: src.permissions?.editTags === undefined ? def.permissions.editTags : !!src.permissions.editTags,
-        editItemOrder: src.permissions?.editItemOrder === undefined ? def.permissions.editItemOrder : !!src.permissions.editItemOrder,
-        editItemInfo: src.permissions?.editItemInfo === undefined ? def.permissions.editItemInfo : !!src.permissions.editItemInfo,
-        editTxtAttachments: src.permissions?.editTxtAttachments === undefined ? def.permissions.editTxtAttachments : !!src.permissions.editTxtAttachments,
-        deleteItems: src.permissions?.deleteItems === undefined ? def.permissions.deleteItems : !!src.permissions.deleteItems,
-        manageCollections: src.permissions?.manageCollections === undefined ? def.permissions.manageCollections : !!src.permissions.manageCollections,
-        deleteCollections: src.permissions?.deleteCollections === undefined
-          ? (src.permissions?.manageCollections === undefined ? def.permissions.deleteCollections : !!src.permissions.manageCollections)
-          : !!src.permissions.deleteCollections
-      }
+      permissions: normalizeRolePermissions(src.permissions, def.permissions)
     };
   };
   const normalized = {
@@ -646,8 +662,54 @@ function normalizeRoleConfig(rawConfig = {}) {
   return normalized;
 }
 
-function getRoleConfig(cfg) {
+function getGlobalRoleConfig(cfg) {
   return normalizeRoleConfig(cfg?.roleConfig || {});
+}
+
+function getAccessibleRoleKeysForCollection(collection = 'scenario', cfg = null) {
+  const resolvedCfg = cfg || readCfg();
+  const global = getGlobalRoleConfig(resolvedCfg);
+  const allKeys = Object.keys(global);
+  const permission = normalizeItemPermission(getCollectionEntry(collection, resolvedCfg)?.permission);
+  if (permission === 'public' || permission === 'authenticated') return allKeys;
+  if (permission === 'owner_only') return ['owner'];
+  if (permission.startsWith('role:')) {
+    const role = permission.slice(5);
+    return ['owner', ...allKeys.filter(key => key === role && key !== 'owner')];
+  }
+  return ['owner'];
+}
+
+function getRoleConfig(cfg, collection = 'scenario') {
+  const resolvedCfg = cfg || readCfg();
+  const global = getGlobalRoleConfig(resolvedCfg);
+  const key = sanitizeCollectionKey(collection, { collections: getCollectionsConfig(resolvedCfg) });
+  const rawByCollection = resolvedCfg?.collectionRoleConfig && typeof resolvedCfg.collectionRoleConfig === 'object'
+    ? resolvedCfg.collectionRoleConfig[key]
+    : null;
+  if (!rawByCollection || typeof rawByCollection !== 'object') return global;
+  const merged = {};
+  const allRoleKeys = [...new Set([...Object.keys(global), ...Object.keys(rawByCollection || {})])];
+  allRoleKeys.forEach(roleKey => {
+    const globalRole = global[roleKey] || normalizeRoleConfig({ [roleKey]: rawByCollection[roleKey] || {} })[roleKey];
+    const rawRole = rawByCollection?.[roleKey] && typeof rawByCollection[roleKey] === 'object' ? rawByCollection[roleKey] : {};
+    merged[roleKey] = {
+      label: globalRole?.label || rawRole?.label || roleKey,
+      permissions: normalizeRolePermissions(rawRole.permissions, globalRole?.permissions || getDefaultRoleConfig().admin.permissions)
+    };
+  });
+  return merged;
+}
+
+function getVisibleRoleConfig(cfg, collection = 'scenario') {
+  const resolvedCfg = cfg || readCfg();
+  const roleConfig = getRoleConfig(resolvedCfg, collection);
+  const allowed = new Set(getAccessibleRoleKeysForCollection(collection, resolvedCfg));
+  const filtered = {};
+  Object.keys(roleConfig).forEach(roleKey => {
+    if (allowed.has(roleKey)) filtered[roleKey] = roleConfig[roleKey];
+  });
+  return filtered;
 }
 
 function canAccessItemByRole(item, role = 'public') {
@@ -660,11 +722,11 @@ function canAccessItemByRole(item, role = 'public') {
   return false;
 }
 
-function hasRolePermission(user, permissionKey) {
+function hasRolePermission(user, permissionKey, collection = 'scenario') {
   if (!user) return false;
   if (user.role === 'owner') return true;
   const cfg = readCfg();
-  const roleConfig = getRoleConfig(cfg);
+  const roleConfig = getVisibleRoleConfig(cfg, collection);
   return !!roleConfig[user.role]?.permissions?.[permissionKey];
 }
 
@@ -679,6 +741,7 @@ const readCfg = () => {
     authSecret: '',
     users: [],
     roleConfig: getDefaultRoleConfig(),
+    collectionRoleConfig: {},
     collections: getDefaultCollectionsConfig(),
     userUiPrefs: {},
     googleClientId: '',
@@ -714,9 +777,13 @@ const readCfg = () => {
     cfg.users = users;
     dirty = true;
   }
-  const roleConfig = getRoleConfig(cfg);
+  const roleConfig = getGlobalRoleConfig(cfg);
   if (JSON.stringify(cfg.roleConfig || {}) !== JSON.stringify(roleConfig)) {
     cfg.roleConfig = roleConfig;
+    dirty = true;
+  }
+  if (!cfg.collectionRoleConfig || typeof cfg.collectionRoleConfig !== 'object' || Array.isArray(cfg.collectionRoleConfig)) {
+    cfg.collectionRoleConfig = {};
     dirty = true;
   }
   const collections = getCollectionsConfig(cfg);
@@ -2533,7 +2600,7 @@ app.get('/api/items/:id/download', auth, (req, res) => {
   const collection = getC(req);
   const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
   if (collectionDenied) return res.status(403).json(collectionDenied);
-  if (!hasRolePermission(req.authUser, 'downloadFiles')) return res.status(403).json({ error: '你沒有權限下載檔案' });
+  if (!hasRolePermission(req.authUser, 'downloadFiles', collection)) return res.status(403).json({ error: '你沒有權限下載檔案' });
   const cat = readCat(collection);
   const collCfg = getCollectionConfig(collection);
   const item = (cat.items || []).find(i => i.id === req.params.id);
@@ -2550,7 +2617,7 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
   const collection = getC(req);
   const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
   if (collectionDenied) return res.status(403).json(collectionDenied);
-  if (!hasRolePermission(req.authUser, 'downloadFiles')) return res.status(403).json({ error: '你沒有權限下載檔案' });
+  if (!hasRolePermission(req.authUser, 'downloadFiles', collection)) return res.status(403).json({ error: '你沒有權限下載檔案' });
   const cat = readCat(collection);
   const collCfg = getCollectionConfig(collection);
   const item = (cat.items || []).find(i => i.id === req.params.id);
@@ -2625,7 +2692,7 @@ app.get('/api/download/:id', auth, (req, res) => {
   const collection = getC(req);
   const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
   if (collectionDenied) return res.status(403).json(collectionDenied);
-  if (!hasRolePermission(req.authUser, 'downloadFiles')) return res.status(403).json({ error: '你沒有權限下載檔案' });
+    if (!hasRolePermission(req.authUser, 'downloadFiles', collection)) return res.status(403).json({ error: '你沒有權限下載檔案' });
   const cat = readCat(collection);
   const collCfg = getCollectionConfig(collection);
   const item = (cat.items || []).find(i => i.id === req.params.id);
@@ -2669,7 +2736,7 @@ app.get('/api/download/:id/files/:index', auth, (req, res) => {
   const collection = getC(req);
   const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
   if (collectionDenied) return res.status(403).json(collectionDenied);
-  if (!hasRolePermission(req.authUser, 'downloadFiles')) return res.status(403).json({ error: '你沒有權限下載檔案' });
+  if (!hasRolePermission(req.authUser, 'downloadFiles', collection)) return res.status(403).json({ error: '你沒有權限下載檔案' });
   const cat = readCat(collection);
   const collCfg = getCollectionConfig(collection);
   const item = (cat.items || []).find(i => i.id === req.params.id);
@@ -2873,7 +2940,7 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
           createdAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.createdAt) : '',
           updatedAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.savedAt) : '',
           updatedByLabel: textEditMeta?.savedBy || '',
-          canEditTxt: hasRolePermission(req.authUser, 'editTxtAttachments')
+      canEditTxt: hasRolePermission(req.authUser, 'editTxtAttachments', collection)
         });
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(preview.html);
@@ -2884,8 +2951,8 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
 
 app.put('/api/preview/:id/:index', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'editTxtAttachments')) return res.status(403).json({ error: '你沒有權限編輯 TXT 附件' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'editTxtAttachments', collection)) return res.status(403).json({ error: '你沒有權限編輯 TXT 附件' });
     const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
     if (collectionDenied) return res.status(403).json(collectionDenied);
     const cat = readCat(collection);
@@ -2936,7 +3003,7 @@ app.put('/api/password', auth, (req, res) => {
 app.get('/api/auth-users', auth, (req, res) => {
   try {
     const cfg = readCfg();
-    const roleConfig = getRoleConfig(cfg);
+    const roleConfig = getGlobalRoleConfig(cfg);
     const allUsers = normalizeAuthUsers(cfg.users, cfg.pwdHash);
     const users = (req.authUser?.role === 'owner' ? allUsers : allUsers.filter(user => user.id === req.authUser?.id)).map(user => ({
       id: user.id,
@@ -2957,7 +3024,7 @@ app.get('/api/auth-users', auth, (req, res) => {
 app.put('/api/auth-users', auth, (req, res) => {
   try {
     const cfg = readCfg();
-    const roleConfig = getRoleConfig(cfg);
+    const roleConfig = getGlobalRoleConfig(cfg);
     const allowedRoles = new Set(Object.keys(roleConfig));
     const incoming = Array.isArray(req.body?.users) ? req.body.users : [];
     const existingUsers = normalizeAuthUsers(cfg.users, cfg.pwdHash);
@@ -3036,8 +3103,10 @@ app.put('/api/auth-users', auth, (req, res) => {
 app.get('/api/role-config', auth, (req, res) => {
   try {
     const cfg = readCfg();
+    const collection = getC(req);
     res.json({
-      roleConfig: getRoleConfig(cfg),
+      roleConfig: getVisibleRoleConfig(cfg, collection),
+      allRoleConfig: getGlobalRoleConfig(cfg),
       currentUser: req.authUser ? { id: req.authUser.id, username: req.authUser.username, role: req.authUser.role } : null
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3046,19 +3115,54 @@ app.get('/api/role-config', auth, (req, res) => {
 app.put('/api/role-config', auth, (req, res) => {
   try {
     const cfg = readCfg();
-    const current = getRoleConfig(cfg);
+    const collection = getC(req);
+    const current = getRoleConfig(cfg, collection);
+    const currentVisible = getVisibleRoleConfig(cfg, collection);
     const incoming = normalizeRoleConfig(req.body?.roleConfig || {});
+    const incomingAll = normalizeRoleConfig(req.body?.allRoleConfig || cfg.roleConfig || {});
+    const visibleKeys = new Set(getAccessibleRoleKeysForCollection(collection, cfg));
     const role = req.authUser?.role || 'admin';
+    const globalRoleConfig = getGlobalRoleConfig(cfg);
     if (role === 'owner') {
-      cfg.roleConfig = incoming;
+      cfg.roleConfig = incomingAll;
+      cfg.collectionRoleConfig = cfg.collectionRoleConfig && typeof cfg.collectionRoleConfig === 'object' ? cfg.collectionRoleConfig : {};
+      const nextCollectionRoles = { ...(cfg.collectionRoleConfig[collection] || {}) };
+      Object.keys(currentVisible).forEach(roleKey => {
+        if (!visibleKeys.has(roleKey)) return;
+        const source = incoming[roleKey] || current[roleKey] || globalRoleConfig[roleKey];
+        if (!source) return;
+        nextCollectionRoles[roleKey] = {
+          label: (incomingAll[roleKey]?.label || globalRoleConfig[roleKey]?.label || source.label || '').trim(),
+          permissions: normalizeRolePermissions(source.permissions, globalRoleConfig[roleKey]?.permissions || getDefaultRoleConfig().admin.permissions)
+        };
+      });
+      Object.keys(incoming).forEach(roleKey => {
+        if (!visibleKeys.has(roleKey)) return;
+        const source = incoming[roleKey];
+        if (!source) return;
+        nextCollectionRoles[roleKey] = {
+          label: (incomingAll[roleKey]?.label || source.label || '').trim(),
+          permissions: normalizeRolePermissions(source.permissions, globalRoleConfig[roleKey]?.permissions || getDefaultRoleConfig().admin.permissions)
+        };
+      });
+      cfg.collectionRoleConfig[collection] = nextCollectionRoles;
       saveCfg(cfg);
-      return res.json({ ok: true, roleConfig: cfg.roleConfig });
+      return res.json({
+        ok: true,
+        roleConfig: getVisibleRoleConfig(cfg, collection),
+        allRoleConfig: getGlobalRoleConfig(cfg)
+      });
     }
-    if (!current[role]) return res.status(403).json({ error: '找不到目前身份組' });
-    current[role].label = incoming[role]?.label || current[role].label;
-    cfg.roleConfig = current;
+    if (!currentVisible[role]) return res.status(403).json({ error: '找不到目前身份組' });
+    const nextGlobal = getGlobalRoleConfig(cfg);
+    nextGlobal[role].label = incomingAll[role]?.label || incoming[role]?.label || nextGlobal[role].label;
+    cfg.roleConfig = nextGlobal;
     saveCfg(cfg);
-    return res.json({ ok: true, roleConfig: cfg.roleConfig });
+    return res.json({
+      ok: true,
+      roleConfig: getVisibleRoleConfig(cfg, collection),
+      allRoleConfig: getGlobalRoleConfig(cfg)
+    });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -3108,7 +3212,7 @@ app.get('/api/collections-config', auth, (req, res) => {
   try {
     const cfg = readCfg();
     const role = req.authUser?.role || 'admin';
-    if (role !== 'owner' && !hasRolePermission(req.authUser, 'manageCollections')) {
+    if (role !== 'owner' && !hasRolePermission(req.authUser, 'manageCollections', getC(req))) {
       return res.status(403).json({ error: '你沒有權限管理資料夾頁籤' });
     }
     res.json({ collections: getCollectionsConfig(cfg) });
@@ -3119,13 +3223,13 @@ app.put('/api/collections-config', auth, (req, res) => {
   try {
     const cfg = readCfg();
     const role = req.authUser?.role || 'admin';
-    if (role !== 'owner' && !hasRolePermission(req.authUser, 'manageCollections')) {
+    if (role !== 'owner' && !hasRolePermission(req.authUser, 'manageCollections', getC(req))) {
       return res.status(403).json({ error: '你沒有權限管理資料夾頁籤' });
     }
     const incoming = Array.isArray(req.body?.collections) ? req.body.collections : [];
     const nextCollections = normalizeCollectionsConfig(incoming);
     if (!nextCollections.length) return res.status(400).json({ error: '至少需要保留一個資料庫頁籤' });
-    if (!nextCollections.some(item => item.key === 'scenario')) return res.status(400).json({ error: '至少需要保留劇本庫頁籤' });
+    if (!nextCollections.some(item => item.key === 'scenario')) return res.status(400).json({ error: '至少需要保留資料庫頁籤' });
     const currentCollections = getCollectionsConfig(cfg);
     const currentMap = new Map(currentCollections.map(item => [item.key, item]));
     const invalidModeChange = nextCollections.find(item => currentMap.has(item.key) && currentMap.get(item.key).mode !== item.mode);
@@ -3142,7 +3246,7 @@ app.put('/api/collections-config', auth, (req, res) => {
     const removedCollections = currentCollections
       .filter(item => item.key !== 'scenario' && !nextCollections.some(next => next.key === item.key))
       .map(item => item.key);
-    if (role !== 'owner' && removedCollections.length && !hasRolePermission(req.authUser, 'deleteCollections')) {
+    if (role !== 'owner' && removedCollections.length && !hasRolePermission(req.authUser, 'deleteCollections', getC(req))) {
       return res.status(403).json({ error: '你沒有權限刪除資料夾頁籤' });
     }
     cfg.collections = nextCollections;
@@ -3176,8 +3280,8 @@ app.put('/api/cfg-google', auth, (req, res) => {
 // 上傳新項目 POST /api/upload/:itemId
 app.put('/api/tags', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'editTags')) return res.status(403).json({ error: '你沒有權限編輯標籤庫' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'editTags', collection)) return res.status(403).json({ error: '你沒有權限編輯標籤庫' });
     const cat = readCat(collection);
     cat.tags = Array.isArray(req.body.tags) ? req.body.tags : [];
     if (Array.isArray(req.body.items)) {
@@ -3193,8 +3297,8 @@ app.put('/api/tags', auth, (req, res) => {
 
 app.put('/api/categories', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'editCategories')) return res.status(403).json({ error: '你沒有權限編輯類別庫' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'editCategories', collection)) return res.status(403).json({ error: '你沒有權限編輯類別庫' });
     const cat = readCat(collection);
     cat.categories = Array.isArray(req.body.categories) ? req.body.categories : [];
     if (Array.isArray(req.body.items)) {
@@ -3221,8 +3325,8 @@ app.post('/api/upload/:itemId', auth,
   ]),
   (req, res) => {
     try {
-      if (!hasRolePermission(req.authUser, 'uploadItems')) return res.status(403).json({ error: '你沒有權限使用上傳功能' });
       const collection = getC(req);
+      if (!hasRolePermission(req.authUser, 'uploadItems', collection)) return res.status(403).json({ error: '你沒有權限使用上傳功能' });
       const id  = req.params.itemId;
       const prs = req.files?.previews || [];
       const relativePaths = Array.isArray(req.body?.['relativePaths[]'])
@@ -3284,8 +3388,8 @@ app.post('/api/upload/:itemId', auth,
 // 編輯項目 metadata
 app.put('/api/items/:id', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'editItemInfo')) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'editItemInfo', collection)) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
     const cat = readCat(collection);
     const it  = cat.items.find(i => i.id === req.params.id);
     if (!it) return res.status(404).json({ error: '項目不存在' });
@@ -3320,8 +3424,8 @@ app.put('/api/items/:id', auth, (req, res) => {
 
 app.post('/api/items/:id/previews', auth, upload.array('previews', 30), (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'editItemInfo')) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'editItemInfo', collection)) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
     const cat = readCat(collection);
     const it  = cat.items.find(i => i.id === req.params.id);
     if (!it) return res.status(404).json({ error: '項目不存在' });
@@ -3373,8 +3477,8 @@ app.post('/api/items/:id/file', auth, upload.fields([
   { name: 'files', maxCount: 500 }
 ]), (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'editItemInfo')) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'editItemInfo', collection)) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
     const cat = readCat(collection);
     const it  = cat.items.find(i => i.id === req.params.id);
     if (!it) return res.status(404).json({ error: '項目不存在' });
@@ -3446,8 +3550,8 @@ app.post('/api/items/:id/file', auth, upload.fields([
 
 app.delete('/api/items/:id/file', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'editItemInfo')) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'editItemInfo', collection)) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
     const cat = readCat(collection);
     const it  = cat.items.find(i => i.id === req.params.id);
     if (!it) return res.status(404).json({ error: '項目不存在' });
@@ -3468,8 +3572,8 @@ app.delete('/api/items/:id/file', auth, (req, res) => {
 // 刪除項目（含上傳的檔案）
 app.delete('/api/items/:id', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'deleteItems')) return res.status(403).json({ error: '你沒有權限刪除項目' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'deleteItems', collection)) return res.status(403).json({ error: '你沒有權限刪除項目' });
     const cat = readCat(collection);
     const idx = cat.items.findIndex(i => i.id === req.params.id);
     if (idx < 0) return res.status(404).json({ error: '項目不存在' });
@@ -3490,13 +3594,12 @@ app.delete('/api/items/:id', auth, (req, res) => {
 
 app.post('/api/items/batch-delete', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'deleteItems')) return res.status(403).json({ error: '你沒有權限刪除項目' });
+    const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'deleteItems', collection)) return res.status(403).json({ error: '你沒有權限刪除項目' });
     const ids = Array.isArray(req.body?.ids)
       ? [...new Set(req.body.ids.filter(id => typeof id === 'string' && id.trim()))]
       : [];
     if (!ids.length) return res.status(400).json({ error: '缺少要刪除的項目' });
-
-    const collection = getC(req);
     const cat = readCat(collection);
     const idSet = new Set(ids);
     const removed = [];
@@ -3524,8 +3627,8 @@ app.post('/api/items/batch-delete', auth, (req, res) => {
 
 app.get('/api/trash', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'deleteItems')) return res.status(403).json({ error: '你沒有權限查看回收桶' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'deleteItems', collection)) return res.status(403).json({ error: '你沒有權限查看回收桶' });
     const trash = readTrash(collection).filter(item => canAccessItemByRole(item, req.authUser?.role));
     res.json({ ok: true, trash });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3533,13 +3636,12 @@ app.get('/api/trash', auth, (req, res) => {
 
 app.post('/api/trash/restore', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'deleteItems')) return res.status(403).json({ error: '你沒有權限復原項目' });
+    const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'deleteItems', collection)) return res.status(403).json({ error: '你沒有權限復原項目' });
     const ids = Array.isArray(req.body?.ids)
       ? [...new Set(req.body.ids.filter(id => typeof id === 'string' && id.trim()))]
       : [];
     if (!ids.length) return res.status(400).json({ error: '缺少要復原的項目' });
-
-    const collection = getC(req);
     const trash = readTrash(collection);
     const idSet = new Set(ids);
     const restoreItems = [];
@@ -3582,8 +3684,8 @@ app.post('/api/trash/restore', auth, (req, res) => {
 
 app.delete('/api/trash', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'deleteItems')) return res.status(403).json({ error: '你沒有權限永久刪除項目' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'deleteItems', collection)) return res.status(403).json({ error: '你沒有權限永久刪除項目' });
     const requestedIds = Array.isArray(req.body?.ids)
       ? [...new Set(req.body.ids.filter(id => typeof id === 'string' && id.trim()))]
       : null;
@@ -3611,8 +3713,8 @@ app.delete('/api/trash', auth, (req, res) => {
 // 儲存排序
 app.put('/api/order', auth, (req, res) => {
   try {
-    if (!hasRolePermission(req.authUser, 'editItemOrder')) return res.status(403).json({ error: '你沒有權限編輯項目清單' });
     const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'editItemOrder', collection)) return res.status(403).json({ error: '你沒有權限編輯項目清單' });
     const cat = readCat(collection);
     const ids = req.body.ids;
     if (Array.isArray(ids)) {

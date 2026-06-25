@@ -1432,7 +1432,7 @@ const S = {
   MF:     { cats:[], tags:[] },
   up:     { prevs:[], files:[], tags:[], categories:[], mode:'up' },
   eTags:  [], eCatsPicked: [], eId: null, ePrevs: [], eDownloadEntries: [],
-  authUsers: [], currentAuthUser: null, roleConfig: null,
+  authUsers: [], currentAuthUser: null, roleConfig: null, allRoleConfig: null,
   downloadModalData: null,
   previewModalState: null,
   previewTreeOpen: {},
@@ -1615,18 +1615,29 @@ function syncItemCategoryFields(item) {
   return item;
 }
 function getRoleLabel(role) {
-  return S.roleConfig?.[role]?.label || (role === 'owner' ? '站主' : '管理員');
+  return S.allRoleConfig?.[role]?.label || S.roleConfig?.[role]?.label || (role === 'owner' ? '站主' : '管理員');
 }
 function getRoleKeys() {
-  const keys = Object.keys(S.roleConfig || {});
+  const keys = Object.keys(S.allRoleConfig || S.roleConfig || {});
   const rest = keys.filter(key => key !== 'owner').sort((a, b) => getRoleLabel(a).localeCompare(getRoleLabel(b), 'zh-Hant'));
   return ['owner', ...rest.filter((key, idx) => rest.indexOf(key) === idx)];
+}
+function getVisibleRoleKeysForCollection(item = getCollectionEntry()) {
+  const keys = getRoleKeys();
+  const permission = normalizePermissionValue(item?.permission || 'public');
+  if (permission === 'public' || permission === 'authenticated') return keys;
+  if (permission === 'owner_only') return ['owner'];
+  if (permission.startsWith('role:')) {
+    const role = permission.slice(5);
+    return ['owner', ...keys.filter(key => key === role && key !== 'owner')];
+  }
+  return ['owner'];
 }
 function makeRoleKey(label = '') {
   const base = String(label || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || `role-${Date.now().toString(36)}`;
   let key = base;
   let index = 2;
-  while (S.roleConfig?.[key]) {
+  while ((S.allRoleConfig || S.roleConfig)?.[key]) {
     key = `${base}-${index++}`;
   }
   return key;
@@ -1724,6 +1735,7 @@ function refreshManageSnapshots() {
   S.saved = {
     collections: JSON.parse(JSON.stringify(S.collections || [])),
     roleConfig: JSON.parse(JSON.stringify(S.roleConfig || {})),
+    allRoleConfig: JSON.parse(JSON.stringify(S.allRoleConfig || {})),
     categories: [...(S.cat.categories || [])],
     categoryMap: Object.fromEntries((S.cat.items || []).map(item => [item.id, [...getItemCategories(item)]])),
     tags: [...(S.cat.tags || [])],
@@ -2547,10 +2559,11 @@ function toggleAdminCollectionMenu(event) {
 }
 
 function renderCollectionNav() {
-  const current = getCollectionEntry();
-  const shouldShow = S.collections.length >= 2;
+  const visibleCollections = S.collections.filter(item => canCurrentUserAccessCollectionConfigItem(item));
+  const current = visibleCollections.find(item => item.key === S.collection) || visibleCollections[0] || getCollectionEntry();
+  const shouldShow = visibleCollections.length >= 2;
   const shouldShowAdmin = shouldShow && !!S.currentAuthUser && !!getToken();
-  const itemHtml = S.collections.map(item => `
+  const itemHtml = visibleCollections.map(item => `
     <button class="collection-switch-item${item.key === current.key ? ' on' : ''}" type="button" onclick="setCollection('${esc(item.key)}')">
       <span class="collection-switch-name">${esc(item.label)}</span>
     </button>
@@ -2682,6 +2695,7 @@ async function setCollection(next) {
   if (search) search.value = '';
   applyCollectionUI();
   await loadCatalog(true);
+  if (getToken()) await loadRoleConfig();
 }
 
 // ════════════════════════════════════════════════════
@@ -3908,6 +3922,11 @@ function updateCollectionConfigField(index, field, value) {
   }
   if (field === 'permission') {
     S.collections[index].permission = normalizePermissionValue(value);
+    if (S.collections[index].key === S.collection) {
+      renderRoleConfigPanel();
+      applyRolePermissionUI();
+      renderMan();
+    }
     return;
   }
   S.collections[index][field] = value;
@@ -4001,6 +4020,7 @@ async function saveCollectionConfig() {
     refreshManageSnapshots();
     renderCollectionConfigPanel();
     applyCollectionUI();
+    if (getToken()) await loadRoleConfig();
     loadCfgForm();
     applyUI();
     renderGallery();
@@ -4012,6 +4032,10 @@ async function saveCollectionConfig() {
 function cancelCollectionConfigChanges() {
   S.collections = JSON.parse(JSON.stringify(S.saved.collections || S.collections || []));
   renderCollectionConfigPanel();
+  renderCollectionNav();
+  applyCollectionUI();
+  renderRoleConfigPanel();
+  applyRolePermissionUI();
 }
 
 function applyRoleLabels() {
@@ -4051,7 +4075,7 @@ function renderRoleConfigPanel() {
       ['deleteCollections', '刪除資料夾頁籤']
     ]]
   ];
-  const roleKeys = isOwner ? getRoleKeys() : [S.currentAuthUser?.role].filter(Boolean);
+  const roleKeys = isOwner ? getVisibleRoleKeysForCollection() : [S.currentAuthUser?.role].filter(Boolean);
   box.innerHTML = roleKeys.map(role => {
     const roleInfo = cfg[role] || { label: getRoleLabel(role), permissions: {} };
     const canEditLabel = isOwner || (S.currentAuthUser?.role === role && canRenameSelf);
@@ -4084,7 +4108,9 @@ function renderRoleConfigPanel() {
 function updateRoleConfigField(role, field, value) {
   if (!S.roleConfig?.[role]) return;
   S.roleConfig[role][field] = value;
+  if (S.allRoleConfig?.[role]) S.allRoleConfig[role][field] = value;
   applyRoleLabels();
+  renderAuthUserList();
 }
 
 function updateRolePermission(role, key, value) {
@@ -4097,12 +4123,13 @@ function addRoleConfigRow() {
   const label = String(input?.value || '').trim();
   if (!label) return;
   if (!S.roleConfig) S.roleConfig = {};
-  if (Object.values(S.roleConfig).some(role => String(role?.label || '').trim() === label)) {
+  if (!S.allRoleConfig) S.allRoleConfig = JSON.parse(JSON.stringify(S.roleConfig || {}));
+  if (Object.values(S.allRoleConfig).some(role => String(role?.label || '').trim() === label)) {
     toast(`身份組名稱「${label}」已存在`, 'err');
     return;
   }
   const key = makeRoleKey(label);
-  S.roleConfig[key] = {
+  const nextRole = {
     label,
     permissions: {
       downloadFiles: false,
@@ -4117,6 +4144,10 @@ function addRoleConfigRow() {
       deleteCollections: false
     }
   };
+  S.allRoleConfig[key] = JSON.parse(JSON.stringify(nextRole));
+  if (getVisibleRoleKeysForCollection().includes(key) || ['public', 'authenticated'].includes(normalizePermissionValue(getCollectionEntry()?.permission || 'public'))) {
+    S.roleConfig[key] = JSON.parse(JSON.stringify(nextRole));
+  }
   if (input) input.value = '';
   renderRoleConfigPanel();
   renderAuthUserList();
@@ -4127,6 +4158,7 @@ async function loadRoleConfig() {
     const data = await api('GET', '/api/role-config');
     S.currentAuthUser = data.currentUser || S.currentAuthUser;
     S.roleConfig = data.roleConfig || null;
+    S.allRoleConfig = data.allRoleConfig || data.roleConfig || null;
     await loadCollectionConfig();
     refreshManageSnapshots();
     renderRoleConfigPanel();
@@ -4143,9 +4175,10 @@ async function saveRoleConfig() {
   if (!S.roleConfig) return;
   try {
     showLdg('\u5132\u5b58\u8eab\u4efd\u7d44\u6b0a\u9650\u2026');
-    const data = await api('PUT', '/api/role-config', { roleConfig: S.roleConfig });
+    const data = await api('PUT', '/api/role-config', { roleConfig: S.roleConfig, allRoleConfig: S.allRoleConfig || S.roleConfig });
     hideLdg();
     S.roleConfig = data.roleConfig || S.roleConfig;
+    S.allRoleConfig = data.allRoleConfig || S.allRoleConfig || S.roleConfig;
     refreshManageSnapshots();
     renderRoleConfigPanel();
     renderAuthUserList();
@@ -4158,6 +4191,7 @@ async function saveRoleConfig() {
 
 function cancelRoleConfigChanges() {
   S.roleConfig = JSON.parse(JSON.stringify(S.saved.roleConfig || S.roleConfig || {}));
+  S.allRoleConfig = JSON.parse(JSON.stringify(S.saved.allRoleConfig || S.allRoleConfig || {}));
   renderRoleConfigPanel();
   renderAuthUserList();
   applyRoleLabels();
