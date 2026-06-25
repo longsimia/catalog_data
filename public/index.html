@@ -520,7 +520,8 @@ textarea.fc{min-height:72px;resize:vertical}
 .cfg-inline-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);margin-bottom:.5rem}
 .cfg-inline-divider{height:1px;background:var(--border);margin-bottom:.7rem}
 .cfg-self-role-panel .disc-body{padding:.85rem .8rem .8rem}
-.self-role-perm-item{font-size:.8rem;color:var(--text);line-height:1.6}
+.self-role-perm-item{display:flex;align-items:flex-start;gap:.45rem;font-size:.8rem;color:var(--text);line-height:1.6}
+.self-role-perm-item input[type="checkbox"]{margin:.12rem 0 0;accent-color:var(--gold)}
 .disc-page-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.22rem .52rem;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02);color:var(--muted);font-size:.72rem;font-family:inherit;cursor:pointer;transition:all .18s}
 .disc-page-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gglow)}
 .manage-page{display:none}
@@ -1077,7 +1078,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
             <ul class="auth-user-help" id="auth-user-help">
               <li>密碼欄留空時，會保留該帳號原本的密碼。</li>
             </ul>
-            <button class="btn btn-gold btn-w" id="btn-save-pwd" onclick="saveAuthUsers()">儲存帳號設定</button>
+            <button class="btn btn-gold btn-w" id="btn-save-pwd" onclick="saveAuthUsers()" style="margin-top:10px">儲存帳號設定</button>
           </div>
         </details>
 
@@ -4226,13 +4227,10 @@ function renderSelfRolePermissionPanel() {
       <h4>${esc(roleInfo.label || getRoleLabel(role))}</h4>
       <div class="role-perms">
         ${permGroups.map(([groupTitle, perms], idx) => {
-          const enabled = perms.filter(([key]) => roleInfo.permissions?.[key]);
           return `
             <div class="role-perm-group">
               <div class="role-perm-title">${esc(groupTitle)}</div>
-              ${enabled.length
-                ? enabled.map(([, label]) => `<div class="self-role-perm-item">${esc(label)}</div>`).join('')
-                : '<p class="role-note">目前沒有權限</p>'}
+              ${perms.map(([key, label]) => `<label class="self-role-perm-item"><input type="checkbox" ${roleInfo.permissions?.[key] ? 'checked' : ''} disabled><span>${esc(label)}</span></label>`).join('')}
             </div>${idx < permGroups.length - 1 ? '<div class="role-perm-divider" aria-hidden="true"></div>' : ''}
           `;
         }).join('')}
