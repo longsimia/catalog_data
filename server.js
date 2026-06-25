@@ -1795,7 +1795,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   ${isTxt && canEditTxt ? `<script>
     const saveBtn = document.getElementById('saveBtn');
     const status = document.getElementById('saveStatus');
-    const saveUrl = ${JSON.stringify(options.saveUrl || '')};
+    const saveUrlRaw = ${JSON.stringify(options.saveUrl || '')};
+    const saveUrl = saveUrlRaw ? new URL(saveUrlRaw, window.location.origin).toString() : '';
     const leaveModal = document.getElementById('leaveModal');
     const leaveModalBg = document.getElementById('leaveModalBg');
     const leaveStayBtn = document.getElementById('leaveStayBtn');
@@ -2927,11 +2928,10 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
     }
     const textEditMeta = preview.file?.ext === '.txt' ? getTextEditMeta(item, preview.file.key, preview.file.abs) : null;
     const previewSavePath = withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}`, collection);
-    const previewSaveUrl = `${req.protocol}://${req.get('host')}${previewSavePath}`;
     preview.html = preview.file?.ext === '.docx'
       ? renderDocxPreviewPage(item, preview.file, preview.blocks || [])
       : renderTextPreviewPage(item, preview.file, preview.text, {
-          saveUrl: previewSaveUrl,
+          saveUrl: previewSavePath,
           createdAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.createdAt) : '',
           updatedAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.savedAt) : '',
           updatedByLabel: textEditMeta?.savedBy || '',
