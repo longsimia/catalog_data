@@ -3561,6 +3561,7 @@ function syncLightboxDownload(item, downloadData, previewData) {
   const dlBtn  = document.getElementById('lb-dl');
   const bottomActions = document.getElementById('lb-bottom-actions');
   const canDownload = canRolePermission('downloadFiles');
+  const canPreview = canRolePermission('onlinePreview');
   const files = Array.isArray(downloadData?.files) ? downloadData.files : [];
   const hasDownload = canDownload && (!!downloadData?.allUrl || files.length > 0);
   dlBtn.href   = '#';
@@ -3569,8 +3570,8 @@ function syncLightboxDownload(item, downloadData, previewData) {
   dlBtn.toggleAttribute('disabled', !canDownload);
 
   const previewBtn = document.getElementById('lb-preview');
-  previewBtn.style.display = previewData?.supported ? 'inline-flex' : 'none';
-  previewBtn.onclick = previewData?.supported
+  previewBtn.style.display = (canPreview && previewData?.supported) ? 'inline-flex' : 'none';
+  previewBtn.onclick = (canPreview && previewData?.supported)
     ? () => {
       const files = Array.isArray(previewData?.files) ? previewData.files : [];
         if (files.length === 1 && files[0]?.url && !String(files[0]?.relativePath || '').includes('/')) {
@@ -4280,6 +4281,7 @@ function applyRoleLabels() {
 function getRolePermissionGroups() {
   return [
     ['項目內容', [
+      ['onlinePreview', '線上閱覽'],
       ['downloadFiles', '下載檔案'],
       ['uploadItems', '上傳項目'],
       ['editItemInfo', '編輯項目資訊'],
@@ -4386,6 +4388,7 @@ function addRoleConfigRow() {
   const nextRole = {
     label,
     permissions: {
+      onlinePreview: false,
       downloadFiles: false,
       uploadItems: false,
       editItemInfo: false,

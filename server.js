@@ -28,6 +28,7 @@ const CAT_FILE = path.join(DATA, 'catalog.json');
 const CFG_FILE = path.join(DATA, 'config.json');
 const VALID_COLLECTION_MODES = new Set(['scenario', 'image']);
 const ROLE_PERMISSION_KEYS = [
+  'onlinePreview',
   'downloadFiles',
   'uploadItems',
   'editCategories',
@@ -690,6 +691,7 @@ function getDefaultRoleConfig() {
     owner: {
       label: '群主',
       permissions: {
+        onlinePreview: true,
         downloadFiles: true,
         uploadItems: true,
         editCategories: true,
@@ -703,6 +705,7 @@ function getDefaultRoleConfig() {
     admin: {
       label: '管理員',
       permissions: {
+        onlinePreview: true,
         downloadFiles: true,
         uploadItems: true,
         editCategories: true,
@@ -726,6 +729,7 @@ function sanitizeRoleKey(value) {
 
 function normalizeRolePermissions(srcPermissions = {}, fallbackPermissions = getDefaultRoleConfig().admin.permissions) {
   return {
+    onlinePreview: srcPermissions?.onlinePreview === undefined ? fallbackPermissions.onlinePreview : !!srcPermissions.onlinePreview,
     downloadFiles: srcPermissions?.downloadFiles === undefined ? fallbackPermissions.downloadFiles : !!srcPermissions.downloadFiles,
     uploadItems: srcPermissions?.uploadItems === undefined ? fallbackPermissions.uploadItems : !!srcPermissions.uploadItems,
     editCategories: srcPermissions?.editCategories === undefined ? fallbackPermissions.editCategories : !!srcPermissions.editCategories,
@@ -2812,6 +2816,7 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
     const collection = getC(req);
     const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
     if (collectionDenied) return res.status(403).json(collectionDenied);
+    if (!hasRolePermission(req.authUser, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限線上閱覽附件' });
     const cat = readCat(collection);
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).json({ error: '項目不存在' });
@@ -2908,6 +2913,7 @@ app.get('/preview-hub/:id', auth, (req, res) => {
     const collection = getC(req);
     const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
     if (collectionDenied) return res.status(403).send(collectionDenied.error);
+    if (!hasRolePermission(req.authUser, 'onlinePreview', collection)) return res.status(403).send('你沒有權限線上閱覽附件');
     const cat = readCat(collection);
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).send('Item not found');
@@ -3067,6 +3073,7 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
     const collection = getC(req);
     const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
     if (collectionDenied) return res.status(403).json(collectionDenied);
+    if (!hasRolePermission(req.authUser, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限線上閱覽附件' });
     const cat = readCat(collection);
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).json({ error: '項目不存在' });
