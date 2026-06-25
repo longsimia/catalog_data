@@ -2399,11 +2399,18 @@ function getPreviewMediaEntries(item) {
 function getItemCoverEntry(item) {
   return getPreviewMediaEntries(item)[0] || null;
 }
+function imgThumbFallbackAttrs(thumbSrc = '', fullSrc = '') {
+  const thumb = String(thumbSrc || '').trim();
+  const full = String(fullSrc || '').trim();
+  if (!thumb || !full || thumb === full) return '';
+  return ` data-fullsrc="${esc(full)}" onerror="if(this.dataset.fullsrc && this.src !== this.dataset.fullsrc){ this.onerror=null; this.src=this.dataset.fullsrc; }"`;
+}
 function renderCardCover(entry, title = '') {
   if (!entry?.src) return '<div class="card-ph"></div>';
   if (entry.kind === 'video') return `<video class="card-cover-video" src="${esc(entry.src)}" muted playsinline preload="metadata"></video>`;
   if (entry.kind === 'audio') return `<div class="card-cover-audio">${icon('audio')}<span>${esc(title || '音訊預覽')}</span></div>`;
-  return `<img class="card-cover" src="${esc(entry.thumbSrc || entry.src)}" alt="${esc(title)}" loading="lazy">`;
+  const displaySrc = entry.thumbSrc || entry.src;
+  return `<img class="card-cover" src="${esc(displaySrc)}" alt="${esc(title)}" loading="lazy"${imgThumbFallbackAttrs(displaySrc, entry.src)}>`;
 }
 function renderPreviewThumbFromFile(file) {
   const name = file?.name || 'media';
@@ -2997,7 +3004,11 @@ function galleryListRowHtml(item, idx) {
 
 function thToListThumb(th) {
   return th?.src && th.kind === 'image'
-    ? `<img class="mth" src="${esc(th.thumbSrc || th.src)}" loading="lazy" onerror="this.style.display='none'">`
+    ? (() => {
+        const displaySrc = th.thumbSrc || th.src;
+        const fallbackAttrs = imgThumbFallbackAttrs(displaySrc, th.src);
+        return `<img class="mth" src="${esc(displaySrc)}" loading="lazy"${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
+      })()
     : th?.src && th.kind === 'video'
     ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"></video>`
     : th?.src && th.kind === 'audio'
@@ -3624,7 +3635,10 @@ function getPreviewThumbSrc(file) {
 function renderPreviewGridThumb(file, label) {
   const kind = getMediaKindFromName(file?.name || file?.url || '');
   const src = getPreviewThumbSrc(file);
-  if (kind === 'image' && src) return `<img class="preview-card-thumb" src="${esc(src)}" alt="${esc(label)}" loading="lazy">`;
+  if (kind === 'image' && src) {
+    const fullSrc = file?.mediaUrl || file?.url || src;
+    return `<img class="preview-card-thumb" src="${esc(src)}" alt="${esc(label)}" loading="lazy"${imgThumbFallbackAttrs(src, fullSrc)}>`;
+  }
   if (kind === 'video' && src) return `<div class="preview-card-media video"><video src="${esc(src)}" muted playsinline preload="metadata" aria-label="${esc(label)}"></video></div>`;
   if (kind === 'audio') return `<div class="preview-card-media">${icon('audio')}<span>${esc(label)}</span></div>`;
   return `<div class="preview-card-media">${icon(getPreviewTreeIconName(file))}<span>${esc(label)}</span></div>`;
