@@ -2926,10 +2926,12 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
       return res.send(preview.text || '');
     }
     const textEditMeta = preview.file?.ext === '.txt' ? getTextEditMeta(item, preview.file.key, preview.file.abs) : null;
+    const previewSavePath = withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}`, collection);
+    const previewSaveUrl = `${req.protocol}://${req.get('host')}${previewSavePath}`;
     preview.html = preview.file?.ext === '.docx'
       ? renderDocxPreviewPage(item, preview.file, preview.blocks || [])
       : renderTextPreviewPage(item, preview.file, preview.text, {
-          saveUrl: withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}`, collection),
+          saveUrl: previewSaveUrl,
           createdAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.createdAt) : '',
           updatedAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.savedAt) : '',
           updatedByLabel: textEditMeta?.savedBy || '',
