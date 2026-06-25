@@ -1478,7 +1478,7 @@ const S = {
   lbImgs: [], lbSlide: 0, lbItemId: null,
   F:      { q:'', cats:[], tags:[], page:1, pageSize:20 },
   MF:     { cats:[], tags:[] },
-  up:     { prevs:[], files:[], tags:[], categories:[], mode:'up' },
+  up:     { prevs:[], files:[], tags:[], categories:[], mode:'up', attachmentPrevs: new Set() },
   eTags:  [], eCatsPicked: [], eId: null, ePrevs: [], eDownloadEntries: [],
   authUsers: [], currentAuthUser: null, roleConfig: null, allRoleConfig: null,
   savedRoleLabels: null, savedRolePerms: null,
@@ -4877,7 +4877,11 @@ function pickUpPrev(i) {
   const file = (panel?._candidates || [])[i];
   if (!file) return;
   const dup = S.up.prevs.some(f => f.name === file.name && f.size === file.size);
-  if (!dup) { S.up.prevs.push(file); renderPrevGrid(); }
+  if (!dup) {
+    S.up.prevs.push(file);
+    S.up.attachmentPrevs.add(file);
+    renderPrevGrid();
+  }
   renderUpPickPrevPanel();
   toast(dup ? '已在預覽清單中' : `已加入預覽：${file.name}`, dup ? '' : 'ok');
 }
@@ -4933,20 +4937,73 @@ function pickEditPrev(i) {
   const panel = document.getElementById('edit-pick-prev-panel');
   const entry = (panel?._candidates || [])[i];
   if (!entry) return;
-  let dup = false;
-  if (entry.kind === 'existing') {
-    dup = S.ePrevs.some(p => p.kind === 'existing' && p.srcKind === 'key' && p.value === entry.key);
-    if (!dup) {
-      const previewEntry = makeExistingPreviewEntry('key', entry.key);
-      if (previewEntry) S.ePrevs.push(previewEntry);
-    }
-  } else {
-    dup = S.ePrevs.some(p => p.kind === 'new' && p.tempId === entry.tempId);
-    if (!dup) S.ePrevs.push({ kind: 'new', file: entry.file, tempId: entry.tempId, src: URL.createObjectURL(entry.file) });
+
+  if (entry.kind === 'new') {
+    // 新附件：立即上傳取 key，避免儲存時重複上傳
+    _pickEditPrevNew(entry, panel);
+    return;
   }
-  if (!dup) renderEditPrevGrid();
+
+  // 已存在的附件：用 key 參照，不重複上傳
+  const dup = S.ePrevs.some(p => p.kind === 'existing' && p.srcKind === 'key' && p.value === entry.key);
+  if (!dup) {
+    const previewEntry = makeExistingPreviewEntry('key', entry.key);
+    if (previewEntry) S.ePrevs.push(previewEntry);
+    renderEditPrevGrid();
+  }
   renderEditPickPrevPanel();
   toast(dup ? '已在預覽清單中' : '已加入預覽', dup ? '' : 'ok');
+}
+
+async function _pickEditPrevNew(entry, panel) {
+  panel.innerHTML = '<p style="padding:.5rem;color:var(--muted);font-size:.8rem">上傳中…</p>';
+  try {
+    const existingKeys = S.eDownloadEntries.filter(e => e.kind === 'existing').map(e => e.key);
+    const fd = new FormData();
+    fd.append('files', entry.file);
+    fd.append('relativePaths[]', getEntryRelativeFilePath(entry) || entry.file?.name || 'file');
+    fd.append('keptKeys', JSON.stringify(existingKeys));
+    const resp = await fetch(uploadUrl(`/api/items/${S.eId}/file`), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: fd
+    });
+    const data = parseJsonText(await resp.text(), {});
+    if (!resp.ok) throw new Error(data.error || '上傳失敗');
+
+    const existingKeySet = new Set(existingKeys);
+    const dlFiles = getItemDownloadFiles(data.item || {});
+    const newFile = dlFiles.find(f => !existingKeySet.has(f.key));
+    if (!newFile?.key) throw new Error('無法取得檔案 key');
+    const newKey = newFile.key;
+
+    // 把 S.eDownloadEntries 裡的 new 轉成 existing
+    const idx = S.eDownloadEntries.findIndex(e => e.tempId === entry.tempId);
+    if (idx >= 0) {
+      S.eDownloadEntries[idx] = {
+        kind: 'existing',
+        key: newKey,
+        originalName: entry.file?.name || '',
+        size: entry.file?.size || 0,
+        relativePath: getEntryRelativeFilePath(entry) || entry.file?.name || ''
+      };
+    }
+    const localItem = S.cat.items.find(i => i.id === S.eId);
+    if (localItem) Object.assign(localItem, data.item || {});
+
+    const dup = S.ePrevs.some(p => p.kind === 'existing' && p.key === newKey);
+    if (!dup) {
+      const previewEntry = makeExistingPreviewEntry('key', newKey);
+      if (previewEntry) S.ePrevs.push(previewEntry);
+      renderEditPrevGrid();
+    }
+    panel.innerHTML = ''; panel._candidates = null;
+    renderEditPickPrevPanel();
+    toast(dup ? '已在預覽清單中' : '已加入預覽', dup ? '' : 'ok');
+  } catch(e) {
+    panel.innerHTML = ''; panel._candidates = null;
+    toast(e.message, 'err');
+  }
 }
 function onFile(files) {
   if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
@@ -5220,7 +5277,8 @@ function prevDrop(e, targetIdx) {
 }
 function prevDragEnd(e) { e.currentTarget.classList.remove('drag'); S.prevDragIdx = null; clearPrevDragIndicator(); renderPrevGrid(); }
 function removePrevAt(i) {
-  S.up.prevs.splice(i, 1);
+  const [removed] = S.up.prevs.splice(i, 1);
+  if (removed) S.up.attachmentPrevs?.delete(removed);
   renderPrevGrid();
 }
 function renderEditPrevGrid() {
@@ -5576,7 +5634,9 @@ async function doUp() {
   fd.append('permission',  document.getElementById('u-perm').value || 'public');
 
   // Files
-  S.up.prevs.forEach(f => fd.append('previews', f));
+  S.up.prevs.forEach(f => {
+  if (!S.up.attachmentPrevs.has(f)) fd.append('previews', f);
+});
 
   // XHR for upload progress
   const xhr = new XMLHttpRequest();
@@ -5607,6 +5667,40 @@ async function doUp() {
             }
           });
           createdItem = uploadResult?.item || createdItem;
+        }
+        // Phase 3：把附件來源的預覽以 key 參照設定，不重複上傳
+        if (S.up.attachmentPrevs.size && createdItem) {
+          const dlFiles = getItemDownloadFiles(createdItem);
+          const attachKeyMap = new Map();
+          S.up.attachmentPrevs.forEach(f => {
+            const match = dlFiles.find(df => df.name === f.name && df.size === f.size);
+            if (match?.key) attachKeyMap.set(f, match.key);
+          });
+          if (attachKeyMap.size) {
+            const phase1Keys = [...(createdItem.previewKeys || [])];
+            let p1Idx = 0;
+            const fullOrder = S.up.prevs.map(f => {
+              if (S.up.attachmentPrevs.has(f)) {
+                const key = attachKeyMap.get(f);
+                return key ? { type: 'key', value: key } : null;
+              }
+              const key = phase1Keys[p1Idx++];
+              return key ? { type: 'key', value: key } : null;
+            }).filter(Boolean);
+            if (fullOrder.length) {
+              const prevFd = new FormData();
+              prevFd.append('order', JSON.stringify(fullOrder));
+              const p3Resp = await fetch(uploadUrl(`/api/items/${id}/previews`), {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: prevFd
+              });
+              if (p3Resp.ok) {
+                const p3Data = await p3Resp.json().catch(() => ({}));
+                if (p3Data.item) createdItem = p3Data.item;
+              }
+            }
+          }
         }
         await loadCatalog();
         if (createdItem) {
@@ -5645,7 +5739,7 @@ function resetUploadFormState() {
   document.getElementById('fi-f').value           = '';
   document.getElementById('fi-picked').innerHTML  = '';
   document.getElementById('fi-info').textContent  = '';
-  S.up = { prevs:[], files:[], tags:[], categories:[], mode:'up' };
+  S.up = { prevs:[], files:[], tags:[], categories:[], mode:'up', attachmentPrevs: new Set() };
   renderChips('u');
   renderCategoryChips('u');
   setMd('up');
