@@ -354,7 +354,6 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 .cfg-host-usage-stack{display:grid;gap:.42rem}
 .cfg-host-usage-bar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:var(--bg2)}
 .cfg-host-usage-bar-seg{display:block;height:100%;flex:0 0 auto}
-.cfg-host-usage-bar-used-other{background:color-mix(in srgb,var(--text) 16%, var(--muted) 84%)}
 .cfg-host-usage-bar-unused{background:var(--bg2)}
 .cfg-host-usage-legend{display:grid;gap:.5rem}
 .cfg-host-usage-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.55rem;align-items:center;font-size:.8rem;color:color-mix(in srgb,var(--text) 82%, var(--muted) 18%)}
@@ -4094,26 +4093,23 @@ function renderHostUsagePanel(data) {
   const total = Number(volume.totalBytes || 0);
   const free = Number(volume.freeBytes || 0);
   const usedPercent = Number(volume.usedPercent || 0);
+  const usedBytes = Number(volume.usedBytes || 0);
+  const siteOtherBytes = Number(app.otherBytes || 0);
+  const otherHostUsedBytes = Math.max(0, usedBytes - Number(app.totalBytes || 0));
+  const mergedOtherBytes = siteOtherBytes + otherHostUsedBytes;
   const sections = [
     { label: '上傳檔案', value: Number(app.uploadsBytes || 0), colorVar: '--usage-uploads' },
     { label: '縮圖 / 預覽', value: Number(app.thumbsBytes || 0), colorVar: '--usage-thumbs' },
     { label: '設定資料', value: Number(app.configBytes || 0), colorVar: '--usage-config' },
-    { label: '其他站內資料', value: Number(app.otherBytes || 0), colorVar: '--usage-other' }
+    { label: '其他', value: mergedOtherBytes, colorVar: '--usage-other' }
   ];
   const fmtGb = bytes => `${(Number(bytes || 0) / (1024 ** 3)).toFixed(1)}GB`;
-  const usedBytes = Number(volume.usedBytes || 0);
-  const otherHostUsedBytes = Math.max(0, usedBytes - Number(app.totalBytes || 0));
   const barSegments = [
     ...sections.map(section => ({
       width: total > 0 ? (section.value / total) * 100 : 0,
       style: `background:var(${section.colorVar})`,
       title: `${section.label} ${fmtSz(section.value)}`
     })),
-    ...(otherHostUsedBytes > 0 ? [{
-      width: total > 0 ? (otherHostUsedBytes / total) * 100 : 0,
-      className: 'cfg-host-usage-bar-used-other',
-      title: `其他主機已使用空間 ${fmtSz(otherHostUsedBytes)}`
-    }] : []),
     ...(free > 0 ? [{
       width: total > 0 ? (free / total) * 100 : 0,
       className: 'cfg-host-usage-bar-unused',
