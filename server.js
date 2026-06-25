@@ -897,8 +897,11 @@ function filterCatalogForViewer(cat, role = 'public') {
   const tagOrder = Array.isArray(cat.tags) ? cat.tags : [];
   const catOrder = Array.isArray(cat.categories) ? cat.categories : [];
 
-  const rawTags = [...new Set(items.flatMap(item => Array.isArray(item.tags) ? item.tags : []).filter(Boolean))];
-  const rawCats = [...new Set(items.flatMap(item => Array.isArray(item.categories) ? item.categories : (item.category ? [item.category] : [])).filter(Boolean))];
+  const rawTags = [...new Set(items.flatMap(item =>
+    Array.isArray(item.tags) ? item.tags : []).filter(Boolean))];
+  const rawCats = [...new Set(items.flatMap(item =>
+    Array.isArray(item.categories) ? item.categories :
+    (item.category ? [item.category] : [])).filter(Boolean))];
 
   const visibleTags = [
     ...tagOrder.filter(t => rawTags.includes(t)),
@@ -909,7 +912,11 @@ function filterCatalogForViewer(cat, role = 'public') {
     ...rawCats.filter(c => !catOrder.includes(c))
   ];
 
-  return sanitizeCatalogForPublic({ ...cat, items, tags: visibleTags, categories: visibleCategories });
+  const result = { ...cat, items, tags: visibleTags, categories: visibleCategories };
+
+  // 只有未登入訪客才清除下載相關欄位
+  if (role === 'public') return sanitizeCatalogForPublic(result);
+  return result;
 }
 
 const auth = (req, res, next) => {
