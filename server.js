@@ -7,9 +7,9 @@ const fs      = require('fs');
 const os      = require('os');
 const crypto  = require('crypto');
 const zlib    = require('zlib');
-const { spawnSync } = require('child_process');
 const { TextDecoder } = require('util');
 const { OAuth2Client } = require('google-auth-library');
+const sharp   = require('sharp');
 const iconv   = require('iconv-lite');
 
 const app      = express();
@@ -22,7 +22,6 @@ const DEFAULT_INITIAL_ADMIN_PASSWORD = 'admin123456';
 const BOOTSTRAP_ADMIN_USERNAME = String(process.env.BOOTSTRAP_ADMIN_USERNAME || '').trim();
 const BOOTSTRAP_ADMIN_PASSWORD = String(process.env.BOOTSTRAP_ADMIN_PASSWORD || '');
 const UPLOADS  = path.join(DATA, 'uploads');
-const THUMB_SCRIPT = path.join(ROOT, 'tools', 'generate_thumb.py');
 const THUMB_MAX_EDGE = 400;
 const THUMB_QUALITY = 80;
 const CAT_FILE = path.join(DATA, 'catalog.json');
@@ -49,14 +48,6 @@ const managePageLocks = new Map();
 [DATA, UPLOADS].forEach(d => fs.mkdirSync(d, { recursive: true }));
 
 const THUMB_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']);
-const THUMB_PYTHON_CANDIDATES = [
-  process.env.CATALOG_THUMB_PYTHON,
-  process.env.PYTHON,
-  path.join(os.homedir(), '.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'python', 'python.exe'),
-  'python3',
-  'python'
-].filter(Boolean);
-let cachedThumbPython = null;
 
 // ── 工具函式 ──────────────────────────────────────
 const sha256 = s => crypto.createHash('sha256').update(String(s)).digest('hex');
@@ -446,21 +437,7 @@ function resolveThumbSourceFromRequestPath(rawPath = '') {
   return sourceKey;
 }
 
-function findThumbPython() {
-  if (cachedThumbPython) return cachedThumbPython;
-  for (const candidate of THUMB_PYTHON_CANDIDATES) {
-    if (!candidate) continue;
-    if ((candidate.includes('\\') || candidate.includes('/') || /^[a-zA-Z]:/.test(candidate)) && !fs.existsSync(candidate)) continue;
-    const probe = spawnSync(candidate, ['-c', 'print("ok")'], { encoding: 'utf8', timeout: 10000 });
-    if (!probe.error && probe.status === 0 && String(probe.stdout || '').includes('ok')) {
-      cachedThumbPython = candidate;
-      return cachedThumbPython;
-    }
-  }
-  return '';
-}
-
-function ensureThumbForKey(sourceKey = '', options = {}) {
+async function ensureThumbForKey(sourceKey = '', options = {}) {
   const key = String(sourceKey || '').trim();
   if (!key || !isThumbEligibleImageKey(key)) return '';
   const sourceAbs = path.join(UPLOADS, key);
@@ -474,32 +451,35 @@ function ensureThumbForKey(sourceKey = '', options = {}) {
     if (thumbStat.size > 0 && thumbStat.mtimeMs >= sourceStat.mtimeMs) return thumbAbs;
   }
 
-  const python = findThumbPython();
-  if (!python || !fs.existsSync(THUMB_SCRIPT)) return '';
-
   fs.mkdirSync(path.dirname(thumbAbs), { recursive: true });
-  const result = spawnSync(
-    python,
-    [THUMB_SCRIPT, '--input', sourceAbs, '--output', thumbAbs, '--max-edge', String(THUMB_MAX_EDGE), '--quality', String(THUMB_QUALITY)],
-    { encoding: 'utf8', timeout: 30000 }
-  );
-  if (result.error || result.status !== 0 || !fs.existsSync(thumbAbs)) {
+  try {
+    await sharp(sourceAbs, { failOn: 'none' })
+      .rotate()
+      .resize({
+        width: THUMB_MAX_EDGE,
+        height: THUMB_MAX_EDGE,
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .webp({ quality: THUMB_QUALITY })
+      .toFile(thumbAbs);
+  } catch (error) {
     try { fs.rmSync(thumbAbs, { force: true }); } catch {}
-    const stderr = String(result.stderr || result.error?.message || '').trim();
+    const stderr = String(error?.message || '').trim();
     if (stderr) console.warn(`[thumb] ${key}: ${stderr}`);
     return '';
   }
   return thumbAbs;
 }
 
-function ensureThumbsForKeys(keys = [], options = {}) {
+async function ensureThumbsForKeys(keys = [], options = {}) {
   const seen = new Set();
-  (Array.isArray(keys) ? keys : []).forEach(key => {
+  for (const key of (Array.isArray(keys) ? keys : [])) {
     const value = String(key || '').trim();
-    if (!value || seen.has(value)) return;
+    if (!value || seen.has(value)) continue;
     seen.add(value);
-    ensureThumbForKey(value, options);
-  });
+    await ensureThumbForKey(value, options);
+  }
 }
 
 function collectThumbSourceKeys(item = {}) {
@@ -513,13 +493,13 @@ function collectThumbSourceKeys(item = {}) {
   return [...keys];
 }
 
-function backfillThumbsForCollection(collection = 'scenario') {
+async function backfillThumbsForCollection(collection = 'scenario') {
   const cat = readCat(collection);
   const keys = new Set();
   (Array.isArray(cat.items) ? cat.items : []).forEach(item => {
     collectThumbSourceKeys(item).forEach(key => keys.add(key));
   });
-  ensureThumbsForKeys([...keys]);
+  await ensureThumbsForKeys([...keys]);
 }
 function normalizeRelativePath(relativePath, fallback = 'download.bin') {
   const raw = String(relativePath || '').replace(/\\/g, '/').trim();
@@ -2550,12 +2530,12 @@ app.use('/uploads',
   },
   express.static(UPLOADS, { maxAge: '7d' })
 );
-app.get('/thumbs/*', (req, res) => {
+app.get('/thumbs/*', async (req, res) => {
   const sourceKey = resolveThumbSourceFromRequestPath(req.params[0] || '');
   if (!sourceKey || path.basename(sourceKey).startsWith('dl.')) {
     return res.status(404).end();
   }
-  const thumbAbs = ensureThumbForKey(sourceKey);
+  const thumbAbs = await ensureThumbForKey(sourceKey);
   if (!thumbAbs || !fs.existsSync(thumbAbs)) {
     return res.status(404).end();
   }
@@ -3474,7 +3454,7 @@ app.post('/api/upload/:itemId', auth,
     { name: 'file',     maxCount: 1  },
     { name: 'files',    maxCount: 500 }
   ]),
-  (req, res) => {
+  async (req, res) => {
     try {
       const collection = getC(req);
       if (!hasRolePermission(req.authUser, 'uploadItems', collection)) return res.status(403).json({ error: '你沒有權限使用上傳功能' });
@@ -3526,7 +3506,7 @@ app.post('/api/upload/:itemId', auth,
         createdAt:   new Date().toISOString()
       };
 
-      ensureThumbsForKeys([...previewKeys, ...download.downloadFiles.map(file => file.key)]);
+      await ensureThumbsForKeys([...previewKeys, ...download.downloadFiles.map(file => file.key)]);
 
       const cat = readCat(collection);
       cat.items.push(item);
@@ -3575,7 +3555,7 @@ app.put('/api/items/:id', auth, (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/items/:id/previews', auth, upload.array('previews', 30), (req, res) => {
+app.post('/api/items/:id/previews', auth, upload.array('previews', 30), async (req, res) => {
   try {
     const collection = getC(req);
     if (!hasRolePermission(req.authUser, 'editItemInfo', collection)) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
@@ -3620,7 +3600,7 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), (req, re
     it.coverKey = keptPreviewKeys[0] || null;
     it.coverUrl = it.coverKey ? null : (keptPreviewUrls[0] || null);
 
-    ensureThumbsForKeys(keptPreviewKeys);
+    await ensureThumbsForKeys(keptPreviewKeys);
 
     saveCat(cat, collection);
     res.json({ ok: true, item: it });
@@ -3630,7 +3610,7 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), (req, re
 app.post('/api/items/:id/file', auth, upload.fields([
   { name: 'file',  maxCount: 1  },
   { name: 'files', maxCount: 500 }
-]), (req, res) => {
+]), async (req, res) => {
   try {
     const collection = getC(req);
     if (!hasRolePermission(req.authUser, 'editItemInfo', collection)) return res.status(403).json({ error: '你沒有權限編輯項目資訊' });
@@ -3698,7 +3678,7 @@ app.post('/api/items/:id/file', auth, upload.fields([
     it.downloadFiles = download.downloadFiles;
     it.downloadUrl = null;
 
-    ensureThumbsForKeys(download.downloadFiles.map(file => file.key));
+    await ensureThumbsForKeys(download.downloadFiles.map(file => file.key));
 
     saveCat(cat, collection);
     res.json({ ok: true, item: it });
@@ -3900,10 +3880,14 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`    本機：http://localhost:${PORT}`);
   console.log(`    外部：http://<你的VM-IP>:${PORT}\n`);
   setTimeout(() => {
-    try {
-      getCollectionsConfig().forEach(entry => backfillThumbsForCollection(entry.key));
-    } catch (err) {
-      console.warn('[thumb] backfill failed:', err?.message || err);
-    }
+    (async () => {
+      try {
+        for (const entry of getCollectionsConfig()) {
+          await backfillThumbsForCollection(entry.key);
+        }
+      } catch (err) {
+        console.warn('[thumb] backfill failed:', err?.message || err);
+      }
+    })();
   }, 0);
 });
