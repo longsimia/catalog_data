@@ -12,6 +12,8 @@
   --text:#e8e2d6;--muted:#8e8a98;
   --gold:#c9a84c;--gdim:#7a6230;--gglow:rgba(201,168,76,.12);
   --border:#28283a;--ok:#3eaf6f;--err:#e05252;
+  --usage-uploads:#8f6c4e;--usage-thumbs:#b79978;--usage-config:#6c866e;--usage-other:#7f8898;
+  --usage-bar-fill:color-mix(in srgb,var(--text) 22%, var(--admin-gold,var(--gold)) 78%);
   --header-top:#07070f;--header-glow:rgba(201,168,76,.07);
   --ctrl-bg:rgba(17,17,24,.97);--hbg-bg:rgba(0,0,0,.4);
   --topbar-height:82px;--topbar-btn-size:46px;
@@ -36,6 +38,8 @@ body[data-theme="light"]{
   --gold:#a18d79;--gdim:#d8cec2;--gglow:rgba(161,141,121,.07);
   --admin-gold:#8d6a43;
   --border:#ece5db;--ok:#5d8b72;--err:#bb6a62;
+  --usage-uploads:#b08a64;--usage-thumbs:#d3b08b;--usage-config:#6f8a70;--usage-other:#9fa9b5;
+  --usage-bar-fill:color-mix(in srgb,var(--text) 18%, var(--admin-gold,var(--gold)) 82%);
   --header-top:#fdfbf7;--header-glow:rgba(161,141,121,.04);
   --ctrl-bg:rgba(255,255,255,.94);--hbg-bg:rgba(255,255,255,.92);
   --overlay-blend:multiply;--elev:0 18px 34px rgba(87,72,56,.09),0 0 0 1px rgba(120,98,75,.06);
@@ -337,19 +341,18 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 #adm-login p{font-size:.86rem;color:var(--muted)}
 .auth-user-list{display:grid;gap:.6rem;margin-top:.6rem}
 .cfg-host-usage-section{margin-bottom:1rem}
-.cfg-host-usage-shell{display:grid;gap:.82rem;padding:1rem;background:linear-gradient(180deg,color-mix(in srgb,var(--card) 94%, transparent),color-mix(in srgb,var(--bg2) 88%, transparent));border:1px solid color-mix(in srgb,var(--border) 92%, transparent);border-radius:16px;box-shadow:none}
-body[data-theme="light"] .cfg-host-usage-shell{background:transparent}
+.cfg-host-usage-shell{display:grid;gap:.82rem;padding:1rem;background:transparent;border:1px solid color-mix(in srgb,var(--border) 92%, transparent);border-radius:16px;box-shadow:none}
 .cfg-host-usage-shell.loading{min-height:144px;place-items:center;color:var(--muted);text-align:center}
 .cfg-host-usage-top{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap}
 .cfg-host-usage-title{display:grid;gap:.18rem}
-.cfg-host-usage-title strong{font-size:.94rem;color:color-mix(in srgb,var(--admin-gold,var(--gold)) 86%, var(--text));font-weight:400;letter-spacing:.02em}
+.cfg-host-usage-title strong{font-size:.72rem;color:var(--gold);font-weight:400;letter-spacing:.12em}
 .cfg-host-usage-title span{font-size:.76rem;line-height:1.55;color:color-mix(in srgb,var(--muted) 88%, var(--text) 12%)}
 .cfg-host-usage-summary{display:flex;align-items:baseline;gap:.42rem;flex-wrap:wrap;justify-content:flex-end}
 .cfg-host-usage-summary strong{font-size:1.48rem;line-height:1;color:color-mix(in srgb,var(--text) 84%, var(--admin-gold,var(--gold)) 16%);font-weight:600}
 .cfg-host-usage-summary span{font-size:.78rem;letter-spacing:.01em;color:color-mix(in srgb,var(--muted) 90%, var(--text) 10%)}
-.cfg-host-usage-stack{display:grid;gap:.5rem}
-.cfg-host-usage-bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:#d6d0c7}
-.cfg-host-usage-bar-fill{display:block;height:100%;border-radius:999px;background:color-mix(in srgb,var(--text) 22%, var(--admin-gold,var(--gold)) 78%)}
+.cfg-host-usage-stack{display:grid;gap:.42rem}
+.cfg-host-usage-bar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:var(--bg2)}
+.cfg-host-usage-bar-fill{display:block;height:100%;border-radius:999px;background:var(--usage-bar-fill)}
 .cfg-host-usage-legend{display:grid;gap:.5rem}
 .cfg-host-usage-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.55rem;align-items:center;font-size:.8rem;color:color-mix(in srgb,var(--text) 82%, var(--muted) 18%)}
 .cfg-host-usage-dot{width:10px;height:10px;border-radius:50%}
@@ -4086,12 +4089,11 @@ function renderHostUsagePanel(data) {
   const free = Number(volume.freeBytes || 0);
   const usedPercent = Number(volume.usedPercent || 0);
   const sections = [
-    { label: '上傳檔案', value: Number(app.uploadsBytes || 0), color: '#b08a64' },
-    { label: '縮圖 / 預覽', value: Number(app.thumbsBytes || 0), color: '#d3b08b' },
-    { label: '設定資料', value: Number(app.configBytes || 0), color: '#6f8a70' },
-    { label: '其他站內資料', value: Number(app.otherBytes || 0), color: '#9fa9b5' }
+    { label: '上傳檔案', value: Number(app.uploadsBytes || 0), colorVar: '--usage-uploads' },
+    { label: '縮圖 / 預覽', value: Number(app.thumbsBytes || 0), colorVar: '--usage-thumbs' },
+    { label: '設定資料', value: Number(app.configBytes || 0), colorVar: '--usage-config' },
+    { label: '其他站內資料', value: Number(app.otherBytes || 0), colorVar: '--usage-other' }
   ];
-  const appTotal = Math.max(1, sections.reduce((sum, section) => sum + section.value, 0));
   const fmtGb = bytes => `${(Number(bytes || 0) / (1024 ** 3)).toFixed(1)}GB`;
   const hostUsedPercent = total > 0 ? Math.max(0, Math.min(100, (Number(volume.usedBytes || 0) / total) * 100)) : 0;
   shell.className = 'cfg-host-usage-shell';
@@ -4114,7 +4116,7 @@ function renderHostUsagePanel(data) {
     <div class="cfg-host-usage-legend">
       ${sections.map(section => `
         <div class="cfg-host-usage-row">
-          <span class="cfg-host-usage-dot" style="background:${section.color}"></span>
+          <span class="cfg-host-usage-dot" style="background:var(${section.colorVar})"></span>
           <span>${esc(section.label)}</span>
           <strong>${fmtSz(section.value)}</strong>
         </div>
