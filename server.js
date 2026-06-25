@@ -32,9 +32,7 @@ const ROLE_PERMISSION_KEYS = [
   'editItemOrder',
   'editItemInfo',
   'editTxtAttachments',
-  'deleteItems',
-  'manageCollections',
-  'deleteCollections'
+  'deleteItems'
 ];
 const DEFAULT_COLLECTIONS = [
   { key: 'scenario', label: '資料庫', mode: 'scenario' },
@@ -592,9 +590,7 @@ function getDefaultRoleConfig() {
         editItemOrder: true,
         editItemInfo: true,
         editTxtAttachments: true,
-        deleteItems: true,
-        manageCollections: true,
-        deleteCollections: true
+        deleteItems: true
       }
     },
     admin: {
@@ -607,9 +603,7 @@ function getDefaultRoleConfig() {
         editItemOrder: true,
         editItemInfo: true,
         editTxtAttachments: true,
-        deleteItems: true,
-        manageCollections: true,
-        deleteCollections: true
+        deleteItems: true
       }
     }
   };
@@ -632,11 +626,7 @@ function normalizeRolePermissions(srcPermissions = {}, fallbackPermissions = get
     editItemOrder: srcPermissions?.editItemOrder === undefined ? fallbackPermissions.editItemOrder : !!srcPermissions.editItemOrder,
     editItemInfo: srcPermissions?.editItemInfo === undefined ? fallbackPermissions.editItemInfo : !!srcPermissions.editItemInfo,
     editTxtAttachments: srcPermissions?.editTxtAttachments === undefined ? fallbackPermissions.editTxtAttachments : !!srcPermissions.editTxtAttachments,
-    deleteItems: srcPermissions?.deleteItems === undefined ? fallbackPermissions.deleteItems : !!srcPermissions.deleteItems,
-    manageCollections: srcPermissions?.manageCollections === undefined ? fallbackPermissions.manageCollections : !!srcPermissions.manageCollections,
-    deleteCollections: srcPermissions?.deleteCollections === undefined
-      ? (srcPermissions?.manageCollections === undefined ? fallbackPermissions.deleteCollections : !!srcPermissions.manageCollections)
-      : !!srcPermissions.deleteCollections
+    deleteItems: srcPermissions?.deleteItems === undefined ? fallbackPermissions.deleteItems : !!srcPermissions.deleteItems
   };
 }
 
@@ -3217,22 +3207,20 @@ app.get('/api/collections', (req, res) => {
 
 app.get('/api/collections-config', auth, (req, res) => {
   try {
-    const cfg = readCfg();
-    const role = req.authUser?.role || 'admin';
-    if (role !== 'owner' && !hasRolePermission(req.authUser, 'manageCollections', getC(req))) {
+    if (req.authUser?.role !== 'owner') {
       return res.status(403).json({ error: '你沒有權限管理資料夾頁籤' });
     }
+    const cfg = readCfg();
     res.json({ collections: getCollectionsConfig(cfg) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/collections-config', auth, (req, res) => {
   try {
-    const cfg = readCfg();
-    const role = req.authUser?.role || 'admin';
-    if (role !== 'owner' && !hasRolePermission(req.authUser, 'manageCollections', getC(req))) {
+    if (req.authUser?.role !== 'owner') {
       return res.status(403).json({ error: '你沒有權限管理資料夾頁籤' });
     }
+    const cfg = readCfg();
     const incoming = Array.isArray(req.body?.collections) ? req.body.collections : [];
     const nextCollections = normalizeCollectionsConfig(incoming);
     if (!nextCollections.length) return res.status(400).json({ error: '至少需要保留一個資料庫頁籤' });
@@ -3241,21 +3229,9 @@ app.put('/api/collections-config', auth, (req, res) => {
     const currentMap = new Map(currentCollections.map(item => [item.key, item]));
     const invalidModeChange = nextCollections.find(item => currentMap.has(item.key) && currentMap.get(item.key).mode !== item.mode);
     if (invalidModeChange) return res.status(400).json({ error: `資料庫「${invalidModeChange.label}」建立後不可變更模式` });
-    if (role !== 'owner') {
-      const hiddenEntries = currentCollections.filter(item => !canAccessCollectionByRole(item.key, role, cfg));
-      for (const hidden of hiddenEntries) {
-        const incomingHidden = nextCollections.find(item => item.key === hidden.key);
-        if (!incomingHidden || incomingHidden.label !== hidden.label || incomingHidden.mode !== hidden.mode || normalizeItemPermission(incomingHidden.permission) !== normalizeItemPermission(hidden.permission)) {
-          return res.status(403).json({ error: '你不能編輯僅站主可見的頁籤' });
-        }
-      }
-    }
     const removedCollections = currentCollections
       .filter(item => item.key !== 'scenario' && !nextCollections.some(next => next.key === item.key))
       .map(item => item.key);
-    if (role !== 'owner' && removedCollections.length && !hasRolePermission(req.authUser, 'deleteCollections', getC(req))) {
-      return res.status(403).json({ error: '你沒有權限刪除資料夾頁籤' });
-    }
     cfg.collections = nextCollections;
     saveCfg(cfg);
     removedCollections.forEach(key => deleteCollectionStorage(key, { collections: currentCollections }));

@@ -510,11 +510,17 @@ textarea.fc{min-height:72px;resize:vertical}
   background-repeat:no-repeat;background-position:center;background-size:contain;transition:transform .18s}
 .disc[open] summary::after{transform:rotate(180deg)}
 .disc-body{padding:.1rem .8rem .8rem}
+.disc.plain-section summary{display:none}
+.disc.plain-section .disc-body{padding:.85rem .8rem .8rem}
 #role-disc .disc-body{padding:14px .8rem .8rem}
 .disc-body > .tag-man-box,
 .disc-body > #man-list{margin-top:.15rem}
 .disc-head{display:flex;align-items:center;justify-content:space-between;gap:.75rem;width:100%}
 .disc-head-actions{display:flex;align-items:center;gap:.4rem}
+.cfg-inline-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);margin-bottom:.5rem}
+.cfg-inline-divider{height:1px;background:var(--border);margin-bottom:.7rem}
+.cfg-self-role-panel .disc-body{padding:.85rem .8rem .8rem}
+.self-role-perm-item{font-size:.8rem;color:var(--text);line-height:1.6}
 .disc-page-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.22rem .52rem;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02);color:var(--muted);font-size:.72rem;font-family:inherit;cursor:pointer;transition:all .18s}
 .disc-page-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gglow)}
 .manage-page{display:none}
@@ -1062,14 +1068,26 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <details class="disc" id="cfg-auth-disc">
           <summary><div class="disc-head"><span id="cfg-auth-title">帳號</span></div></summary>
           <div class="disc-body">
+            <div id="cfg-auth-inline-head" hidden>
+              <div class="cfg-inline-title">帳號</div>
+              <div class="cfg-inline-divider"></div>
+            </div>
             <div class="auth-user-list" id="auth-users-list"></div>
             <button class="btn btn-out btn-w" id="btn-add-auth-user" onclick="addAuthUserRow()" style="margin-top:.45rem">新增帳號</button>
-            <ul class="auth-user-help">
+            <ul class="auth-user-help" id="auth-user-help">
               <li>密碼欄留空時，會保留該帳號原本的密碼。</li>
             </ul>
             <button class="btn btn-gold btn-w" id="btn-save-pwd" onclick="saveAuthUsers()">儲存帳號設定</button>
           </div>
         </details>
+
+        <div class="disc cfg-self-role-panel" id="cfg-self-role-panel" style="display:none">
+          <div class="disc-body">
+            <div class="cfg-inline-title">權限</div>
+            <div class="cfg-inline-divider"></div>
+            <div id="cfg-self-role-content"></div>
+          </div>
+        </div>
 
         <button class="btn btn-out btn-w" id="btn-logout" onclick="doLogout()" style="margin-top:.45rem">登出</button>
       </div>
@@ -3914,8 +3932,11 @@ function setTab(t) {
     renderMan(); renderCategoryManager(); renderTagManager(); ensureManageDisclosure();
   }
   if (t === 'cfg') {
-    loadGlobalCfgForm();
+    loadCfgForm();
     renderCfgRoleList();
+    renderAuthUserList();
+    renderSelfRolePermissionPanel();
+    applyRolePermissionUI();
   }
 }
 
@@ -3947,13 +3968,14 @@ function loadGlobalCfgForm() {
 function loadCfgForm() {
   loadAppearanceForm();
   loadGlobalCfgForm();
+  renderSelfRolePermissionPanel();
 }
 
 function renderCollectionConfigPanel() {
   const box = document.getElementById('collection-config-list');
   if (!box) return;
-  const canManage = canRolePermission('manageCollections');
-  const canDeleteCollections = canRolePermission('deleteCollections');
+  const canManage = S.currentAuthUser?.role === 'owner';
+  const canDeleteCollections = canManage;
   const visibleEntries = S.collections
     .map((item, idx) => ({ item, idx }))
     .filter(({ item }) => canCurrentUserAccessCollectionConfigItem(item));
@@ -3988,7 +4010,7 @@ function clearCollectionCardDropState() {
 }
 
 function collectionCardDragStart(e, idx) {
-  if (!canRolePermission('manageCollections')) return;
+  if (S.currentAuthUser?.role !== 'owner') return;
   S.collectionDragIdx = idx;
   e.currentTarget.classList.add('drag');
   e.dataTransfer.effectAllowed = 'move';
@@ -4032,7 +4054,7 @@ function collectionCardDragEnd(e) {
 }
 
 function updateCollectionConfigField(index, field, value) {
-  if (!canRolePermission('manageCollections')) return;
+  if (S.currentAuthUser?.role !== 'owner') return;
   if (!S.collections[index]) return;
   if (field === 'mode') {
     S.collections[index].mode = normalizeCollectionMode(value);
@@ -4052,7 +4074,7 @@ function updateCollectionConfigField(index, field, value) {
 }
 
 function addCollectionConfigRow() {
-  if (!canRolePermission('manageCollections')) return;
+  if (S.currentAuthUser?.role !== 'owner') return;
   const labelInput = document.getElementById('collection-new-label');
   const modeInput = document.getElementById('collection-new-mode');
   const permInput = document.getElementById('collection-new-permission');
@@ -4080,14 +4102,14 @@ function addCollectionConfigRow() {
 }
 
 function removeCollectionConfigRow(index) {
-  if (!canRolePermission('deleteCollections')) return;
+  if (S.currentAuthUser?.role !== 'owner') return;
   if (index < 0 || index >= S.collections.length) return;
   if (S.collections[index]?.key === 'scenario') return;
   openDeleteConfirm('collection', index);
 }
 
 async function loadCollectionConfig() {
-  if (!canRolePermission('manageCollections')) {
+  if (S.currentAuthUser?.role !== 'owner') {
     renderCollectionConfigPanel();
     return;
   }
@@ -4106,7 +4128,7 @@ async function loadCollectionConfig() {
 }
 
 async function saveCollectionConfig() {
-  if (!canRolePermission('manageCollections')) return;
+  if (S.currentAuthUser?.role !== 'owner') return;
   const collections = S.collections.map((item, idx) => ({
     key: item.key,
     label: String(item.label || '').trim(),
@@ -4169,15 +4191,8 @@ function applyRoleLabels() {
   renderCollectionConfigPanel();
 }
 
-function renderRoleConfigPanel() {
-  const box = document.getElementById('role-config-list');
-  if (!box) return;
-  const cfg = S.roleConfig || {
-    owner: { label: '站主', permissions: {} },
-    admin: { label: '管理員', permissions: {} }
-  };
-  const isOwner = S.currentAuthUser?.role === 'owner';
-  const permGroups = [
+function getRolePermissionGroups() {
+  return [
     ['項目內容', [
       ['downloadFiles', '下載檔案'],
       ['uploadItems', '上傳項目'],
@@ -4188,11 +4203,54 @@ function renderRoleConfigPanel() {
     ['管理介面', [
       ['editCategories', '編輯類別庫'],
       ['editTags', '編輯標籤庫'],
-      ['editItemOrder', '編輯資料清單'],
-      ['manageCollections', '編輯資料夾頁籤'],
-      ['deleteCollections', '刪除資料夾頁籤']
+      ['editItemOrder', '編輯資料清單']
     ]]
   ];
+}
+
+function renderSelfRolePermissionPanel() {
+  const panel = document.getElementById('cfg-self-role-panel');
+  const content = document.getElementById('cfg-self-role-content');
+  if (!panel || !content) return;
+  const role = S.currentAuthUser?.role || '';
+  if (!role || role === 'owner') {
+    panel.style.display = 'none';
+    content.innerHTML = '';
+    return;
+  }
+  const roleInfo = S.roleConfig?.[role] || S.allRoleConfig?.[role] || { label: getRoleLabel(role), permissions: {} };
+  const permGroups = getRolePermissionGroups();
+  panel.style.display = '';
+  content.innerHTML = `
+    <div class="role-card">
+      <h4>${esc(roleInfo.label || getRoleLabel(role))}</h4>
+      <div class="role-perms">
+        ${permGroups.map(([groupTitle, perms], idx) => {
+          const enabled = perms.filter(([key]) => roleInfo.permissions?.[key]);
+          return `
+            <div class="role-perm-group">
+              <div class="role-perm-title">${esc(groupTitle)}</div>
+              ${enabled.length
+                ? enabled.map(([, label]) => `<div class="self-role-perm-item">${esc(label)}</div>`).join('')
+                : '<p class="role-note">目前沒有權限</p>'}
+            </div>${idx < permGroups.length - 1 ? '<div class="role-perm-divider" aria-hidden="true"></div>' : ''}
+          `;
+        }).join('')}
+      </div>
+      <p class="role-note">只有${esc(getRoleLabel('owner'))}可以調整身份組權限。</p>
+    </div>
+  `;
+}
+
+function renderRoleConfigPanel() {
+  const box = document.getElementById('role-config-list');
+  if (!box) return;
+  const cfg = S.roleConfig || {
+    owner: { label: '站主', permissions: {} },
+    admin: { label: '管理員', permissions: {} }
+  };
+  const isOwner = S.currentAuthUser?.role === 'owner';
+  const permGroups = getRolePermissionGroups();
   const roleKeys = isOwner ? getVisibleRoleKeysForCollection() : [S.currentAuthUser?.role].filter(Boolean);
   box.innerHTML = roleKeys.map(role => {
     const roleInfo = cfg[role] || { label: getRoleLabel(role), permissions: {} };
@@ -4252,9 +4310,7 @@ function addRoleConfigRow() {
       deleteItems: false,
       editCategories: false,
       editTags: false,
-      editItemOrder: false,
-      manageCollections: false,
-      deleteCollections: false
+      editItemOrder: false
     }
   };
   S.allRoleConfig[key] = JSON.parse(JSON.stringify(nextRole));
@@ -4334,6 +4390,7 @@ async function loadRoleConfig() {
     renderRoleConfigPanel();
     renderCfgRoleList();
     renderAuthUserList();
+    renderSelfRolePermissionPanel();
     applyRoleLabels();
     applyRolePermissionUI();
     renderMan();
@@ -4354,6 +4411,7 @@ async function saveRoleConfig() {
     renderRoleConfigPanel();
     renderCfgRoleList();
     renderAuthUserList();
+    renderSelfRolePermissionPanel();
     applyRoleLabels();
     applyRolePermissionUI();
     renderMan();
@@ -4379,6 +4437,7 @@ function cancelRoleConfigChanges() {
   renderRoleConfigPanel();
   renderCfgRoleList();
   renderAuthUserList();
+  renderSelfRolePermissionPanel();
   applyRoleLabels();
   applyRolePermissionUI();
 }
@@ -4398,6 +4457,7 @@ async function saveRoleList() {
     renderCfgRoleList();
     renderRoleConfigPanel();
     renderAuthUserList();
+    renderSelfRolePermissionPanel();
     applyRoleLabels();
     applyRolePermissionUI();
     toast('身份組設定已儲存', 'ok');
@@ -4422,6 +4482,7 @@ function cancelRoleListChanges() {
   renderCfgRoleList();
   renderRoleConfigPanel();
   renderAuthUserList();
+  renderSelfRolePermissionPanel();
   applyRoleLabels();
   applyRolePermissionUI();
 }
@@ -4433,18 +4494,30 @@ function applyRolePermissionUI() {
   const canEditTags = canRolePermission('editTags');
   const canEditOrder = canRolePermission('editItemOrder');
   const canEditSite = S.currentAuthUser?.role === 'owner';
-  const canManageCollections = canRolePermission('manageCollections');
   const canEditAttachments = canRolePermission('editTxtAttachments');
+  const appearanceSection = document.getElementById('appearance-disc');
   const collectionSection = document.getElementById('collection-disc');
   const globalSection = document.getElementById('cfg-global-section');
   const cfgRoleSection = document.getElementById('cfg-role-disc');
   const authSection = document.getElementById('cfg-auth-disc');
+  const authInlineHead = document.getElementById('cfg-auth-inline-head');
+  const authHelp = document.getElementById('auth-user-help');
+  const selfRolePanel = document.getElementById('cfg-self-role-panel');
   const authTitle = document.getElementById('cfg-auth-title');
-  if (collectionSection) collectionSection.style.display = (canEditSite || canManageCollections) ? '' : 'none';
+  if (appearanceSection) appearanceSection.style.display = canEditSite ? '' : 'none';
+  if (collectionSection) collectionSection.style.display = canEditSite ? '' : 'none';
   if (globalSection) globalSection.style.display = canEditSite ? '' : 'none';
   if (cfgRoleSection) cfgRoleSection.style.display = canEditSite ? '' : 'none';
   if (authSection) authSection.style.display = '';
+  if (authSection) {
+    authSection.classList.toggle('plain-section', !canEditSite);
+    if (!canEditSite) authSection.setAttribute('open', 'open');
+  }
+  if (authInlineHead) authInlineHead.hidden = !!canEditSite;
+  if (authHelp) authHelp.style.display = canEditSite ? '' : 'none';
+  if (selfRolePanel) selfRolePanel.style.display = canEditSite ? 'none' : '';
   if (authTitle) authTitle.textContent = '帳號';
+  renderSelfRolePermissionPanel();
   document.getElementById('lb-dl')?.toggleAttribute('disabled', !canDownload);
   document.getElementById('btn-do-up')?.toggleAttribute('disabled', !canUpload);
   document.getElementById('btn-clear-form')?.toggleAttribute('disabled', !canUpload);
@@ -4455,8 +4528,8 @@ function applyRolePermissionUI() {
   ['cfg-google-client-id','cfg-upload-origin'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
   document.getElementById('btn-save-site')?.toggleAttribute('disabled', !canEditSite);
   document.getElementById('btn-save-global-cfg')?.toggleAttribute('disabled', !canEditSite);
-  ['collection-new-label','collection-new-mode','collection-new-permission','btn-save-collections'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !(canEditSite || canManageCollections)));
-  document.getElementById('btn-cancel-collections')?.toggleAttribute('disabled', !(canEditSite || canManageCollections));
+  ['collection-new-label','collection-new-mode','collection-new-permission','btn-save-collections'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
+  document.getElementById('btn-cancel-collections')?.toggleAttribute('disabled', !canEditSite);
   document.getElementById('btn-add-role')?.toggleAttribute('disabled', !canEditSite);
   document.getElementById('btn-save-role-list')?.toggleAttribute('disabled', !canEditSite);
   document.getElementById('btn-cancel-role-list')?.toggleAttribute('disabled', !canEditSite);
@@ -4517,17 +4590,20 @@ function renderAuthUserList() {
     addBtn?.setAttribute('disabled', 'disabled');
     addBtn && (addBtn.style.display = 'none');
     saveBtn?.removeAttribute('disabled');
-    const self = S.authUsers[0] || { id: '', username: '', role: S.currentAuthUser?.role || 'admin', password: '', googleEmail: '', googleOnly: false };
+    const selfIndex = S.authUsers.findIndex(user => (user.id && user.id === S.currentAuthUser?.id) || user.username === S.currentAuthUser?.username);
+    const self = (selfIndex >= 0 ? S.authUsers[selfIndex] : S.authUsers[0])
+      || { id: '', username: '', role: S.currentAuthUser?.role || 'admin', password: '', googleEmail: '', googleOnly: false };
+    const targetIndex = selfIndex >= 0 ? selfIndex : 0;
     box.innerHTML = `
       <p style="color:var(--muted);font-size:.78rem;margin:0 0 .55rem">你可以在這裡修改自己的用戶名與密碼。</p>
       <div class="auth-user-row">
-        <input type="text" class="fc" value="${esc(self.username || '')}" placeholder="用戶名" oninput="updateAuthUserField(0,'username',this.value)">
-        <input type="password" class="fc auth-user-password" value="" placeholder="留空則維持原密碼" oninput="updateAuthUserField(0,'password',this.value)">
+        <input type="text" class="fc" value="${esc(self.username || '')}" placeholder="用戶名" oninput="updateAuthUserField(${targetIndex},'username',this.value)">
+        <input type="password" class="fc auth-user-password" value="" placeholder="留空則維持原密碼" oninput="updateAuthUserField(${targetIndex},'password',this.value)">
         <input type="text" class="fc auth-user-role" value="${esc(getRoleLabel(self.role || 'admin'))}" disabled>
         <input type="email" class="fc auth-user-google" value="${esc(self.googleEmail || '')}"
           placeholder="Google 登入信箱（選填）"
-          oninput="updateAuthUserField(0,'googleEmail',this.value)">
-        ${authUserStatusHtml(self, 0, false)}
+          oninput="updateAuthUserField(${targetIndex},'googleEmail',this.value)">
+        ${authUserStatusHtml(self, targetIndex, false)}
       </div>
     `;
     return;
@@ -4601,6 +4677,7 @@ async function loadAuthUsers() {
       googleOnly: !!user.googleOnly
     }));
     renderAuthUserList();
+    renderSelfRolePermissionPanel();
   } catch (e) {
     toast(e.message, 'err');
   }
@@ -4692,6 +4769,7 @@ async function saveAuthUsers() {
       googleOnly: !!user.googleOnly
     }));
     renderAuthUserList();
+    renderSelfRolePermissionPanel();
     toast('帳號設定已儲存', 'ok');
   } catch(e) { hideLdg(); toast(e.message, 'err'); }
 }
@@ -7064,7 +7142,7 @@ async function confirmDeleteAction() {
   if (S.delKind === 'item' && !canRolePermission('deleteItems')) { toast('你沒有權限刪除項目', 'err'); return; }
   if (S.delKind === 'collection') {
     const idx = S.delTargetIdx;
-    if (!canRolePermission('deleteCollections')) { toast('你沒有權限刪除資料夾頁籤', 'err'); return; }
+    if (S.currentAuthUser?.role !== 'owner') { toast('只有站主可以刪除頁籤', 'err'); return; }
     closeDeleteConfirm();
     if (idx === null || idx < 0 || idx >= S.collections.length) return;
     if (S.collections[idx]?.key === 'scenario') return;
