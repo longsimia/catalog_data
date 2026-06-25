@@ -7,6 +7,7 @@ const fs      = require('fs');
 const os      = require('os');
 const crypto  = require('crypto');
 const zlib    = require('zlib');
+const { spawnSync } = require('child_process');
 const { TextDecoder } = require('util');
 const { OAuth2Client } = require('google-auth-library');
 const iconv   = require('iconv-lite');
@@ -21,6 +22,9 @@ const DEFAULT_INITIAL_ADMIN_PASSWORD = 'admin123456';
 const BOOTSTRAP_ADMIN_USERNAME = String(process.env.BOOTSTRAP_ADMIN_USERNAME || '').trim();
 const BOOTSTRAP_ADMIN_PASSWORD = String(process.env.BOOTSTRAP_ADMIN_PASSWORD || '');
 const UPLOADS  = path.join(DATA, 'uploads');
+const THUMB_SCRIPT = path.join(ROOT, 'tools', 'generate_thumb.py');
+const THUMB_MAX_EDGE = 400;
+const THUMB_QUALITY = 80;
 const CAT_FILE = path.join(DATA, 'catalog.json');
 const CFG_FILE = path.join(DATA, 'config.json');
 const VALID_COLLECTION_MODES = new Set(['scenario', 'image']);
@@ -43,6 +47,16 @@ const managePageLocks = new Map();
 
 // 確保目錄存在
 [DATA, UPLOADS].forEach(d => fs.mkdirSync(d, { recursive: true }));
+
+const THUMB_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']);
+const THUMB_PYTHON_CANDIDATES = [
+  process.env.CATALOG_THUMB_PYTHON,
+  process.env.PYTHON,
+  path.join(os.homedir(), '.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'python', 'python.exe'),
+  'python3',
+  'python'
+].filter(Boolean);
+let cachedThumbPython = null;
 
 // ── 工具函式 ──────────────────────────────────────
 const sha256 = s => crypto.createHash('sha256').update(String(s)).digest('hex');
@@ -393,6 +407,119 @@ function buildStoredKey(collection = 'scenario', itemId = '', filename = '') {
   return key === 'scenario'
     ? `${itemId}/${filename}`
     : `${key}/${itemId}/${filename}`;
+}
+
+function isThumbEligibleImageKey(key = '') {
+  return THUMB_IMAGE_EXTS.has(path.extname(String(key || '')).toLowerCase());
+}
+
+function buildThumbKey(sourceKey = '') {
+  const normalized = String(sourceKey || '').replace(/\\/g, '/').trim();
+  if (!normalized) return '';
+  const dir = path.posix.dirname(normalized);
+  const base = path.posix.basename(normalized);
+  return path.posix.join(dir === '.' ? '' : dir, '.thumbs', `${base}.webp`);
+}
+
+function getThumbAbsPath(sourceKey = '') {
+  const thumbKey = buildThumbKey(sourceKey);
+  return thumbKey ? path.join(UPLOADS, thumbKey) : '';
+}
+
+function getThumbUrl(sourceKey = '') {
+  const thumbKey = buildThumbKey(sourceKey);
+  return thumbKey ? `/thumbs/${thumbKey}` : '';
+}
+
+function resolveThumbSourceFromRequestPath(rawPath = '') {
+  const normalized = String(rawPath || '').replace(/\\/g, '/').trim().replace(/^\/+/, '');
+  if (!normalized.toLowerCase().endsWith('.webp')) return '';
+  const withoutExt = normalized.slice(0, -'.webp'.length);
+  const marker = '/.thumbs/';
+  const markerIndex = withoutExt.lastIndexOf(marker);
+  if (markerIndex === -1) return '';
+  const prefix = withoutExt.slice(0, markerIndex);
+  const filename = withoutExt.slice(markerIndex + marker.length);
+  if (!filename) return '';
+  const sourceKey = prefix ? `${prefix}/${filename}` : filename;
+  if (buildThumbKey(sourceKey) !== normalized) return '';
+  return sourceKey;
+}
+
+function findThumbPython() {
+  if (cachedThumbPython) return cachedThumbPython;
+  for (const candidate of THUMB_PYTHON_CANDIDATES) {
+    if (!candidate) continue;
+    if ((candidate.includes('\\') || candidate.includes('/') || /^[a-zA-Z]:/.test(candidate)) && !fs.existsSync(candidate)) continue;
+    const probe = spawnSync(candidate, ['-c', 'print("ok")'], { encoding: 'utf8', timeout: 10000 });
+    if (!probe.error && probe.status === 0 && String(probe.stdout || '').includes('ok')) {
+      cachedThumbPython = candidate;
+      return cachedThumbPython;
+    }
+  }
+  return '';
+}
+
+function ensureThumbForKey(sourceKey = '', options = {}) {
+  const key = String(sourceKey || '').trim();
+  if (!key || !isThumbEligibleImageKey(key)) return '';
+  const sourceAbs = path.join(UPLOADS, key);
+  if (!fs.existsSync(sourceAbs)) return '';
+  const thumbAbs = getThumbAbsPath(key);
+  if (!thumbAbs) return '';
+
+  const sourceStat = fs.statSync(sourceAbs);
+  if (!options.force && fs.existsSync(thumbAbs)) {
+    const thumbStat = fs.statSync(thumbAbs);
+    if (thumbStat.size > 0 && thumbStat.mtimeMs >= sourceStat.mtimeMs) return thumbAbs;
+  }
+
+  const python = findThumbPython();
+  if (!python || !fs.existsSync(THUMB_SCRIPT)) return '';
+
+  fs.mkdirSync(path.dirname(thumbAbs), { recursive: true });
+  const result = spawnSync(
+    python,
+    [THUMB_SCRIPT, '--input', sourceAbs, '--output', thumbAbs, '--max-edge', String(THUMB_MAX_EDGE), '--quality', String(THUMB_QUALITY)],
+    { encoding: 'utf8', timeout: 30000 }
+  );
+  if (result.error || result.status !== 0 || !fs.existsSync(thumbAbs)) {
+    try { fs.rmSync(thumbAbs, { force: true }); } catch {}
+    const stderr = String(result.stderr || result.error?.message || '').trim();
+    if (stderr) console.warn(`[thumb] ${key}: ${stderr}`);
+    return '';
+  }
+  return thumbAbs;
+}
+
+function ensureThumbsForKeys(keys = [], options = {}) {
+  const seen = new Set();
+  (Array.isArray(keys) ? keys : []).forEach(key => {
+    const value = String(key || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    ensureThumbForKey(value, options);
+  });
+}
+
+function collectThumbSourceKeys(item = {}) {
+  const keys = new Set();
+  (Array.isArray(item.previewKeys) ? item.previewKeys : []).forEach(key => {
+    if (isThumbEligibleImageKey(key)) keys.add(key);
+  });
+  normalizeDownloadFiles(item).forEach(file => {
+    if (isThumbEligibleImageKey(file?.key)) keys.add(file.key);
+  });
+  return [...keys];
+}
+
+function backfillThumbsForCollection(collection = 'scenario') {
+  const cat = readCat(collection);
+  const keys = new Set();
+  (Array.isArray(cat.items) ? cat.items : []).forEach(item => {
+    collectThumbSourceKeys(item).forEach(key => keys.add(key));
+  });
+  ensureThumbsForKeys([...keys]);
 }
 function normalizeRelativePath(relativePath, fallback = 'download.bin') {
   const raw = String(relativePath || '').replace(/\\/g, '/').trim();
@@ -2406,6 +2533,8 @@ function removeStoredFile(key) {
   if (!key) return;
   const abs = path.join(UPLOADS, key);
   if (fs.existsSync(abs)) fs.rmSync(abs, { force: true });
+  const thumbAbs = getThumbAbsPath(key);
+  if (thumbAbs && fs.existsSync(thumbAbs)) fs.rmSync(thumbAbs, { force: true });
 }
 
 // ── 中介層 ────────────────────────────────────────
@@ -2421,6 +2550,19 @@ app.use('/uploads',
   },
   express.static(UPLOADS, { maxAge: '7d' })
 );
+app.get('/thumbs/*', (req, res) => {
+  const sourceKey = resolveThumbSourceFromRequestPath(req.params[0] || '');
+  if (!sourceKey || path.basename(sourceKey).startsWith('dl.')) {
+    return res.status(404).end();
+  }
+  const thumbAbs = ensureThumbForKey(sourceKey);
+  if (!thumbAbs || !fs.existsSync(thumbAbs)) {
+    return res.status(404).end();
+  }
+  res.type('image/webp');
+  res.set('Cache-Control', 'public, max-age=604800');
+  return res.sendFile(thumbAbs);
+});
 
 // ══════════════════════════════════════════════════
 //  PUBLIC API
@@ -2645,7 +2787,8 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
     relativePath: file.relativePath || file.name,
     url: withCollection(`/api/download/${item.id}/files/${file.index}`, collection),
     key: file.key || '',
-    mediaUrl: file.key ? withCollection(`/uploads/${file.key}`, collection) : ''
+    mediaUrl: file.key ? withCollection(`/uploads/${file.key}`, collection) : '',
+    thumbUrl: file.key && isThumbEligibleImageKey(file.key) ? getThumbUrl(file.key) : ''
   }));
 
   if (files.length) {
@@ -2695,7 +2838,8 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
         url: withCollection(`/preview-open/${item.id}/${index}`, collection),
         mediaUrl: PREVIEWABLE_MEDIA_MIME[file?.ext]
           ? withCollection(`/uploads/${file.key}`, collection)
-          : withCollection(`/api/preview/${item.id}/${index}`, collection)
+          : withCollection(`/api/preview/${item.id}/${index}`, collection),
+        thumbUrl: PREVIEWABLE_MEDIA_MIME[file?.ext] && isThumbEligibleImageKey(file?.key) ? getThumbUrl(file.key) : ''
       }))
     });
   } catch (e) {
@@ -3382,6 +3526,8 @@ app.post('/api/upload/:itemId', auth,
         createdAt:   new Date().toISOString()
       };
 
+      ensureThumbsForKeys([...previewKeys, ...download.downloadFiles.map(file => file.key)]);
+
       const cat = readCat(collection);
       cat.items.push(item);
       saveCat(cat, collection);
@@ -3474,6 +3620,8 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), (req, re
     it.coverKey = keptPreviewKeys[0] || null;
     it.coverUrl = it.coverKey ? null : (keptPreviewUrls[0] || null);
 
+    ensureThumbsForKeys(keptPreviewKeys);
+
     saveCat(cat, collection);
     res.json({ ok: true, item: it });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3549,6 +3697,8 @@ app.post('/api/items/:id/file', auth, upload.fields([
     it.downloadName = download.downloadName;
     it.downloadFiles = download.downloadFiles;
     it.downloadUrl = null;
+
+    ensureThumbsForKeys(download.downloadFiles.map(file => file.key));
 
     saveCat(cat, collection);
     res.json({ ok: true, item: it });
@@ -3749,4 +3899,11 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✅  素材庫後端已啟動`);
   console.log(`    本機：http://localhost:${PORT}`);
   console.log(`    外部：http://<你的VM-IP>:${PORT}\n`);
+  setTimeout(() => {
+    try {
+      getCollectionsConfig().forEach(entry => backfillThumbsForCollection(entry.key));
+    } catch (err) {
+      console.warn('[thumb] backfill failed:', err?.message || err);
+    }
+  }, 0);
 });

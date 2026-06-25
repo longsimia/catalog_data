@@ -2347,6 +2347,14 @@ function fileUrl(key) {
   if (!key) return '';
   return '/uploads/' + key;
 }
+function thumbUrl(key) {
+  if (!key) return '';
+  return '/thumbs/' + key + '.webp';
+}
+function canUseThumbForName(name = '') {
+  const clean = String(name || '').split('?')[0].split('#')[0].toLowerCase();
+  return ['.jpg','.jpeg','.png','.webp','.bmp','.gif'].some(ext => clean.endsWith(ext));
+}
 function getMediaKindFromName(name = '') {
   const clean = String(name || '').split('?')[0].split('#')[0].toLowerCase();
   const ext = clean.includes('.') ? clean.slice(clean.lastIndexOf('.')) : '';
@@ -2371,14 +2379,14 @@ function getMediaKindLabel(kind) {
 function getPreviewMediaEntries(item) {
   const seen = new Set();
   const list = [];
-  const push = (src, value = '') => {
+  const push = (src, value = '', thumbSrc = '') => {
     if (!src || seen.has(src)) return;
     seen.add(src);
-    list.push({ src, kind: getMediaKindFromName(value || src), label: value || src });
+    list.push({ src, thumbSrc, kind: getMediaKindFromName(value || src), label: value || src });
   };
-  if (item?.coverKey) push(fileUrl(item.coverKey), item.coverKey);
+  if (item?.coverKey) push(fileUrl(item.coverKey), item.coverKey, canUseThumbForName(item.coverKey) ? thumbUrl(item.coverKey) : '');
   if (item?.coverUrl) push(item.coverUrl, item.coverUrl);
-  (item?.previewKeys || []).forEach(k => push(fileUrl(k), k));
+  (item?.previewKeys || []).forEach(k => push(fileUrl(k), k, canUseThumbForName(k) ? thumbUrl(k) : ''));
   (item?.previewUrls || []).forEach(url => push(url, url));
   return list;
 }
@@ -2389,7 +2397,7 @@ function renderCardCover(entry, title = '') {
   if (!entry?.src) return '<div class="card-ph"></div>';
   if (entry.kind === 'video') return `<video class="card-cover-video" src="${esc(entry.src)}" muted playsinline preload="metadata"></video>`;
   if (entry.kind === 'audio') return `<div class="card-cover-audio">${icon('audio')}<span>${esc(title || '音訊預覽')}</span></div>`;
-  return `<img class="card-cover" src="${esc(entry.src)}" alt="${esc(title)}" loading="lazy">`;
+  return `<img class="card-cover" src="${esc(entry.thumbSrc || entry.src)}" alt="${esc(title)}" loading="lazy">`;
 }
 function renderPreviewThumbFromFile(file) {
   const name = file?.name || 'media';
@@ -2983,7 +2991,7 @@ function galleryListRowHtml(item, idx) {
 
 function thToListThumb(th) {
   return th?.src && th.kind === 'image'
-    ? `<img class="mth" src="${esc(th.src)}" loading="lazy" onerror="this.style.display='none'">`
+    ? `<img class="mth" src="${esc(th.thumbSrc || th.src)}" loading="lazy" onerror="this.style.display='none'">`
     : th?.src && th.kind === 'video'
     ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"></video>`
     : th?.src && th.kind === 'audio'
@@ -3605,7 +3613,7 @@ function getPreviewCardHref(file, mode = 'preview') {
   return file?.url || '';
 }
 function getPreviewThumbSrc(file) {
-  return file?.mediaUrl || file?.url || '';
+  return file?.thumbUrl || file?.mediaUrl || file?.url || '';
 }
 function renderPreviewGridThumb(file, label) {
   const kind = getMediaKindFromName(file?.name || file?.url || '');
