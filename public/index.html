@@ -340,8 +340,8 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
   justify-content:center;gap:.85rem;padding:2rem;text-align:center}
 #adm-login p{font-size:.86rem;color:var(--muted)}
 .auth-user-list{display:grid;gap:.6rem;margin-top:.6rem}
-.cfg-host-usage-section{margin-bottom:1rem}
-.cfg-host-usage-shell{display:grid;gap:.82rem;padding:1rem 0;background:transparent;border:none;border-radius:0;box-shadow:none}
+.cfg-host-usage-section{margin-bottom:.95rem}
+.cfg-host-usage-shell{display:grid;gap:.82rem;padding:0;background:transparent;border:none;border-radius:0;box-shadow:none}
 .cfg-host-usage-shell.loading{min-height:144px;place-items:center;color:var(--muted);text-align:center}
 .cfg-host-usage-title{display:grid;gap:.18rem;padding-bottom:.22rem;border-bottom:1px solid var(--border)}
 .cfg-host-usage-title strong{font-size:.72rem;color:var(--admin-gold,var(--gold));font-weight:400;letter-spacing:.12em}
@@ -1033,7 +1033,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
             <input type="text" class="fc" id="cfg-upload-origin"
               placeholder="https://upload.yourdomain.com（留空則使用目前網站網域）">
           </div>
-          <button class="btn btn-out btn-w" id="btn-save-global-cfg" onclick="saveGlobalCfg()" style="margin:.3rem 0 .95rem">儲存全站設定</button>
+          <button class="btn btn-gold btn-w" id="btn-save-global-cfg" onclick="saveGlobalCfg()" style="margin:.3rem 0 .95rem">儲存全站設定</button>
         </div>
 
         <details class="disc" id="collection-disc">
@@ -1215,7 +1215,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
             <label>頁尾文字</label>
             <input type="text" class="fc" id="c-f" placeholder="CATALOG · Archived by Username">
           </div>
-          <button class="btn btn-out btn-w" id="btn-save-site" onclick="saveAppearance()">儲存外觀設定</button>
+          <button class="btn btn-gold btn-w" id="btn-save-site" onclick="saveAppearance()">儲存外觀設定</button>
         </div>
       </details>
       <div class="manage-sort-head">
@@ -1915,11 +1915,13 @@ function decorateStaticIcons() {
   setLabeled('#btn-do-up', 'upload', '上傳並儲存');
   setLabeled('#btn-clear-form', 'trash', '清除表單');
   setLabeled('#btn-save-collections', 'save', '儲存');
+  setLabeled('#btn-save-role-list', 'save', '儲存');
   setLabeled('#btn-save-role-config', 'save', '儲存');
   setLabeled('#btn-save-order', 'save', '儲存');
   setLabeled('#btn-save-cats', 'save', '儲存');
   setLabeled('#btn-save-tags', 'save', '儲存');
   setLabeled('#btn-cancel-collections', 'close', '取消變更');
+  setLabeled('#btn-cancel-role-list', 'close', '取消變更');
   setLabeled('#btn-cancel-role-config', 'close', '取消變更');
   setLabeled('#btn-cancel-order', 'close', '取消變更');
   setLabeled('#btn-cancel-cats', 'close', '取消變更');
