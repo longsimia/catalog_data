@@ -2781,6 +2781,7 @@ window.addEventListener('offline', () => setConnState('offline'));
     }
   });
   initGoogleSignIn();
+  if (getToken()) await loadRoleConfig();
   await loadCatalog(true);
   await openSharedLightboxFromUrl();
 }
