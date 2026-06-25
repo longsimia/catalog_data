@@ -651,15 +651,18 @@ function normalizeRoleConfig(rawConfig = {}) {
     };
   };
   const normalized = {
-    owner: buildRole('owner'),
-    admin: buildRole('admin')
+    owner: buildRole('owner')
   };
   Object.keys(rawConfig || {}).forEach(key => {
     const roleKey = sanitizeRoleKey(key);
-    if (!roleKey || roleKey === 'owner' || roleKey === 'admin' || normalized[roleKey]) return;
-    normalized[roleKey] = buildRole(roleKey, defaults.admin);
+    if (!roleKey || roleKey === 'owner' || normalized[roleKey]) return;
+    normalized[roleKey] = buildRole(roleKey, defaults[roleKey] || defaults.admin);
   });
   return normalized;
+}
+
+function getDefaultNonOwnerRoleKey(roleConfig = {}) {
+  return Object.keys(roleConfig || {}).find(key => key !== 'owner') || '';
 }
 
 function getGlobalRoleConfig(cfg) {
@@ -3026,6 +3029,7 @@ app.put('/api/auth-users', auth, (req, res) => {
     const cfg = readCfg();
     const roleConfig = getGlobalRoleConfig(cfg);
     const allowedRoles = new Set(Object.keys(roleConfig));
+    const defaultNonOwnerRole = getDefaultNonOwnerRoleKey(roleConfig);
     const incoming = Array.isArray(req.body?.users) ? req.body.users : [];
     const existingUsers = normalizeAuthUsers(cfg.users, cfg.pwdHash);
     const existingMap = new Map(existingUsers.map(user => [user.id, user]));
@@ -3044,7 +3048,10 @@ app.put('/api/auth-users', auth, (req, res) => {
         const passwordHash = password ? sha256(password) : (previous?.passwordHash || '');
         if (!passwordHash) throw new Error(`第 ${idx + 1} 組帳號需要設定密碼`);
         const requestedRole = sanitizeRoleKey(entry?.role);
-        const role = requestedRole && allowedRoles.has(requestedRole) ? requestedRole : 'admin';
+        let role = requestedRole && allowedRoles.has(requestedRole)
+          ? requestedRole
+          : (idx === 0 ? 'owner' : defaultNonOwnerRole);
+        if (idx > 0 && !role) throw new Error('請先建立至少一個非站主身份組');
         const googleEmail = String(entry?.googleEmail || '').trim().toLowerCase();
         const googleEmailNormalized = normalizeGoogleEmail(googleEmail);
         const googleOnly = !!entry?.googleOnly;

@@ -985,6 +985,24 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
     <!-- Settings Tab -->
     <div class="tab" id="tab-cfg">
       <div id="cfg-site-section">
+        <div id="cfg-global-section">
+          <div class="sh">全站設定</div>
+          <div class="fg">
+            <label>Google Client ID</label>
+            <input type="text" class="fc" id="cfg-google-client-id"
+              placeholder="xxxxxx.apps.googleusercontent.com（Google Cloud Console 取得）">
+            <p style="font-size:.74rem;color:var(--muted);margin:.3rem 0 0">
+              填入後，可在帳號管理中為每位使用者綁定 Google 信箱，即可使用 Google 登入。
+            </p>
+          </div>
+          <div class="fg">
+            <label>上傳網域</label>
+            <input type="text" class="fc" id="cfg-upload-origin"
+              placeholder="https://upload.yourdomain.com（留空則使用目前網站網域）">
+          </div>
+          <button class="btn btn-out btn-w" id="btn-save-global-cfg" onclick="saveGlobalCfg()" style="margin:.3rem 0 .95rem">儲存全站設定</button>
+        </div>
+
         <details class="disc" id="collection-disc">
           <summary><div class="disc-head"><span>頁籤管理</span><span class="disc-head-actions"></span></div></summary>
           <div class="disc-body">
@@ -1038,26 +1056,6 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
               </div>
             </div>
             <div id="cfg-role-list"></div>
-          </div>
-        </details>
-
-        <details class="disc" id="cfg-global-disc">
-          <summary><div class="disc-head"><span>全站設定</span></div></summary>
-          <div class="disc-body">
-            <div class="fg">
-              <label>Google Client ID</label>
-              <input type="text" class="fc" id="cfg-google-client-id"
-                placeholder="xxxxxx.apps.googleusercontent.com（Google Cloud Console 取得）">
-              <p style="font-size:.74rem;color:var(--muted);margin:.3rem 0 0">
-                填入後，可在帳號管理中為每位使用者綁定 Google 信箱，即可使用 Google 登入。
-              </p>
-            </div>
-            <div class="fg">
-              <label>上傳網域</label>
-              <input type="text" class="fc" id="cfg-upload-origin"
-                placeholder="https://upload.yourdomain.com（留空則使用目前網站網域）">
-            </div>
-            <button class="btn btn-out btn-w" id="btn-save-global-cfg" onclick="saveGlobalCfg()" style="margin-top:.3rem">儲存全站設定</button>
           </div>
         </details>
 
@@ -1696,12 +1694,15 @@ function syncItemCategoryFields(item) {
   return item;
 }
 function getRoleLabel(role) {
-  return S.allRoleConfig?.[role]?.label || S.roleConfig?.[role]?.label || (role === 'owner' ? '站主' : '管理員');
+  return S.allRoleConfig?.[role]?.label || S.roleConfig?.[role]?.label || (role === 'owner' ? '站主' : String(role || ''));
 }
 function getRoleKeys() {
   const keys = Object.keys(S.allRoleConfig || S.roleConfig || {});
-  const rest = keys.filter(key => key !== 'owner').sort((a, b) => getRoleLabel(a).localeCompare(getRoleLabel(b), 'zh-Hant'));
+  const rest = keys.filter(key => key !== 'owner');
   return ['owner', ...rest.filter((key, idx) => rest.indexOf(key) === idx)];
+}
+function getDefaultMemberRole() {
+  return getRoleKeys().find(role => role !== 'owner') || '';
 }
 function getVisibleRoleKeysForCollection(item = getCollectionEntry()) {
   const keys = getRoleKeys();
@@ -4266,10 +4267,13 @@ function renderCfgRoleList() {
   if (!box) return;
   const cfg = S.allRoleConfig || S.roleConfig || {};
   const isOwner = S.currentAuthUser?.role === 'owner';
-  const roleKeys = Object.keys(cfg);
+  const roleKeys = [
+    ...['owner'].filter(role => cfg[role]),
+    ...Object.keys(cfg).filter(role => role !== 'owner')
+  ];
   box.innerHTML = roleKeys.map(role => {
     const roleInfo = cfg[role] || {};
-    const isFixed = ['owner', 'admin'].includes(role);
+    const isFixed = role === 'owner';
     return `<div class="role-card" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;margin-bottom:.4rem">
       <input type="text" class="fc" value="${esc(roleInfo.label || '')}" placeholder="${esc(role)}"
         ${isOwner ? '' : 'disabled'}
@@ -4277,7 +4281,7 @@ function renderCfgRoleList() {
         style="flex:1">
       ${!isFixed && isOwner
         ? `<button class="ib del" onclick="deleteRoleConfigRow('${role}')" title="刪除身份組">${icon('trash')}</button>`
-        : `<span class="tag" style="flex-shrink:0">預設</span>`}
+        : `<span class="tag" style="flex-shrink:0" title="系統內建身份組，不能刪除">系統</span>`}
     </div>`;
   }).join('');
   document.getElementById('btn-add-role')?.toggleAttribute('disabled', !isOwner);
@@ -4288,7 +4292,7 @@ function renderCfgRoleList() {
 
 function deleteRoleConfigRow(roleKey) {
   if (S.currentAuthUser?.role !== 'owner') return;
-  if (['owner', 'admin'].includes(roleKey)) { toast('無法刪除預設身份組', 'err'); return; }
+  if (roleKey === 'owner') { toast('無法刪除系統內建身份組', 'err'); return; }
   const label = getRoleLabel(roleKey);
   if (!confirm(`確定要刪除身份組「${label}」？此操作需要儲存後才會生效。`)) return;
   if (S.roleConfig) delete S.roleConfig[roleKey];
@@ -4427,7 +4431,7 @@ function applyRolePermissionUI() {
   const canManageCollections = canRolePermission('manageCollections');
   const canEditAttachments = canRolePermission('editTxtAttachments');
   const collectionSection = document.getElementById('collection-disc');
-  const globalSection = document.getElementById('cfg-global-disc');
+  const globalSection = document.getElementById('cfg-global-section');
   const cfgRoleSection = document.getElementById('cfg-role-disc');
   const authTitle = document.getElementById('cfg-auth-title');
   if (collectionSection) collectionSection.style.display = (canEditSite || canManageCollections) ? '' : 'none';
@@ -4558,7 +4562,12 @@ function clearGoogleOnly(i) {
 }
 
 function addAuthUserRow() {
-  S.authUsers.push({ id: '', username: '', role: 'admin', password: '', googleEmail: '', googleOnly: false });
+  const defaultRole = getDefaultMemberRole();
+  if (!defaultRole) {
+    toast('請先建立至少一個非站主身份組', 'err');
+    return;
+  }
+  S.authUsers.push({ id: '', username: '', role: defaultRole, password: '', googleEmail: '', googleOnly: false });
   renderAuthUserList();
 }
 
@@ -4623,16 +4632,18 @@ async function saveGlobalCfg() {
 
 async function saveAuthUsers() {
   const isOwner = S.currentAuthUser?.role === 'owner';
+  const defaultRole = getDefaultMemberRole();
   const users = S.authUsers.map(user => ({
     id: user.id || '',
     username: String(user.username || '').trim(),
-    role: String(user.role || 'admin'),
+    role: String(user.role || defaultRole),
     password: String(user.password || ''),
     googleEmail: String(user.googleEmail || '').trim().toLowerCase(),
     googleOnly: !!user.googleOnly
   }));
   if (!users.length) { toast('至少要保留一組登入帳號', 'err'); return; }
   if (isOwner && users[0]) users[0].role = 'owner';
+  if (users.slice(1).some(user => !user.role)) { toast('請先建立至少一個非站主身份組', 'err'); return; }
   if (users.some(user => !user.username)) { toast('每組帳號都需要用戶名', 'err'); return; }
   if (isOwner && users.filter(user => user.role === 'owner').length !== 1) { toast(`只能有一位${getRoleLabel('owner')}`, 'err'); return; }
   const seenNames = new Set();
