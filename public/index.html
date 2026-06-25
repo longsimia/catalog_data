@@ -347,6 +347,7 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 .cfg-host-usage-title strong{font-size:.72rem;color:var(--admin-gold,var(--gold));font-weight:400;letter-spacing:.12em}
 .cfg-host-usage-title span{font-size:.76rem;line-height:1.55;color:color-mix(in srgb,var(--muted) 88%, var(--text) 12%)}
 .cfg-host-usage-copy{font-size:.76rem;line-height:1.55;color:color-mix(in srgb,var(--muted) 88%, var(--text) 12%)}
+.cfg-host-usage-box{display:grid;gap:.72rem;padding:.8rem .9rem;border:1px solid var(--border);border-radius:var(--r);background:transparent}
 .cfg-host-usage-top{display:flex;justify-content:space-between;gap:1rem;align-items:baseline;flex-wrap:wrap}
 .cfg-host-usage-meta{font-size:.78rem;letter-spacing:.01em;color:color-mix(in srgb,var(--muted) 90%, var(--text) 10%)}
 .cfg-host-usage-summary strong{font-size:1.48rem;line-height:1;color:color-mix(in srgb,var(--text) 84%, var(--admin-gold,var(--gold)) 16%);font-weight:600}
@@ -1016,7 +1017,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
     <div class="tab" id="tab-cfg">
       <div id="cfg-site-section">
         <div class="cfg-host-usage-section" id="cfg-host-usage-section">
-          <div class="cfg-host-usage-shell loading" id="cfg-host-usage-shell">切換到設定頁時會更新目前主機用量…</div>
+          <div class="cfg-host-usage-shell loading" id="cfg-host-usage-shell">切換到設定頁時會更新目前雲端用量…</div>
         </div>
         <div id="cfg-global-section">
           <div class="sh">全站設定</div>
@@ -4102,33 +4103,35 @@ function renderHostUsagePanel(data) {
   shell.className = 'cfg-host-usage-shell';
   shell.innerHTML = `
     <div class="cfg-host-usage-title">
-      <strong>主機容量狀態</strong>
+      <strong>雲端用量</strong>
     </div>
     <div class="cfg-host-usage-copy">進入設定頁時更新一次，顯示目前資料目錄所在磁碟的使用狀況。</div>
-    <div class="cfg-host-usage-top">
-      <div class="cfg-host-usage-meta">站內資料 ${fmtSz(app.totalBytes || 0)} / 剩餘 ${fmtGb(free)}</div>
-      <div class="cfg-host-usage-summary">
-        <strong>${usedPercent}%</strong>
-      </div>
-    </div>
-    <div class="cfg-host-usage-stack">
-      <div class="cfg-host-usage-bar">
-        <span class="cfg-host-usage-bar-fill" style="width:${hostUsedPercent}%"></span>
-      </div>
-    </div>
-    <div class="cfg-host-usage-legend">
-      ${sections.map(section => `
-        <div class="cfg-host-usage-row">
-          <span class="cfg-host-usage-dot" style="background:var(${section.colorVar})"></span>
-          <span>${esc(section.label)}</span>
-          <strong>${fmtSz(section.value)}</strong>
+    <div class="cfg-host-usage-box">
+      <div class="cfg-host-usage-top">
+        <div class="cfg-host-usage-meta">站內資料 ${fmtSz(app.totalBytes || 0)} / 剩餘 ${fmtGb(free)}</div>
+        <div class="cfg-host-usage-summary">
+          <strong>${usedPercent}%</strong>
         </div>
-      `).join('')}
+      </div>
+      <div class="cfg-host-usage-stack">
+        <div class="cfg-host-usage-bar">
+          <span class="cfg-host-usage-bar-fill" style="width:${hostUsedPercent}%"></span>
+        </div>
+      </div>
+      <div class="cfg-host-usage-legend">
+        ${sections.map(section => `
+          <div class="cfg-host-usage-row">
+            <span class="cfg-host-usage-dot" style="background:var(${section.colorVar})"></span>
+            <span>${esc(section.label)}</span>
+            <strong>${fmtSz(section.value)}</strong>
+          </div>
+        `).join('')}
+      </div>
     </div>
   `;
 }
 
-function renderHostUsagePanelError(message = '目前無法取得主機用量資訊。') {
+function renderHostUsagePanelError(message = '目前無法取得雲端用量資訊。') {
   const shell = document.getElementById('cfg-host-usage-shell');
   if (!shell) return;
   shell.className = 'cfg-host-usage-shell';
@@ -4139,13 +4142,13 @@ async function refreshHostUsagePanel() {
   const shell = document.getElementById('cfg-host-usage-shell');
   if (!shell) return;
   shell.className = 'cfg-host-usage-shell loading';
-  shell.textContent = '正在更新主機用量…';
+  shell.textContent = '正在更新雲端用量…';
   try {
     const data = await api('GET', '/api/host-usage');
     S.hostUsage = data || null;
     renderHostUsagePanel(data || {});
   } catch (e) {
-    renderHostUsagePanelError(e?.message || '目前無法取得主機用量資訊。');
+    renderHostUsagePanelError(e?.message || '目前無法取得雲端用量資訊。');
   }
 }
 
