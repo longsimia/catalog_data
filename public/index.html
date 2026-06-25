@@ -349,8 +349,7 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 .cfg-host-usage-copy{font-size:.76rem;line-height:1.55;color:color-mix(in srgb,var(--muted) 88%, var(--text) 12%)}
 .cfg-host-usage-box{display:grid;gap:.72rem;padding:.8rem .9rem;border:1px solid var(--border);border-radius:var(--r);background:transparent}
 .cfg-host-usage-top{display:flex;justify-content:space-between;gap:1rem;align-items:baseline;flex-wrap:wrap}
-.cfg-host-usage-meta{display:grid;gap:.12rem;align-content:center;min-height:1.48rem}
-.cfg-host-usage-meta-line{font-size:.72rem;line-height:1.08;letter-spacing:.01em;color:color-mix(in srgb,var(--muted) 90%, var(--text) 10%)}
+.cfg-host-usage-meta{font-size:.78rem;letter-spacing:.01em;color:color-mix(in srgb,var(--muted) 90%, var(--text) 10%)}
 .cfg-host-usage-summary strong{font-size:1.48rem;line-height:1;color:color-mix(in srgb,var(--text) 84%, var(--admin-gold,var(--gold)) 16%);font-weight:600}
 .cfg-host-usage-stack{display:grid;gap:.42rem}
 .cfg-host-usage-bar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:var(--bg2)}
@@ -4125,10 +4124,7 @@ function renderHostUsagePanel(data) {
     <div class="cfg-host-usage-copy">進入設定頁時更新一次，顯示目前資料目錄所在磁碟的使用狀況。</div>
     <div class="cfg-host-usage-box">
       <div class="cfg-host-usage-top">
-        <div class="cfg-host-usage-meta">
-          <div class="cfg-host-usage-meta-line">主機磁碟已使用 ${fmtSz(usedBytes)} / 剩餘 ${fmtGb(free)}</div>
-          <div class="cfg-host-usage-meta-line">站內資料 ${fmtSz(app.totalBytes || 0)}</div>
-        </div>
+        <div class="cfg-host-usage-meta">站內資料 ${fmtSz(app.totalBytes || 0)} / 剩餘 ${fmtGb(free)}</div>
         <div class="cfg-host-usage-summary">
           <strong>${usedPercent}%</strong>
         </div>
