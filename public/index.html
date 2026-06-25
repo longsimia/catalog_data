@@ -343,13 +343,13 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 .cfg-host-usage-section{margin-bottom:1rem}
 .cfg-host-usage-shell{display:grid;gap:.82rem;padding:1rem 0;background:transparent;border:none;border-radius:0;box-shadow:none}
 .cfg-host-usage-shell.loading{min-height:144px;place-items:center;color:var(--muted);text-align:center}
-.cfg-host-usage-top{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap;margin-bottom:.08rem}
-.cfg-host-usage-title{display:grid;gap:.18rem;padding-bottom:.72rem;border-bottom:1px solid var(--border)}
+.cfg-host-usage-title{display:grid;gap:.18rem;padding-bottom:.22rem;border-bottom:1px solid var(--border)}
 .cfg-host-usage-title strong{font-size:.72rem;color:var(--admin-gold,var(--gold));font-weight:400;letter-spacing:.12em}
 .cfg-host-usage-title span{font-size:.76rem;line-height:1.55;color:color-mix(in srgb,var(--muted) 88%, var(--text) 12%)}
-.cfg-host-usage-summary{display:flex;align-items:baseline;gap:.42rem;flex-wrap:wrap;justify-content:flex-end}
+.cfg-host-usage-copy{font-size:.76rem;line-height:1.55;color:color-mix(in srgb,var(--muted) 88%, var(--text) 12%)}
+.cfg-host-usage-top{display:flex;justify-content:space-between;gap:1rem;align-items:baseline;flex-wrap:wrap}
+.cfg-host-usage-meta{font-size:.78rem;letter-spacing:.01em;color:color-mix(in srgb,var(--muted) 90%, var(--text) 10%)}
 .cfg-host-usage-summary strong{font-size:1.48rem;line-height:1;color:color-mix(in srgb,var(--text) 84%, var(--admin-gold,var(--gold)) 16%);font-weight:600}
-.cfg-host-usage-summary span{font-size:.78rem;letter-spacing:.01em;color:color-mix(in srgb,var(--muted) 90%, var(--text) 10%)}
 .cfg-host-usage-stack{display:grid;gap:.42rem}
 .cfg-host-usage-bar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:var(--bg2)}
 .cfg-host-usage-bar-fill{display:block;height:100%;border-radius:999px;background:var(--usage-bar-fill)}
@@ -4098,14 +4098,14 @@ function renderHostUsagePanel(data) {
   const hostUsedPercent = total > 0 ? Math.max(0, Math.min(100, (Number(volume.usedBytes || 0) / total) * 100)) : 0;
   shell.className = 'cfg-host-usage-shell';
   shell.innerHTML = `
+    <div class="cfg-host-usage-title">
+      <strong>主機容量狀態</strong>
+    </div>
+    <div class="cfg-host-usage-copy">進入設定頁時更新一次，顯示目前資料目錄所在磁碟的使用狀況。</div>
     <div class="cfg-host-usage-top">
-      <div class="cfg-host-usage-title">
-        <strong>主機容量狀態</strong>
-        <span>進入設定頁時更新一次，顯示目前資料目錄所在磁碟的使用狀況。</span>
-      </div>
+      <div class="cfg-host-usage-meta">站內資料 ${fmtSz(app.totalBytes || 0)} / 剩餘 ${fmtGb(free)}</div>
       <div class="cfg-host-usage-summary">
         <strong>${usedPercent}%</strong>
-        <span>站內資料 ${fmtSz(app.totalBytes || 0)} / 剩餘 ${fmtGb(free)}</span>
       </div>
     </div>
     <div class="cfg-host-usage-stack">
