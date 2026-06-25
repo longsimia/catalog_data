@@ -2349,7 +2349,13 @@ function fileUrl(key) {
 }
 function thumbUrl(key) {
   if (!key) return '';
-  return '/thumbs/' + key + '.webp';
+  const normalized = String(key || '').replace(/\\/g, '/').trim();
+  if (!normalized) return '';
+  const parts = normalized.split('/').filter(Boolean);
+  const base = parts.pop();
+  if (!base) return '';
+  const thumbPath = [...parts, '.thumbs', `${base}.webp`].join('/');
+  return '/thumbs/' + thumbPath;
 }
 function canUseThumbForName(name = '') {
   const clean = String(name || '').split('?')[0].split('#')[0].toLowerCase();
