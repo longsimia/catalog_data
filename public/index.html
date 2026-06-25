@@ -337,22 +337,24 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 #adm-login p{font-size:.86rem;color:var(--muted)}
 .auth-user-list{display:grid;gap:.6rem;margin-top:.6rem}
 .cfg-host-usage-section{margin-bottom:1rem}
-.cfg-host-usage-shell{display:grid;gap:.85rem;padding:1rem;background:linear-gradient(180deg,color-mix(in srgb,var(--card) 94%, transparent),color-mix(in srgb,var(--bg2) 88%, transparent));border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
-.cfg-host-usage-shell.loading{min-height:164px;place-items:center;color:var(--muted);text-align:center}
-.cfg-host-usage-top{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap}
-.cfg-host-usage-title{display:grid;gap:.28rem}
-.cfg-host-usage-title strong{font-size:1.02rem;color:var(--admin-gold,var(--gold))}
-.cfg-host-usage-title span{font-size:.8rem;color:var(--muted)}
-.cfg-host-usage-summary{display:flex;align-items:baseline;gap:.55rem;flex-wrap:wrap;justify-content:flex-end}
-.cfg-host-usage-summary strong{font-size:2rem;line-height:1;color:var(--text)}
-.cfg-host-usage-summary span{font-size:.84rem;color:var(--muted)}
-.cfg-host-usage-stack{display:grid;gap:.55rem}
-.cfg-host-usage-bar{display:flex;height:18px;border-radius:999px;overflow:hidden;background:color-mix(in srgb,var(--bg2) 92%, transparent)}
+.cfg-host-usage-shell{display:grid;gap:.7rem;padding:.88rem .95rem;background:color-mix(in srgb,var(--panel) 92%, transparent);border:1px solid color-mix(in srgb,var(--border) 92%, transparent);border-radius:14px;box-shadow:none}
+.cfg-host-usage-shell.loading{min-height:112px;place-items:center;color:var(--muted);text-align:center}
+.cfg-host-usage-top{display:flex;justify-content:space-between;gap:.9rem;align-items:flex-end;flex-wrap:wrap}
+.cfg-host-usage-title{display:grid;gap:.14rem}
+.cfg-host-usage-title strong{font-size:.95rem;color:var(--text)}
+.cfg-host-usage-title span{font-size:.76rem;color:var(--muted)}
+.cfg-host-usage-summary{display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap;justify-content:flex-end}
+.cfg-host-usage-summary strong{font-size:1.5rem;line-height:1;color:var(--admin-gold,var(--gold));font-weight:700}
+.cfg-host-usage-summary span{font-size:.8rem;color:var(--muted)}
+.cfg-host-usage-stack{display:grid;gap:.42rem}
+.cfg-host-usage-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:color-mix(in srgb,var(--bg2) 88%, transparent)}
 .cfg-host-usage-bar span{display:block;height:100%}
-.cfg-host-usage-meta{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-size:.8rem;color:var(--muted)}
-.cfg-host-usage-legend{display:grid;gap:.55rem}
-.cfg-host-usage-row{display:grid;grid-template-columns:auto 1fr auto;gap:.6rem;align-items:center;font-size:.85rem}
-.cfg-host-usage-dot{width:11px;height:11px;border-radius:50%}
+.cfg-host-usage-meta{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;font-size:.77rem;color:var(--muted)}
+.cfg-host-usage-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem .8rem;padding-top:.1rem}
+.cfg-host-usage-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.45rem;align-items:center;font-size:.8rem}
+.cfg-host-usage-dot{width:9px;height:9px;border-radius:50%}
+.cfg-host-usage-row span:nth-child(2){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cfg-host-usage-row strong{font-weight:600}
 .cfg-host-usage-empty{font-size:.84rem;color:var(--muted)}
 .auth-user-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:.5rem;align-items:center;padding:.6rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel)}
 .auth-user-row .auth-user-password{grid-column:2 / 4}
@@ -4095,7 +4097,7 @@ function renderHostUsagePanel(data) {
     <div class="cfg-host-usage-top">
       <div class="cfg-host-usage-title">
         <strong>主機容量狀態</strong>
-        <span>進入設定頁時更新一次，顯示目前資料目錄所在磁碟的使用狀況。</span>
+        <span>進入設定頁時更新一次</span>
       </div>
       <div class="cfg-host-usage-summary">
         <strong>${usedPercent}%</strong>
@@ -4107,8 +4109,8 @@ function renderHostUsagePanel(data) {
         ${sections.map(section => `<span style="width:${(section.value / appTotal) * 100}%;background:${section.color}" title="${esc(section.label)} ${esc(fmtSz(section.value))}"></span>`).join('')}
       </div>
       <div class="cfg-host-usage-meta">
-        <span>目前主機已使用 ${fmtSz(volume.usedBytes || 0)}</span>
-        <span>站內資料共 ${fmtSz(app.totalBytes || 0)}</span>
+        <span>主機已使用 ${fmtSz(volume.usedBytes || 0)}</span>
+        <span>站內資料 ${fmtSz(app.totalBytes || 0)}</span>
       </div>
     </div>
     <div class="cfg-host-usage-legend">
