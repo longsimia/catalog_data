@@ -893,13 +893,23 @@ function filterCatalogForViewer(cat, role = 'public') {
       ...item,
       permission: normalizeItemPermission(item.permission)
     }));
-  if (role === 'public') {
-    const visibleTags = [...new Set(items.flatMap(item => Array.isArray(item.tags) ? item.tags : []).filter(Boolean))];
-    const visibleCategories = [...new Set(items.flatMap(item => Array.isArray(item.categories) ? item.categories : (item.category ? [item.category] : [])).filter(Boolean))];
-    return sanitizeCatalogForPublic({ ...cat, items, tags: visibleTags, categories: visibleCategories });
-  }
-  if (role === 'owner') return { ...cat, items };
-  return { ...cat, items };
+
+  const tagOrder = Array.isArray(cat.tags) ? cat.tags : [];
+  const catOrder = Array.isArray(cat.categories) ? cat.categories : [];
+
+  const rawTags = [...new Set(items.flatMap(item => Array.isArray(item.tags) ? item.tags : []).filter(Boolean))];
+  const rawCats = [...new Set(items.flatMap(item => Array.isArray(item.categories) ? item.categories : (item.category ? [item.category] : [])).filter(Boolean))];
+
+  const visibleTags = [
+    ...tagOrder.filter(t => rawTags.includes(t)),
+    ...rawTags.filter(t => !tagOrder.includes(t))
+  ];
+  const visibleCategories = [
+    ...catOrder.filter(c => rawCats.includes(c)),
+    ...rawCats.filter(c => !catOrder.includes(c))
+  ];
+
+  return sanitizeCatalogForPublic({ ...cat, items, tags: visibleTags, categories: visibleCategories });
 }
 
 const auth = (req, res, next) => {
