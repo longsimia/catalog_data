@@ -985,34 +985,81 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
     <!-- Settings Tab -->
     <div class="tab" id="tab-cfg">
       <div id="cfg-site-section">
-      <div class="sh">前台外觀</div>
-      <div class="fg">
-        <label>網站標題</label>
-        <input type="text" class="fc" id="c-t" placeholder="CATALOG">
-      </div>
-      <div class="fg">
-        <label>副標題</label>
-        <input type="text" class="fc" id="c-s" placeholder="Personal Catalog">
-      </div>
-      <div class="fg">
-        <label>頁尾文字</label>
-        <input type="text" class="fc" id="c-f" placeholder="CATALOG · Archived by Username">
-      </div>
-      <div class="fg">
-        <label>Google Client ID</label>
-        <input type="text" class="fc" id="cfg-google-client-id"
-          placeholder="xxxxxx.apps.googleusercontent.com（Google Cloud Console 取得）">
-        <p style="font-size:.74rem;color:var(--muted);margin:.3rem 0 0">
-          填入後，可在帳號管理中為每位使用者綁定 Google 信箱，即可使用 Google 登入。
-        </p>
-      </div>
-      <div class="fg">
-        <label>上傳網域</label>
-        <input type="text" class="fc" id="cfg-upload-origin"
-          placeholder="https://upload.yourdomain.com（留空則使用目前網站網域）">
-      </div>
-      <button class="btn btn-out btn-w" id="btn-save-site" onclick="saveSite()" style="margin-bottom:.8rem">儲存外觀設定</button>
-      </div>
+        <details class="disc" id="collection-disc">
+          <summary><div class="disc-head"><span>頁籤管理</span><span class="disc-head-actions"></span></div></summary>
+          <div class="disc-body">
+            <div class="manage-block-head">
+              <div class="manage-head-copy">
+                <div class="collection-add-stack">
+                  <p class="role-note" style="margin:0">頁籤建立後不得再變更模式。</p>
+                  <div class="collection-add-row">
+                    <input type="text" class="fc" id="collection-new-label" placeholder="新增頁籤"
+                      onkeydown="if(event.key==='Enter'){event.preventDefault();addCollectionConfigRow()}">
+                  </div>
+                  <div class="collection-add-row">
+                    <div class="field-inline" title="建立後不可變更">
+                      <span class="field-cap">模式</span>
+                      <select class="fs" id="collection-new-mode">
+                        <option value="scenario">資料</option>
+                        <option value="image">圖庫</option>
+                      </select>
+                    </div>
+                    <div class="field-inline" title="之後仍可調整">
+                      <span class="field-cap">權限</span>
+                      <select class="fs" id="collection-new-permission"></select>
+                    </div>
+                    <button class="btn btn-out" type="button" onclick="addCollectionConfigRow()">新增</button>
+                  </div>
+                </div>
+              </div>
+              <div class="manage-actions">
+                <button class="btn btn-out" id="btn-cancel-collections" onclick="cancelCollectionConfigChanges()">取消變更</button>
+                <button class="btn btn-gold sort-save-btn" id="btn-save-collections" onclick="saveCollectionConfig()">儲存</button>
+              </div>
+            </div>
+            <div class="role-grid" id="collection-config-list"></div>
+          </div>
+        </details>
+
+        <details class="disc" id="cfg-role-disc">
+          <summary><div class="disc-head"><span>身份組</span></div></summary>
+          <div class="disc-body">
+            <div class="manage-block-head">
+              <div class="manage-head-copy">
+                <div class="tag-man-add">
+                  <input type="text" class="fc" id="role-new" placeholder="新增身份組"
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();addRoleConfigRow()}">
+                  <button class="btn btn-out" type="button" onclick="addRoleConfigRow()" id="btn-add-role">新增</button>
+                </div>
+              </div>
+              <div class="manage-actions">
+                <button class="btn btn-out" id="btn-cancel-role-list" onclick="cancelRoleListChanges()">取消變更</button>
+                <button class="btn btn-gold" id="btn-save-role-list" onclick="saveRoleList()">儲存</button>
+              </div>
+            </div>
+            <div id="cfg-role-list"></div>
+          </div>
+        </details>
+
+        <details class="disc" id="cfg-global-disc">
+          <summary><div class="disc-head"><span>全站設定</span></div></summary>
+          <div class="disc-body">
+            <div class="fg">
+              <label>Google Client ID</label>
+              <input type="text" class="fc" id="cfg-google-client-id"
+                placeholder="xxxxxx.apps.googleusercontent.com（Google Cloud Console 取得）">
+              <p style="font-size:.74rem;color:var(--muted);margin:.3rem 0 0">
+                填入後，可在帳號管理中為每位使用者綁定 Google 信箱，即可使用 Google 登入。
+              </p>
+            </div>
+            <div class="fg">
+              <label>上傳網域</label>
+              <input type="text" class="fc" id="cfg-upload-origin"
+                placeholder="https://upload.yourdomain.com（留空則使用目前網站網域）">
+            </div>
+            <button class="btn btn-out btn-w" id="btn-save-global-cfg" onclick="saveGlobalCfg()" style="margin-top:.3rem">儲存全站設定</button>
+          </div>
+        </details>
 
         <div class="sh" id="cfg-auth-title">管理帳號</div>
         <div class="auth-user-list" id="auth-users-list"></div>
@@ -1023,6 +1070,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <button class="btn btn-gold btn-w" id="btn-save-pwd" onclick="saveAuthUsers()">儲存帳號設定</button>
         <button class="btn btn-out btn-w" id="btn-logout" onclick="doLogout()" style="margin-top:.45rem">登出</button>
       </div>
+    </div>
 
     <!-- Upload Tab -->
     <div class="tab on" id="tab-up">
@@ -1104,6 +1152,24 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 
       <!-- Manage Tab -->
       <div class="tab" id="tab-man">
+      <details class="disc" id="appearance-disc" data-disc-id="appearance-disc">
+        <summary><div class="disc-head"><span>前台外觀</span><span class="disc-head-actions"></span></div></summary>
+        <div class="disc-body">
+          <div class="fg">
+            <label>網站標題</label>
+            <input type="text" class="fc" id="c-t" placeholder="CATALOG">
+          </div>
+          <div class="fg">
+            <label>副標題</label>
+            <input type="text" class="fc" id="c-s" placeholder="Personal Catalog">
+          </div>
+          <div class="fg">
+            <label>頁尾文字</label>
+            <input type="text" class="fc" id="c-f" placeholder="CATALOG · Archived by Username">
+          </div>
+          <button class="btn btn-out btn-w" id="btn-save-site" onclick="saveAppearance()">儲存外觀設定</button>
+        </div>
+      </details>
       <div class="manage-sort-head">
         <span class="manage-sort-note" id="man-sort-note">大量資料建議使用獨立頁面進行編輯</span>
         <div class="manage-sort-tools">
@@ -1114,51 +1180,11 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           </div>
         </div>
       </div>
-      <details class="disc" id="collection-disc" data-disc-id="collection-disc">
-        <summary><div class="disc-head"><span>資料夾頁籤</span><span class="disc-head-actions"></span></div></summary>
-        <div class="disc-body">
-          <div class="manage-block-head">
-            <div class="manage-head-copy">
-              <div class="collection-add-stack">
-                <p class="role-note" style="margin:0">頁籤建立後不得再變更模式。</p>
-                <div class="collection-add-row">
-                  <input type="text" class="fc" id="collection-new-label" placeholder="新增頁籤"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();addCollectionConfigRow()}">
-                </div>
-                <div class="collection-add-row">
-                  <div class="field-inline" title="建立後不可變更">
-                    <span class="field-cap">模式</span>
-                    <select class="fs" id="collection-new-mode">
-                      <option value="scenario">資料</option>
-                      <option value="image">圖庫</option>
-                    </select>
-                  </div>
-                  <div class="field-inline" title="之後仍可調整">
-                    <span class="field-cap">權限</span>
-                    <select class="fs" id="collection-new-permission"></select>
-                  </div>
-                  <button class="btn btn-out" type="button" onclick="addCollectionConfigRow()">新增</button>
-                </div>
-              </div>
-            </div>
-            <div class="manage-actions">
-              <button class="btn btn-out" id="btn-cancel-collections" onclick="cancelCollectionConfigChanges()">取消變更</button>
-              <button class="btn btn-gold sort-save-btn" id="btn-save-collections" onclick="saveCollectionConfig()">儲存</button>
-            </div>
-          </div>
-          <div class="role-grid" id="collection-config-list"></div>
-        </div>
-      </details>
       <details class="disc" id="role-disc" data-disc-id="role-disc">
         <summary><div class="disc-head"><span>身份組權限</span><span class="disc-head-actions"></span></div></summary>
         <div class="disc-body">
           <div class="manage-block-head">
-            <div class="manage-head-copy">
-              <div class="tag-man-add">
-                <input type="text" class="fc" id="role-new" placeholder="新增身份組" onkeydown="if(event.key==='Enter'){event.preventDefault();addRoleConfigRow()}">
-              </div>
-            </div>
-            <div class="manage-actions">
+            <div class="manage-actions" style="margin-left:auto">
               <button class="btn btn-out" id="btn-cancel-role-config" onclick="cancelRoleConfigChanges()">取消變更</button>
               <button class="btn btn-gold sort-save-btn" id="btn-save-role-config" onclick="saveRoleConfig()">儲存</button>
             </div>
@@ -1433,6 +1459,7 @@ const S = {
   up:     { prevs:[], files:[], tags:[], categories:[], mode:'up' },
   eTags:  [], eCatsPicked: [], eId: null, ePrevs: [], eDownloadEntries: [],
   authUsers: [], currentAuthUser: null, roleConfig: null, allRoleConfig: null,
+  savedRoleLabels: null, savedRolePerms: null,
   downloadModalData: null,
   previewModalState: null,
   previewTreeOpen: {},
@@ -3876,29 +3903,44 @@ function setTab(t) {
   });
   document.querySelectorAll('.atb').forEach((b, i) => b.classList.toggle('on', tabs[i] === t));
   if (t !== 'man') closeManageListPage();
-  if (t === 'man') { renderMan(); renderCategoryManager(); renderTagManager(); ensureManageDisclosure(); }
+  if (t === 'man') {
+    loadAppearanceForm();
+    renderMan(); renderCategoryManager(); renderTagManager(); ensureManageDisclosure();
+  }
+  if (t === 'cfg') {
+    loadGlobalCfgForm();
+    renderCfgRoleList();
+  }
 }
 
 // ════════════════════════════════════════════════════
 //  SETTINGS
 // ════════════════════════════════════════════════════
-function loadCfgForm() {
+function loadAppearanceForm() {
   const entry = getCollectionEntry();
   const def = getCollectionDef();
   const sc = S.cat.sc || {};
   const siteTitle = entry.label || def.defaultSiteTitle;
-  document.getElementById('c-t').placeholder = siteTitle;
-  document.getElementById('c-s').placeholder = `Personal ${def.defaultSiteTitle}`;
-  document.getElementById('c-f').placeholder = `${siteTitle} · Archived by Username`;
-  document.getElementById('c-t').value = sc.title    || '';
-  document.getElementById('c-s').value = sc.subtitle || '';
-  document.getElementById('c-f').value = sc.footer   || '';
+  const ct = document.getElementById('c-t');
+  const cs = document.getElementById('c-s');
+  const cf = document.getElementById('c-f');
+  if (ct) { ct.placeholder = siteTitle; ct.value = sc.title || ''; }
+  if (cs) { cs.placeholder = `Personal ${def.defaultSiteTitle}`; cs.value = sc.subtitle || ''; }
+  if (cf) { cf.placeholder = `${siteTitle} · Archived by Username`; cf.value = sc.footer || ''; }
+}
+
+function loadGlobalCfgForm() {
   api('GET', '/api/cfg-public').then(d => {
     const googleEl = document.getElementById('cfg-google-client-id');
     if (googleEl) googleEl.value = d?.googleClientId || '';
     const uploadEl = document.getElementById('cfg-upload-origin');
     if (uploadEl) uploadEl.value = d?.uploadOrigin || '';
   }).catch(() => {});
+}
+
+function loadCfgForm() {
+  loadAppearanceForm();
+  loadGlobalCfgForm();
 }
 
 function renderCollectionConfigPanel() {
@@ -4128,7 +4170,6 @@ function renderRoleConfigPanel() {
     owner: { label: '站主', permissions: {} },
     admin: { label: '管理員', permissions: {} }
   };
-  const canRenameSelf = currentRoleCanRenameSelfRole();
   const isOwner = S.currentAuthUser?.role === 'owner';
   const permGroups = [
     ['項目內容', [
@@ -4149,14 +4190,10 @@ function renderRoleConfigPanel() {
   const roleKeys = isOwner ? getVisibleRoleKeysForCollection() : [S.currentAuthUser?.role].filter(Boolean);
   box.innerHTML = roleKeys.map(role => {
     const roleInfo = cfg[role] || { label: getRoleLabel(role), permissions: {} };
-    const canEditLabel = isOwner || (S.currentAuthUser?.role === role && canRenameSelf);
     const canEditPerms = isOwner && role !== 'owner';
     return `
       <div class="role-card">
-        <div class="fg" style="margin-bottom:.7rem">
-          <label>身份組名稱</label>
-          <input type="text" class="fc" value="${esc(roleInfo.label || '')}" ${canEditLabel ? '' : 'disabled'} oninput="updateRoleConfigField('${role}','label',this.value)">
-        </div>
+        <h4>${esc(roleInfo.label || getRoleLabel(role))}</h4>
         ${role === 'owner'
           ? `<p class="role-note">${esc(roleInfo.label || getRoleLabel('owner'))}固定保有完整管理權限。</p>`
           : `<div class="role-perms">
@@ -4171,14 +4208,13 @@ function renderRoleConfigPanel() {
       </div>
     `;
   }).join('');
-  document.getElementById('btn-save-role-config')?.toggleAttribute('disabled', !(isOwner || canRenameSelf));
-  document.getElementById('role-new')?.toggleAttribute('disabled', !isOwner);
+  document.getElementById('btn-save-role-config')?.toggleAttribute('disabled', !isOwner);
   applyRoleLabels();
 }
 
 function updateRoleConfigField(role, field, value) {
-  if (!S.roleConfig?.[role]) return;
-  S.roleConfig[role][field] = value;
+  if (!S.roleConfig?.[role] && !S.allRoleConfig?.[role]) return;
+  if (S.roleConfig?.[role]) S.roleConfig[role][field] = value;
   if (S.allRoleConfig?.[role]) S.allRoleConfig[role][field] = value;
   applyRoleLabels();
   renderAuthUserList();
@@ -4221,7 +4257,59 @@ function addRoleConfigRow() {
   }
   if (input) input.value = '';
   renderRoleConfigPanel();
+  renderCfgRoleList();
   renderAuthUserList();
+}
+
+function renderCfgRoleList() {
+  const box = document.getElementById('cfg-role-list');
+  if (!box) return;
+  const cfg = S.allRoleConfig || S.roleConfig || {};
+  const isOwner = S.currentAuthUser?.role === 'owner';
+  const roleKeys = Object.keys(cfg);
+  box.innerHTML = roleKeys.map(role => {
+    const roleInfo = cfg[role] || {};
+    const isFixed = ['owner', 'admin'].includes(role);
+    return `<div class="role-card" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;margin-bottom:.4rem">
+      <input type="text" class="fc" value="${esc(roleInfo.label || '')}" placeholder="${esc(role)}"
+        ${isOwner ? '' : 'disabled'}
+        oninput="updateRoleConfigField('${role}','label',this.value)"
+        style="flex:1">
+      ${!isFixed && isOwner
+        ? `<button class="ib del" onclick="deleteRoleConfigRow('${role}')" title="刪除身份組">${icon('trash')}</button>`
+        : `<span class="tag" style="flex-shrink:0">預設</span>`}
+    </div>`;
+  }).join('');
+  document.getElementById('btn-add-role')?.toggleAttribute('disabled', !isOwner);
+  document.getElementById('btn-save-role-list')?.toggleAttribute('disabled', !isOwner);
+  document.getElementById('btn-cancel-role-list')?.toggleAttribute('disabled', !isOwner);
+  document.getElementById('role-new')?.toggleAttribute('disabled', !isOwner);
+}
+
+function deleteRoleConfigRow(roleKey) {
+  if (S.currentAuthUser?.role !== 'owner') return;
+  if (['owner', 'admin'].includes(roleKey)) { toast('無法刪除預設身份組', 'err'); return; }
+  const label = getRoleLabel(roleKey);
+  if (!confirm(`確定要刪除身份組「${label}」？此操作需要儲存後才會生效。`)) return;
+  if (S.roleConfig) delete S.roleConfig[roleKey];
+  if (S.allRoleConfig) delete S.allRoleConfig[roleKey];
+  renderCfgRoleList();
+  renderRoleConfigPanel();
+  renderAuthUserList();
+}
+
+function extractRoleLabels(cfg) {
+  const out = {};
+  Object.entries(cfg || {}).forEach(([k, v]) => { out[k] = { label: v.label || '' }; });
+  return out;
+}
+
+function extractRolePerms(cfg) {
+  const out = {};
+  Object.entries(cfg || {}).forEach(([k, v]) => {
+    out[k] = { permissions: JSON.parse(JSON.stringify(v.permissions || {})) };
+  });
+  return out;
 }
 
 async function loadRoleConfig() {
@@ -4230,9 +4318,12 @@ async function loadRoleConfig() {
     S.currentAuthUser = data.currentUser || S.currentAuthUser;
     S.roleConfig = data.roleConfig || null;
     S.allRoleConfig = data.allRoleConfig || data.roleConfig || null;
+    S.savedRoleLabels = extractRoleLabels(S.allRoleConfig || {});
+    S.savedRolePerms = extractRolePerms(S.allRoleConfig || {});
     await loadCollectionConfig();
     refreshManageSnapshots();
     renderRoleConfigPanel();
+    renderCfgRoleList();
     renderAuthUserList();
     applyRoleLabels();
     applyRolePermissionUI();
@@ -4250,8 +4341,9 @@ async function saveRoleConfig() {
     hideLdg();
     S.roleConfig = data.roleConfig || S.roleConfig;
     S.allRoleConfig = data.allRoleConfig || S.allRoleConfig || S.roleConfig;
-    refreshManageSnapshots();
+    S.savedRolePerms = extractRolePerms(S.allRoleConfig);
     renderRoleConfigPanel();
+    renderCfgRoleList();
     renderAuthUserList();
     applyRoleLabels();
     applyRolePermissionUI();
@@ -4261,8 +4353,64 @@ async function saveRoleConfig() {
 }
 
 function cancelRoleConfigChanges() {
-  S.roleConfig = JSON.parse(JSON.stringify(S.saved.roleConfig || S.roleConfig || {}));
-  S.allRoleConfig = JSON.parse(JSON.stringify(S.saved.allRoleConfig || S.allRoleConfig || {}));
+  const savedPerms = S.savedRolePerms || {};
+  const currentLabels = extractRoleLabels(S.allRoleConfig || {});
+  const restored = {};
+  Object.entries(currentLabels).forEach(([key, val]) => {
+    restored[key] = {
+      label: val.label,
+      permissions: JSON.parse(JSON.stringify(savedPerms[key]?.permissions || {}))
+    };
+  });
+  S.allRoleConfig = restored;
+  S.roleConfig = {};
+  (getVisibleRoleKeysForCollection?.() || Object.keys(restored)).forEach(key => {
+    if (restored[key]) S.roleConfig[key] = JSON.parse(JSON.stringify(restored[key]));
+  });
+  renderRoleConfigPanel();
+  renderCfgRoleList();
+  renderAuthUserList();
+  applyRoleLabels();
+  applyRolePermissionUI();
+}
+
+async function saveRoleList() {
+  if (!S.roleConfig) return;
+  try {
+    showLdg('儲存身份組設定…');
+    const data = await api('PUT', '/api/role-config', {
+      roleConfig: S.roleConfig,
+      allRoleConfig: S.allRoleConfig || S.roleConfig
+    });
+    hideLdg();
+    S.roleConfig = data.roleConfig || S.roleConfig;
+    S.allRoleConfig = data.allRoleConfig || S.allRoleConfig || S.roleConfig;
+    S.savedRoleLabels = extractRoleLabels(S.allRoleConfig);
+    renderCfgRoleList();
+    renderRoleConfigPanel();
+    renderAuthUserList();
+    applyRoleLabels();
+    applyRolePermissionUI();
+    toast('身份組設定已儲存', 'ok');
+  } catch(e) { hideLdg(); toast(e.message, 'err'); }
+}
+
+function cancelRoleListChanges() {
+  const savedLabels = S.savedRoleLabels || {};
+  const currentPerms = extractRolePerms(S.allRoleConfig || {});
+  const restored = {};
+  Object.entries(savedLabels).forEach(([key, val]) => {
+    restored[key] = {
+      label: val.label,
+      permissions: JSON.parse(JSON.stringify(currentPerms[key]?.permissions || {}))
+    };
+  });
+  S.allRoleConfig = restored;
+  S.roleConfig = {};
+  (getVisibleRoleKeysForCollection?.() || Object.keys(restored)).forEach(key => {
+    if (restored[key]) S.roleConfig[key] = JSON.parse(JSON.stringify(restored[key]));
+  });
+  renderCfgRoleList();
   renderRoleConfigPanel();
   renderAuthUserList();
   applyRoleLabels();
@@ -4279,10 +4427,12 @@ function applyRolePermissionUI() {
   const canManageCollections = canRolePermission('manageCollections');
   const canEditAttachments = canRolePermission('editTxtAttachments');
   const collectionSection = document.getElementById('collection-disc');
-  const siteSection = document.getElementById('cfg-site-section');
+  const globalSection = document.getElementById('cfg-global-disc');
+  const cfgRoleSection = document.getElementById('cfg-role-disc');
   const authTitle = document.getElementById('cfg-auth-title');
   if (collectionSection) collectionSection.style.display = (canEditSite || canManageCollections) ? '' : 'none';
-  if (siteSection) siteSection.style.display = canEditSite ? '' : 'none';
+  if (globalSection) globalSection.style.display = canEditSite ? '' : 'none';
+  if (cfgRoleSection) cfgRoleSection.style.display = canEditSite ? '' : 'none';
   if (authTitle) authTitle.textContent = canEditSite ? '管理帳號' : '管理帳號';
   document.getElementById('lb-dl')?.toggleAttribute('disabled', !canDownload);
   document.getElementById('btn-do-up')?.toggleAttribute('disabled', !canUpload);
@@ -4290,10 +4440,16 @@ function applyRolePermissionUI() {
   ['u-t','u-a','u-alt','u-url','u-ti','u-ci','u-d','u-perm','fi-p'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canUpload));
   document.getElementById('fi-f')?.toggleAttribute('disabled', !canUpload || !canEditAttachments);
   document.getElementById('e-fi-f')?.toggleAttribute('disabled', !canEditAttachments);
-  ['c-t','c-s','c-f','cfg-google-client-id','cfg-upload-origin'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
+  ['c-t','c-s','c-f'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
+  ['cfg-google-client-id','cfg-upload-origin'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
   document.getElementById('btn-save-site')?.toggleAttribute('disabled', !canEditSite);
+  document.getElementById('btn-save-global-cfg')?.toggleAttribute('disabled', !canEditSite);
   ['collection-new-label','collection-new-mode','collection-new-permission','btn-save-collections'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !(canEditSite || canManageCollections)));
   document.getElementById('btn-cancel-collections')?.toggleAttribute('disabled', !(canEditSite || canManageCollections));
+  document.getElementById('btn-add-role')?.toggleAttribute('disabled', !canEditSite);
+  document.getElementById('btn-save-role-list')?.toggleAttribute('disabled', !canEditSite);
+  document.getElementById('btn-cancel-role-list')?.toggleAttribute('disabled', !canEditSite);
+  document.getElementById('role-new')?.toggleAttribute('disabled', !canEditSite);
   document.getElementById('cat-new')?.toggleAttribute('disabled', !canEditCats);
   document.getElementById('btn-save-cats')?.toggleAttribute('disabled', !canEditCats);
   document.getElementById('btn-cancel-cats')?.toggleAttribute('disabled', !canEditCats);
@@ -4302,7 +4458,7 @@ function applyRolePermissionUI() {
   document.getElementById('btn-cancel-tags')?.toggleAttribute('disabled', !canEditTags);
   document.getElementById('btn-save-order')?.toggleAttribute('disabled', !canEditOrder);
   document.getElementById('btn-cancel-order')?.toggleAttribute('disabled', !canEditOrder);
-  document.getElementById('btn-cancel-role-config')?.toggleAttribute('disabled', !(S.currentAuthUser?.role === 'owner' || currentRoleCanRenameSelfRole()));
+  document.getElementById('btn-cancel-role-config')?.toggleAttribute('disabled', !canEditSite);
   document.getElementById('btn-man-page-save')?.toggleAttribute('disabled', !canEditOrder);
   document.getElementById('btn-man-page-cancel')?.toggleAttribute('disabled', !canEditOrder);
   document.querySelector('#tab-man .disc-page-btn')?.toggleAttribute('disabled', !canEditOrder);
@@ -4434,27 +4590,34 @@ async function loadAuthUsers() {
   }
 }
 
-async function saveSite() {
+async function saveAppearance() {
   const entry = getCollectionEntry();
   const def = getCollectionDef();
   const siteTitle = entry.label || def.defaultSiteTitle;
   const sc = {
-    title:    document.getElementById('c-t').value.trim() || siteTitle,
-    subtitle: document.getElementById('c-s').value.trim(),
-    footer:   document.getElementById('c-f').value.trim() || `${siteTitle} · Archived by Username`
+    title:    (document.getElementById('c-t')?.value || '').trim() || siteTitle,
+    subtitle: (document.getElementById('c-s')?.value || '').trim(),
+    footer:   (document.getElementById('c-f')?.value || '').trim() || `${siteTitle} · Archived by Username`
   };
+  try {
+    showLdg('儲存…');
+    await api('PUT', '/api/site', sc);
+    S.cat.sc = sc; applyUI();
+    hideLdg(); toast('外觀設定已儲存', 'ok');
+  } catch(e) { hideLdg(); toast(e.message, 'err'); }
+}
+
+async function saveGlobalCfg() {
   const googleClientId = (document.getElementById('cfg-google-client-id')?.value || '').trim();
   const uploadOrigin = (document.getElementById('cfg-upload-origin')?.value || '').trim();
   try {
     showLdg('儲存…');
     await Promise.all([
-      api('PUT', '/api/site', sc),
       api('PUT', '/api/cfg-google', { googleClientId }),
       api('PUT', '/api/cfg-upload-origin', { uploadOrigin })
     ]);
-    S.cat.sc = sc; applyUI();
     window.UPLOAD_ORIGIN = uploadOrigin.replace(/\/+$/, '');
-    hideLdg(); toast('外觀設定已儲存', 'ok');
+    hideLdg(); toast('全站設定已儲存', 'ok');
   } catch(e) { hideLdg(); toast(e.message, 'err'); }
 }
 
