@@ -336,6 +336,24 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
   justify-content:center;gap:.85rem;padding:2rem;text-align:center}
 #adm-login p{font-size:.86rem;color:var(--muted)}
 .auth-user-list{display:grid;gap:.6rem;margin-top:.6rem}
+.cfg-host-usage-section{margin-bottom:1rem}
+.cfg-host-usage-shell{display:grid;gap:.85rem;padding:1rem;background:linear-gradient(180deg,color-mix(in srgb,var(--card) 94%, transparent),color-mix(in srgb,var(--bg2) 88%, transparent));border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.cfg-host-usage-shell.loading{min-height:164px;place-items:center;color:var(--muted);text-align:center}
+.cfg-host-usage-top{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;flex-wrap:wrap}
+.cfg-host-usage-title{display:grid;gap:.28rem}
+.cfg-host-usage-title strong{font-size:1.02rem;color:var(--admin-gold,var(--gold))}
+.cfg-host-usage-title span{font-size:.8rem;color:var(--muted)}
+.cfg-host-usage-summary{display:flex;align-items:baseline;gap:.55rem;flex-wrap:wrap;justify-content:flex-end}
+.cfg-host-usage-summary strong{font-size:2rem;line-height:1;color:var(--text)}
+.cfg-host-usage-summary span{font-size:.84rem;color:var(--muted)}
+.cfg-host-usage-stack{display:grid;gap:.55rem}
+.cfg-host-usage-bar{display:flex;height:18px;border-radius:999px;overflow:hidden;background:color-mix(in srgb,var(--bg2) 92%, transparent)}
+.cfg-host-usage-bar span{display:block;height:100%}
+.cfg-host-usage-meta{display:flex;justify-content:space-between;gap:.75rem;flex-wrap:wrap;font-size:.8rem;color:var(--muted)}
+.cfg-host-usage-legend{display:grid;gap:.55rem}
+.cfg-host-usage-row{display:grid;grid-template-columns:auto 1fr auto;gap:.6rem;align-items:center;font-size:.85rem}
+.cfg-host-usage-dot{width:11px;height:11px;border-radius:50%}
+.cfg-host-usage-empty{font-size:.84rem;color:var(--muted)}
 .auth-user-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:.5rem;align-items:center;padding:.6rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel)}
 .auth-user-row .auth-user-password{grid-column:2 / 4}
 .auth-user-row .auth-user-role{grid-column:1;grid-row:2}
@@ -992,6 +1010,9 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
     <!-- Settings Tab -->
     <div class="tab" id="tab-cfg">
       <div id="cfg-site-section">
+        <div class="cfg-host-usage-section" id="cfg-host-usage-section">
+          <div class="cfg-host-usage-shell loading" id="cfg-host-usage-shell">切換到設定頁時會更新目前主機用量…</div>
+        </div>
         <div id="cfg-global-section">
           <div class="sh">全站設定</div>
           <div class="fg">
@@ -1483,6 +1504,7 @@ const S = {
   authUsers: [], currentAuthUser: null, roleConfig: null, allRoleConfig: null,
   savedRoleLabels: null, savedRolePerms: null,
   downloadModalData: null,
+  hostUsage: null,
   previewModalState: null,
   previewTreeOpen: {},
   dragIdx: null, dragOverIdx: null, dragOverPos: null, justMovedId: null, _tx: 0, manPageOpen: false,
@@ -4024,6 +4046,7 @@ function setTab(t) {
     renderAuthUserList();
     renderSelfRolePermissionPanel();
     applyRolePermissionUI();
+    refreshHostUsagePanel();
   }
 }
 
@@ -4050,6 +4073,75 @@ function loadGlobalCfgForm() {
     const uploadEl = document.getElementById('cfg-upload-origin');
     if (uploadEl) uploadEl.value = d?.uploadOrigin || '';
   }).catch(() => {});
+}
+
+function renderHostUsagePanel(data) {
+  const shell = document.getElementById('cfg-host-usage-shell');
+  if (!shell) return;
+  const volume = data?.volume || {};
+  const app = data?.app || {};
+  const total = Number(volume.totalBytes || 0);
+  const free = Number(volume.freeBytes || 0);
+  const usedPercent = Number(volume.usedPercent || 0);
+  const sections = [
+    { label: '上傳檔案', value: Number(app.uploadsBytes || 0), color: '#b08a64' },
+    { label: '縮圖 / 預覽', value: Number(app.thumbsBytes || 0), color: '#d3b08b' },
+    { label: '設定資料', value: Number(app.configBytes || 0), color: '#6f8a70' },
+    { label: '其他站內資料', value: Number(app.otherBytes || 0), color: '#9fa9b5' }
+  ];
+  const appTotal = Math.max(1, sections.reduce((sum, section) => sum + section.value, 0));
+  shell.className = 'cfg-host-usage-shell';
+  shell.innerHTML = `
+    <div class="cfg-host-usage-top">
+      <div class="cfg-host-usage-title">
+        <strong>主機容量狀態</strong>
+        <span>進入設定頁時更新一次，顯示目前資料目錄所在磁碟的使用狀況。</span>
+      </div>
+      <div class="cfg-host-usage-summary">
+        <strong>${usedPercent}%</strong>
+        <span>剩餘 ${fmtSz(free)} / 總量 ${fmtSz(total)}</span>
+      </div>
+    </div>
+    <div class="cfg-host-usage-stack">
+      <div class="cfg-host-usage-bar">
+        ${sections.map(section => `<span style="width:${(section.value / appTotal) * 100}%;background:${section.color}" title="${esc(section.label)} ${esc(fmtSz(section.value))}"></span>`).join('')}
+      </div>
+      <div class="cfg-host-usage-meta">
+        <span>目前主機已使用 ${fmtSz(volume.usedBytes || 0)}</span>
+        <span>站內資料共 ${fmtSz(app.totalBytes || 0)}</span>
+      </div>
+    </div>
+    <div class="cfg-host-usage-legend">
+      ${sections.map(section => `
+        <div class="cfg-host-usage-row">
+          <span class="cfg-host-usage-dot" style="background:${section.color}"></span>
+          <span>${esc(section.label)}</span>
+          <strong>${fmtSz(section.value)}</strong>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderHostUsagePanelError(message = '目前無法取得主機用量資訊。') {
+  const shell = document.getElementById('cfg-host-usage-shell');
+  if (!shell) return;
+  shell.className = 'cfg-host-usage-shell';
+  shell.innerHTML = `<div class="cfg-host-usage-empty">${esc(message)}</div>`;
+}
+
+async function refreshHostUsagePanel() {
+  const shell = document.getElementById('cfg-host-usage-shell');
+  if (!shell) return;
+  shell.className = 'cfg-host-usage-shell loading';
+  shell.textContent = '正在更新主機用量…';
+  try {
+    const data = await api('GET', '/api/host-usage');
+    S.hostUsage = data || null;
+    renderHostUsagePanel(data || {});
+  } catch (e) {
+    renderHostUsagePanelError(e?.message || '目前無法取得主機用量資訊。');
+  }
 }
 
 function loadCfgForm() {

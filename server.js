@@ -112,6 +112,102 @@ function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 }
 
+function safeStatFsBytes(targetPath) {
+  try {
+    const stat = fs.statfsSync(targetPath);
+    const blockSize = Number(stat.bsize || stat.frsize || 0);
+    const totalBytes = Number(stat.blocks || 0) * blockSize;
+    const freeBytes = Number(stat.bfree || 0) * blockSize;
+    const usedBytes = Math.max(0, totalBytes - freeBytes);
+    return {
+      totalBytes,
+      freeBytes,
+      usedBytes,
+      usedPercent: totalBytes > 0 ? Math.min(100, Math.max(0, Math.round((usedBytes / totalBytes) * 1000) / 10)) : 0
+    };
+  } catch {
+    return {
+      totalBytes: 0,
+      freeBytes: 0,
+      usedBytes: 0,
+      usedPercent: 0
+    };
+  }
+}
+
+function scanDirSize(absPath, visitFile) {
+  if (!absPath || !fs.existsSync(absPath)) return 0;
+  const stack = [absPath];
+  let total = 0;
+  while (stack.length) {
+    const current = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const entryPath = path.join(current, entry.name);
+      try {
+        if (entry.isDirectory()) {
+          stack.push(entryPath);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const size = fs.statSync(entryPath).size;
+        total += size;
+        if (visitFile) visitFile(entryPath, size);
+      } catch {}
+    }
+  }
+  return total;
+}
+
+function getHostUsageSnapshot() {
+  const volume = safeStatFsBytes(DATA);
+  let uploadBytes = 0;
+  let thumbBytes = 0;
+  const uploadsBytes = scanDirSize(UPLOADS, (entryPath, size) => {
+    const rel = path.relative(UPLOADS, entryPath).split(path.sep).join('/');
+    if (rel.includes('/.thumbs/') || rel.startsWith('.thumbs/')) thumbBytes += size;
+    else uploadBytes += size;
+  });
+
+  let configBytes = 0;
+  let otherDataBytes = 0;
+  scanDirSize(DATA, (entryPath, size) => {
+    const normalized = path.resolve(entryPath);
+    if (normalized.startsWith(path.resolve(UPLOADS) + path.sep) || normalized === path.resolve(UPLOADS)) return;
+    const rel = path.relative(DATA, entryPath).split(path.sep).join('/');
+    const base = path.basename(entryPath);
+    if (
+      base === path.basename(CFG_FILE) ||
+      base === path.basename(CAT_FILE) ||
+      /^catalog-.*\.json$/i.test(base) ||
+      /^trash(?:-.*)?\.json$/i.test(base) ||
+      rel.startsWith('.update_state/')
+    ) {
+      configBytes += size;
+    } else {
+      otherDataBytes += size;
+    }
+  });
+
+  const appBytes = uploadsBytes + configBytes + otherDataBytes;
+  return {
+    path: DATA,
+    volume,
+    app: {
+      totalBytes: appBytes,
+      uploadsBytes: uploadBytes,
+      thumbsBytes: thumbBytes,
+      configBytes,
+      otherBytes: otherDataBytes
+    }
+  };
+}
+
 function decodeUploadFilename(name) {
   const raw = String(name || '');
   if (!raw) return '';
@@ -2589,6 +2685,15 @@ app.get('/api/cfg-public', (req, res) => {
       uploadOrigin: cfg.uploadOrigin || null
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/host-usage', auth, (req, res) => {
+  try {
+    const snapshot = getHostUsageSnapshot();
+    res.json(snapshot);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.put('/api/cfg-upload-origin', auth, (req, res) => {
