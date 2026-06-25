@@ -1526,6 +1526,21 @@ function readTextFile(absPath) {
   return decodeTextBuffer(fs.readFileSync(absPath));
 }
 
+function ensureHtmlPreviewCharset(htmlText = '') {
+  const html = String(htmlText || '');
+  if (!html) return html;
+  if (/<meta[^>]+charset\s*=/i.test(html) || /<meta[^>]+http-equiv\s*=\s*["']content-type["'][^>]*charset=/i.test(html)) {
+    return html;
+  }
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b([^>]*)>/i, match => `${match}\n<meta charset="utf-8">`);
+  }
+  if (/<html\b[^>]*>/i.test(html)) {
+    return html.replace(/<html\b[^>]*>/i, match => `${match}\n<head><meta charset="utf-8"></head>`);
+  }
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body>${html}</body></html>`;
+}
+
 function encodeTextBuffer(text, meta = {}) {
   const normalized = String(text || '');
   if (meta.encoding === 'utf16be') {
@@ -2188,7 +2203,7 @@ function resolvePreview(item, previewIndex = 0) {
       filename: file.name,
       label: getPreviewLabel(file),
       file,
-      text: readTextFile(file.abs).text,
+      text: ensureHtmlPreviewCharset(readTextFile(file.abs).text),
       html: '',
       abs: null
     };
