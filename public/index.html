@@ -353,7 +353,9 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 .cfg-host-usage-summary strong{font-size:1.48rem;line-height:1;color:color-mix(in srgb,var(--text) 84%, var(--admin-gold,var(--gold)) 16%);font-weight:600}
 .cfg-host-usage-stack{display:grid;gap:.42rem}
 .cfg-host-usage-bar{display:flex;height:6px;border-radius:999px;overflow:hidden;background:var(--bg2)}
-.cfg-host-usage-bar-fill{display:block;height:100%;border-radius:999px;background:var(--usage-bar-fill)}
+.cfg-host-usage-bar-seg{display:block;height:100%;flex:0 0 auto}
+.cfg-host-usage-bar-used-other{background:color-mix(in srgb,var(--text) 16%, var(--muted) 84%)}
+.cfg-host-usage-bar-unused{background:var(--bg2)}
 .cfg-host-usage-legend{display:grid;gap:.5rem}
 .cfg-host-usage-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.55rem;align-items:center;font-size:.8rem;color:color-mix(in srgb,var(--text) 82%, var(--muted) 18%)}
 .cfg-host-usage-dot{width:10px;height:10px;border-radius:50%}
@@ -4099,7 +4101,25 @@ function renderHostUsagePanel(data) {
     { label: '其他站內資料', value: Number(app.otherBytes || 0), colorVar: '--usage-other' }
   ];
   const fmtGb = bytes => `${(Number(bytes || 0) / (1024 ** 3)).toFixed(1)}GB`;
-  const hostUsedPercent = total > 0 ? Math.max(0, Math.min(100, (Number(volume.usedBytes || 0) / total) * 100)) : 0;
+  const usedBytes = Number(volume.usedBytes || 0);
+  const otherHostUsedBytes = Math.max(0, usedBytes - Number(app.totalBytes || 0));
+  const barSegments = [
+    ...sections.map(section => ({
+      width: total > 0 ? (section.value / total) * 100 : 0,
+      style: `background:var(${section.colorVar})`,
+      title: `${section.label} ${fmtSz(section.value)}`
+    })),
+    ...(otherHostUsedBytes > 0 ? [{
+      width: total > 0 ? (otherHostUsedBytes / total) * 100 : 0,
+      className: 'cfg-host-usage-bar-used-other',
+      title: `其他主機已使用空間 ${fmtSz(otherHostUsedBytes)}`
+    }] : []),
+    ...(free > 0 ? [{
+      width: total > 0 ? (free / total) * 100 : 0,
+      className: 'cfg-host-usage-bar-unused',
+      title: `剩餘空間 ${fmtGb(free)}`
+    }] : [])
+  ].filter(segment => segment.width > 0.02);
   shell.className = 'cfg-host-usage-shell';
   shell.innerHTML = `
     <div class="cfg-host-usage-title">
@@ -4115,7 +4135,7 @@ function renderHostUsagePanel(data) {
       </div>
       <div class="cfg-host-usage-stack">
         <div class="cfg-host-usage-bar">
-          <span class="cfg-host-usage-bar-fill" style="width:${hostUsedPercent}%"></span>
+          ${barSegments.map(segment => `<span class="cfg-host-usage-bar-seg${segment.className ? ` ${segment.className}` : ''}" style="width:${segment.width}%;${segment.style || ''}" title="${esc(segment.title)}"></span>`).join('')}
         </div>
       </div>
       <div class="cfg-host-usage-legend">
