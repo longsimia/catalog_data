@@ -340,7 +340,7 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
   justify-content:center;gap:.85rem;padding:2rem;text-align:center}
 #adm-login p{font-size:.86rem;color:var(--muted)}
 .auth-user-list{display:grid;gap:.6rem;margin-top:.6rem}
-.cfg-host-usage-section{margin-bottom:.95rem}
+.cfg-host-usage-section{margin-bottom:1.9rem}
 .cfg-host-usage-shell{display:grid;gap:.82rem;padding:0;background:transparent;border:none;border-radius:0;box-shadow:none}
 .cfg-host-usage-shell.loading{min-height:144px;place-items:center;color:var(--muted);text-align:center}
 .cfg-host-usage-title{display:grid;gap:.18rem;padding-bottom:.22rem;border-bottom:1px solid var(--border)}
@@ -1033,7 +1033,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
             <input type="text" class="fc" id="cfg-upload-origin"
               placeholder="https://upload.yourdomain.com（留空則使用目前網站網域）">
           </div>
-          <button class="btn btn-gold btn-w" id="btn-save-global-cfg" onclick="saveGlobalCfg()" style="margin:.3rem 0 .95rem">儲存全站設定</button>
+          <button class="btn btn-gold btn-w" id="btn-save-global-cfg" onclick="saveGlobalCfg()" style="margin:.3rem 0 1.9rem">儲存全站設定</button>
         </div>
 
         <details class="disc" id="collection-disc">
@@ -1909,6 +1909,7 @@ function decorateStaticIcons() {
     btn.innerHTML = `${icon(names[i])}<span>${labels[i]}</span>`;
   });
   setLabeled('#btn-save-site', 'save', '儲存外觀設定');
+  setLabeled('#btn-save-global-cfg', 'save', '儲存全站設定');
   setLabeled('#btn-save-pwd', 'lock', '儲存帳號設定');
   setLabeled('#btn-add-auth-user', 'plus', '新增帳號');
   setLabeled('#btn-logout', 'close', '登出');
