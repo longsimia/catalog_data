@@ -1004,7 +1004,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         </div>
 
         <details class="disc" id="collection-disc">
-          <summary><div class="disc-head"><span>頁籤管理</span><span class="disc-head-actions"></span></div></summary>
+          <summary><div class="disc-head"><span>頁籤</span><span class="disc-head-actions"></span></div></summary>
           <div class="disc-body">
             <div class="manage-block-head">
               <div class="manage-head-copy">
@@ -1059,13 +1059,18 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           </div>
         </details>
 
-        <div class="sh" id="cfg-auth-title">管理帳號</div>
-        <div class="auth-user-list" id="auth-users-list"></div>
-        <button class="btn btn-out btn-w" id="btn-add-auth-user" onclick="addAuthUserRow()" style="margin-top:.45rem">新增帳號</button>
-        <ul class="auth-user-help">
-          <li>密碼欄留空時，會保留該帳號原本的密碼。</li>
-        </ul>
-        <button class="btn btn-gold btn-w" id="btn-save-pwd" onclick="saveAuthUsers()">儲存帳號設定</button>
+        <details class="disc" id="cfg-auth-disc">
+          <summary><div class="disc-head"><span id="cfg-auth-title">帳號</span></div></summary>
+          <div class="disc-body">
+            <div class="auth-user-list" id="auth-users-list"></div>
+            <button class="btn btn-out btn-w" id="btn-add-auth-user" onclick="addAuthUserRow()" style="margin-top:.45rem">新增帳號</button>
+            <ul class="auth-user-help">
+              <li>密碼欄留空時，會保留該帳號原本的密碼。</li>
+            </ul>
+            <button class="btn btn-gold btn-w" id="btn-save-pwd" onclick="saveAuthUsers()">儲存帳號設定</button>
+          </div>
+        </details>
+
         <button class="btn btn-out btn-w" id="btn-logout" onclick="doLogout()" style="margin-top:.45rem">登出</button>
       </div>
     </div>
@@ -4433,11 +4438,13 @@ function applyRolePermissionUI() {
   const collectionSection = document.getElementById('collection-disc');
   const globalSection = document.getElementById('cfg-global-section');
   const cfgRoleSection = document.getElementById('cfg-role-disc');
+  const authSection = document.getElementById('cfg-auth-disc');
   const authTitle = document.getElementById('cfg-auth-title');
   if (collectionSection) collectionSection.style.display = (canEditSite || canManageCollections) ? '' : 'none';
   if (globalSection) globalSection.style.display = canEditSite ? '' : 'none';
   if (cfgRoleSection) cfgRoleSection.style.display = canEditSite ? '' : 'none';
-  if (authTitle) authTitle.textContent = canEditSite ? '管理帳號' : '管理帳號';
+  if (authSection) authSection.style.display = '';
+  if (authTitle) authTitle.textContent = '帳號';
   document.getElementById('lb-dl')?.toggleAttribute('disabled', !canDownload);
   document.getElementById('btn-do-up')?.toggleAttribute('disabled', !canUpload);
   document.getElementById('btn-clear-form')?.toggleAttribute('disabled', !canUpload);
