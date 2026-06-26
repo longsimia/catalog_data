@@ -843,14 +843,14 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   .collection-switch-menu{max-width:min(88vw,320px)}
   .collection-add-row{flex-wrap:wrap}
   .collection-add-row .fc{flex:1 0 100%;max-width:none}
-  .ctrl{min-height:auto;padding:.7rem .85rem}
-  .ctrl-view-btn{flex:0 0 42px}
-  .sw{flex:1 1 0;min-width:0}
+  .ctrl{top:70px;min-height:auto;padding:.7rem .85rem}
+  .ctrl-view-btn{order:2;flex:0 0 42px}
+  .sw{order:1;flex:1 1 calc(100% - 42px - .5rem);min-width:0}
   .pgsel{width:100%;justify-content:flex-start}
   .page-jump{width:43px}
   .theme-btn{top:calc((70px - 42px) / 2);right:4.5rem;width:42px;height:42px}
   .hbg{top:calc((70px - 42px) / 2);right:1rem;width:42px;height:42px}
-  .tf{flex:1 1 0;min-width:0;width:auto;max-width:calc(50% - .25rem)}
+  .tf{order:3;flex:1 1 0;min-width:0;width:auto;max-width:calc(50% - .25rem)}
   .tf-btn{width:100%;min-width:0}
   .tf-panel{left:0;right:auto;min-width:100%;max-width:none}
   .lb-inner{flex-direction:column;overflow-y:auto}
@@ -969,7 +969,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <a class="btn btn-out" id="lb-src" href="#" target="_blank" rel="noopener">原文連結</a>
         <div class="lb-preview-row">
           <button class="btn btn-out" id="lb-preview" type="button">線上閱覽</button>
-          <button class="ib preview-entry-share" id="lb-preview-share" type="button" title="開啟線上閱覽公開連結" aria-label="開啟線上閱覽公開連結">${icon('share')}</button>
+          <button class="ib preview-entry-share" id="lb-preview-share" type="button" title="開啟線上閱覽公開連結" aria-label="開啟線上閱覽公開連結"></button>
         </div>
         <div class="lb-acts-row" id="lb-bottom-actions">
           <button class="btn btn-out" id="lb-edit" type="button">編輯</button>
@@ -1960,6 +1960,7 @@ function decorateStaticIcons() {
   setLabeled('#lb-edit', 'edit', '編輯');
   setLabeled('#lb-src', 'link', '原文連結');
   setLabeled('#lb-preview', 'file', '線上閱覽');
+  setHtml('#lb-preview-share', icon('share'));
   setHtml('.si', icon('search'));
   setHtml('#gallery-view-btn', icon('layoutList'));
 }
