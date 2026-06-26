@@ -969,7 +969,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <a class="btn btn-out" id="lb-src" href="#" target="_blank" rel="noopener">原文連結</a>
         <div class="lb-preview-row">
           <button class="btn btn-out" id="lb-preview" type="button">線上閱覽</button>
-          <button class="ib preview-entry-share" id="lb-preview-share" type="button" title="開啟線上閱覽公開連結" aria-label="開啟線上閱覽公開連結"></button>
+          <button class="ib preview-entry-share" id="lb-preview-share" type="button" title="公開線上閱覽" aria-label="公開線上閱覽"></button>
         </div>
         <div class="lb-acts-row" id="lb-bottom-actions">
           <button class="btn btn-out" id="lb-edit" type="button">編輯</button>
@@ -3751,7 +3751,7 @@ function renderPreviewListEntries(files, mode = 'preview') {
     const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : 0;
     return `<div class="preview-entry-row">
       <a class="preview-entry preview-entry-main" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}"><span class="meta">${iconHtml}<span class="name" title="${esc(label)}">${esc(label)}</span></span></a>
-      <button class="ib preview-entry-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="開啟線上閱覽公開連結" aria-label="開啟線上閱覽公開連結">${icon('share')}</button>
+      <button class="ib preview-entry-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="公開線上閱覽" aria-label="公開線上閱覽">${icon('share')}</button>
     </div>`;
   }).join('');
 }
@@ -3811,7 +3811,7 @@ function renderPreviewFileGrid(files, mode = 'preview') {
         ${renderPreviewGridThumb(file, label)}
         <div class="preview-card-name" title="${esc(label)}">${esc(label)}</div>
       </a>
-      <button class="ib preview-card-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="開啟線上閱覽公開連結" aria-label="開啟線上閱覽公開連結">${icon('share')}</button>
+      <button class="ib preview-card-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="公開線上閱覽" aria-label="公開線上閱覽">${icon('share')}</button>
     </div>`;
   }).join('');
   return html ? `<div class="preview-grid">${html}</div>` : '';
