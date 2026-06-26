@@ -179,7 +179,7 @@ select.fs:focus{border-color:var(--gold)}
 .pill:hover,.pill.on{border-color:var(--gold);color:var(--gold);background:var(--gglow)}
 .pgsel{display:flex;align-items:center;gap:.38rem;color:var(--muted);font-size:.76rem;white-space:nowrap;flex-wrap:wrap}
 .pgsel select{min-width:56px}
-.page-jump{position:relative;display:inline-flex;align-items:center;gap:.38rem;color:var(--muted);width:48px}
+.page-jump{position:relative;display:inline-flex;align-items:center;gap:.38rem;color:var(--muted);width:var(--page-jump-width,48px)}
 .page-jump::after{content:'';position:absolute;right:.7rem;top:50%;width:.72rem;height:.72rem;transform:translateY(-50%);pointer-events:none;opacity:.8;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8a98' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:center;background-size:contain;transition:transform .18s}
 .page-jump.open::after{transform:translateY(-50%) rotate(180deg)}
 .page-jump input{width:100%;min-height:42px;padding:.5rem 1.8rem .5rem .72rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);color:var(--text);font-size:.83rem;font-family:inherit;outline:none;transition:border-color .2s}
@@ -844,6 +844,8 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 
 /* ── RESPONSIVE ── */
 @media(max-width:700px){
+  body::after{content:'';position:fixed;top:0;left:0;right:0;height:70px;z-index:240;pointer-events:none;
+    background:var(--ctrl-bg);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
   header{padding:6rem 1rem 3.4rem}
   .collection-switch{top:calc((70px - 42px) / 2);left:1rem}
   .collection-switch-btn{min-height:42px;padding:0 .82rem}
@@ -859,13 +861,17 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       "view pg pg";
     gap:.5rem;align-items:center;justify-content:stretch;
   }
-  .ctrl-view-btn{grid-area:view;order:unset;justify-self:start;align-self:stretch;display:inline-flex;visibility:visible;opacity:1;flex:0 0 42px}
+  .ctrl .ctrl-view-btn{
+    position:relative;top:auto;right:auto;left:auto;
+    grid-area:view;order:unset;justify-self:start;align-self:stretch;
+    display:inline-flex;visibility:visible;opacity:1;flex:0 0 42px;z-index:auto
+  }
   .sw{grid-area:search;order:unset;min-width:0;max-width:none;width:100%}
   #cat-filter{grid-area:cat}
   #pills{grid-area:tag}
   .tf{order:unset;min-width:0;width:auto;max-width:none}
   .pgsel{grid-area:pg;order:unset;width:100%;justify-content:flex-start;min-width:0}
-  .page-jump{width:43px}
+  .page-jump{width:var(--page-jump-width-mobile,56px)}
   .theme-btn{top:calc((70px - 42px) / 2);right:4.5rem;width:42px;height:42px}
   .hbg{top:calc((70px - 42px) / 2);right:1rem;width:42px;height:42px}
   .tf-btn{width:100%;min-width:0}
@@ -3115,6 +3121,11 @@ function updatePageJump(totalPages, hasItems) {
   const input = document.getElementById('page-jump-input');
   const panel = document.getElementById('page-jump-panel');
   if (!wrap || !input || !panel) return;
+  const digits = Math.max(String(Math.max(totalPages, 1)).length, String(Math.max(S.F.page || 1, 1)).length, 2);
+  const desktopWidth = `${Math.max(48, Math.round(22 + digits * 14))}px`;
+  const mobileWidth = `${Math.max(56, Math.round(30 + digits * 16))}px`;
+  wrap.style.setProperty('--page-jump-width', desktopWidth);
+  wrap.style.setProperty('--page-jump-width-mobile', mobileWidth);
   input.dataset.totalPages = String(totalPages);
   input.value = hasItems ? String(S.F.page) : '';
   input.disabled = !hasItems;
