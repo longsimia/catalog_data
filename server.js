@@ -1734,7 +1734,7 @@ function normalizePreviewText(text) {
   return raw || 'This document does not contain readable text for preview.';
 }
 
-function renderDocxPreviewPage(item, file, blocks = []) {
+function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
   const pageTitle = escapeXml(getPreviewLabel(file));
   const itemTitle = escapeXml(item?.translatedTitle || item?.title || '文件線上閱覽');
   const kind = 'Docx 文件閱覽';
@@ -1743,6 +1743,7 @@ function renderDocxPreviewPage(item, file, blocks = []) {
     return `<div class="docx-block" data-kind="${escapeXml(block.type)}" data-idx="${idx}">${block.html}</div>`;
   }).join('');
 
+  const noContextMenuScript = options.disableContextMenu ? `\n  ${getNoContextMenuScript()}` : '';
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -1879,6 +1880,7 @@ function renderDocxPreviewPage(item, file, blocks = []) {
       if (e.key === 'Escape') closeZoom();
     });
   </script>
+  ${noContextMenuScript}
 </body>
 </html>`;
 }
@@ -1894,6 +1896,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   const createdAtLabel = escapeXml(options.createdAtLabel || '');
   const updatedAtLabel = escapeXml(options.updatedAtLabel || '');
   const updatedByLabel = escapeXml(options.updatedByLabel || '');
+  const noContextMenuScript = options.disableContextMenu ? `\n  ${getNoContextMenuScript()}` : '';
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -2150,6 +2153,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       showLeaveModal(true);
     });
   </script>` : ''}
+  ${noContextMenuScript}
 </body>
 </html>`;
 }
@@ -2372,6 +2376,16 @@ function createPreviewShareToken(existingLinks = {}) {
     if (token && !existingLinks[token]) return token;
   }
   return crypto.randomBytes(12).toString('hex');
+}
+
+function getNoContextMenuScript() {
+  return `<script>document.addEventListener('contextmenu', event => event.preventDefault());</script>`;
+}
+
+function applyNoContextMenuToHtml(html = '') {
+  const script = getNoContextMenuScript();
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${script}</body>`);
+  return `${html}${script}`;
 }
 
 function renderPreviewHubPageV2(item, previews, token, collection = 'scenario') {
@@ -3256,9 +3270,132 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
 </html>`;
 }
 
+function renderPreviewShareShell(token = '') {
+  const safeToken = escapeXml(String(token || '').trim());
+  return `<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>公開閱覽</title>
+  <style>
+    :root{--bg:#111118;--panel:#15151d;--text:#e8e2d6;--muted:#8e8a98;--border:#28283a}
+    html{color-scheme:dark}
+    html[data-theme="light"],body[data-theme="light"]{
+      color-scheme:light;
+      --bg:#e6e6e6;--panel:#ffffff;--text:#3b342d;--muted:#9b9084;--border:#ece5db;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif}
+    .state{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center}
+    .card{background:var(--panel);border:1px solid var(--border);padding:24px 28px;max-width:520px;width:100%}
+    h1{margin:0 0 10px;font-family:"Noto Serif TC",serif;font-size:1.25rem}
+    p{margin:0;color:var(--muted);line-height:1.7}
+    iframe,embed{display:block;border:none;width:100%;height:100vh}
+    .media-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .media-wrap img,.media-wrap video{display:block;max-width:min(100%,1200px);max-height:calc(100vh - 40px);border:none}
+    .media-wrap audio{width:min(720px,100%)}
+  </style>
+</head>
+<body>
+  <div class="state" id="state">
+    <div class="card">
+      <h1>公開閱覽</h1>
+      <p id="msg">正在載入檔案...</p>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const mode = localStorage.getItem('theme-mode') === 'light' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = mode;
+      document.body.dataset.theme = mode;
+    })();
+    document.addEventListener('contextmenu', event => event.preventDefault());
+    const token = ${JSON.stringify(String(token || '').trim())};
+    const msg = document.getElementById('msg');
+
+    async function openPreview() {
+      const url = '/api/preview-share/' + encodeURIComponent(token);
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        let text = '無法載入檔案';
+        try {
+          const data = await resp.json();
+          text = data.error || text;
+        } catch {}
+        msg.textContent = text;
+        return;
+      }
+      const type = (resp.headers.get('content-type') || '').toLowerCase();
+      if (type.startsWith('audio/')) {
+        const blob = await resp.blob();
+        const mediaUrl = URL.createObjectURL(blob);
+        const wrap = document.createElement('div');
+        wrap.className = 'media-wrap';
+        const audio = document.createElement('audio');
+        audio.src = mediaUrl;
+        audio.controls = true;
+        audio.autoplay = true;
+        document.body.innerHTML = '';
+        document.body.appendChild(wrap);
+        wrap.appendChild(audio);
+        return;
+      }
+      if (type.startsWith('video/')) {
+        const blob = await resp.blob();
+        const mediaUrl = URL.createObjectURL(blob);
+        const wrap = document.createElement('div');
+        wrap.className = 'media-wrap';
+        const video = document.createElement('video');
+        video.src = mediaUrl;
+        video.controls = true;
+        video.autoplay = true;
+        video.playsInline = true;
+        document.body.innerHTML = '';
+        document.body.appendChild(wrap);
+        wrap.appendChild(video);
+        return;
+      }
+      if (type.startsWith('image/')) {
+        const blob = await resp.blob();
+        const mediaUrl = URL.createObjectURL(blob);
+        const wrap = document.createElement('div');
+        wrap.className = 'media-wrap';
+        const img = document.createElement('img');
+        img.src = mediaUrl;
+        img.alt = '';
+        document.body.innerHTML = '';
+        document.body.appendChild(wrap);
+        wrap.appendChild(img);
+        return;
+      }
+      if (type.includes('application/pdf')) {
+        const blob = await resp.blob();
+        const mediaUrl = URL.createObjectURL(blob);
+        const embed = document.createElement('embed');
+        embed.src = mediaUrl;
+        embed.type = 'application/pdf';
+        document.body.innerHTML = '';
+        document.body.appendChild(embed);
+        return;
+      }
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.location.replace(blobUrl);
+    }
+
+    openPreview().catch(() => {
+      msg.textContent = '載入失敗，請稍後再試。';
+    });
+  </script>
+</body>
+</html>`;
+}
+
 function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
   const collection = options.collection || 'scenario';
   const canEditTxt = !!options.canEditTxt;
+  const disableContextMenu = !!options.disableContextMenu;
   const previewSavePath = canEditTxt ? withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}`, collection) : '';
   if (preview.type === 'media') {
     res.type(preview.mimeType || getPreviewMediaMimeType(path.extname(preview.filename || '')));
@@ -3270,17 +3407,18 @@ function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
   }
   if (preview.type === 'html-file') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(preview.text || '');
+    return res.send(disableContextMenu ? applyNoContextMenuToHtml(preview.text || '') : (preview.text || ''));
   }
   const textEditMeta = preview.file?.ext === '.txt' ? getTextEditMeta(item, preview.file.key, preview.file.abs) : null;
   preview.html = preview.file?.ext === '.docx'
-    ? renderDocxPreviewPage(item, preview.file, preview.blocks || [])
+    ? renderDocxPreviewPage(item, preview.file, preview.blocks || [], { disableContextMenu })
     : renderTextPreviewPage(item, preview.file, preview.text, {
         saveUrl: previewSavePath,
         createdAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.createdAt) : '',
         updatedAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.savedAt) : '',
         updatedByLabel: textEditMeta?.savedBy || '',
-        canEditTxt
+        canEditTxt,
+        disableContextMenu
       });
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   return res.send(preview.html);
@@ -3299,12 +3437,25 @@ app.get('/preview-share/:token', (req, res) => {
     const cfg = readCfg();
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).send('找不到分享的線上閱覽檔案');
-    return sendResolvedPreview(res, resolved.item, resolved.preview, resolved.previewIndex, {
-      collection: resolved.share.collection,
-      canEditTxt: false
-    });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(renderPreviewShareShell(req.params.token));
   } catch (e) {
     return res.status(500).send(e.message);
+  }
+});
+
+app.get('/api/preview-share/:token', (req, res) => {
+  try {
+    const cfg = readCfg();
+    const resolved = resolveSharedPreview(cfg, req.params.token);
+    if (!resolved) return res.status(404).json({ error: '找不到分享的線上閱覽檔案' });
+    return sendResolvedPreview(res, resolved.item, resolved.preview, resolved.previewIndex, {
+      collection: resolved.share.collection,
+      canEditTxt: false,
+      disableContextMenu: true
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 
