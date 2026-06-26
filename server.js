@@ -519,6 +519,12 @@ function getThumbUrl(sourceKey = '') {
   return thumbKey ? `/thumbs/${thumbKey}` : '';
 }
 
+function getUploadPublicUrl(sourceKey = '') {
+  const normalized = String(sourceKey || '').replace(/\\/g, '/').trim().replace(/^\/+/, '');
+  if (!normalized) return '';
+  return `/uploads/${normalized.split('/').map(part => encodeURIComponent(part)).join('/')}`;
+}
+
 function resolveThumbSourceFromRequestPath(rawPath = '') {
   const normalized = String(rawPath || '').replace(/\\/g, '/').trim().replace(/^\/+/, '');
   if (!normalized.toLowerCase().endsWith('.webp')) return '';
@@ -2406,7 +2412,7 @@ function getPreviewShareEmbedImagePath(item = {}, preview = null, token = '') {
   const imageExts = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
   const previewFile = preview?.file || null;
   if (previewFile?.key && imageExts.has(String(previewFile.ext || '').toLowerCase())) {
-    return getThumbUrl(previewFile.key) || `/api/preview-share/${encodeURIComponent(token)}`;
+    return getUploadPublicUrl(previewFile.key) || getThumbUrl(previewFile.key) || `/api/preview-share/${encodeURIComponent(token)}`;
   }
   const thumbKeys = collectThumbSourceKeys(item);
   if (thumbKeys.length) return getThumbUrl(thumbKeys[0]);
