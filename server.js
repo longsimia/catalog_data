@@ -1803,7 +1803,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       -webkit-font-smoothing:antialiased;
       transition:background .2s ease,color .2s ease;
     }
-    .page{width:min(100%,720px);margin:0 auto;padding:24px 24px 72px}
+    .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
     .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
     .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .actions{display:flex;align-items:center;gap:10px}
@@ -1848,7 +1848,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .divider{height:1px;background:var(--line);margin:0 0 36px}
     .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted);text-align:center}
     @media (max-width: 720px){
-      .page{padding:15px 20px 48px}
+      .page{padding:30px 20px 48px}
       .docx-heading-1,.docx-heading-2{font-size:24px}
       .docx-heading-3{font-size:20px}
       .docx-table{font-size:14px}
@@ -1967,8 +1967,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       -webkit-font-smoothing:antialiased;
       transition:background .2s ease,color .2s ease;
     }
-    .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:17px}
+    .page{width:min(100%,720px);margin:0 auto;padding:24px 24px 72px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:6px}
     .topbar-actions{justify-content:flex-end}
     .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .meta{margin-bottom:18px}
@@ -2017,7 +2017,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .article a{color:var(--link);text-decoration:none}
     .article a:hover{text-decoration:underline}
     @media (max-width: 720px){
-      .page{padding:30px 20px 48px}
+      .page{padding:15px 20px 48px}
       .article,.article-body,.editor{font-size:16px;line-height:1.88}
     }
   </style>
