@@ -4103,7 +4103,7 @@ function renderHostUsagePanel(data) {
     { label: '設定資料', value: Number(app.configBytes || 0), colorVar: '--usage-config' },
     { label: '其他（含站外已使用空間）', value: mergedOtherBytes, colorVar: '--usage-other' }
   ];
-  const fmtGb = bytes => `${(Number(bytes || 0) / (1000 ** 3)).toFixed(1)}GB`;
+  const fmtGb = bytes => `${(Number(bytes || 0) / (1024 ** 3)).toFixed(1)}GB`;
   const barSegments = [
     ...sections.map(section => ({
       width: total > 0 ? (section.value / total) * 100 : 0,
