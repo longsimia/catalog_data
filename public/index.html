@@ -1749,8 +1749,18 @@ function normalizeCat() {
 }
 function getItemCategories(item) {
   if (!item) return [];
-  if (Array.isArray(item.categories)) return [...new Set(item.categories.filter(Boolean))];
-  return item.category ? [item.category] : [];
+  if (Array.isArray(item.categories)) return sortCategoriesByLibrary(item.categories);
+  return item.category ? sortCategoriesByLibrary([item.category]) : [];
+}
+function sortCategoriesByLibrary(categories) {
+  const picked = [...new Set((categories || []).filter(Boolean))];
+  const order = S.cat.categories || [];
+  const known = order.filter(cat => picked.includes(cat));
+  const extra = picked.filter(cat => !order.includes(cat));
+  return [...known, ...extra];
+}
+function getItemTags(item) {
+  return sortTagsByLibrary(item?.tags || []);
 }
 function syncItemCategoryFields(item) {
   if (!item) return item;
@@ -1873,7 +1883,7 @@ function getItemMetaLabel(item) {
   const parts = [];
   const categoryLabel = getItemCategoryLabel(item);
   if (categoryLabel) parts.push(categoryLabel);
-  const tags = (item.tags || []).filter(Boolean);
+  const tags = getItemTags(item);
   if (tags.length) parts.push(tags.join(', '));
   return parts.join(' · ');
 }
@@ -3068,7 +3078,7 @@ function updatePageJump(totalPages, hasItems) {
 
 function galleryGridCardHtml(item, idx) {
   const coverEntry = getItemCoverEntry(item);
-  const tags = item.tags || [];
+  const tags = getItemTags(item);
   const delay = Math.min(idx, 10) * 0.04;
   const entry = getCollectionEntry();
   const def = getCollectionDef();
@@ -3603,7 +3613,7 @@ function syncLightboxItem(item, options = {}) {
   lbAlt.hidden = !subtitleText;
   lbAuthor.textContent = authorText;
   lbAuthor.hidden = !authorText;
-  lbTags.innerHTML = (item.tags||[]).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+  lbTags.innerHTML = getItemTags(item).map(t => `<span class="tag">${esc(t)}</span>`).join('');
   lbDesc.textContent = item.description || '';
   lbSync();
 }
@@ -5611,6 +5621,9 @@ function addCategorySelection(v, ctx) {
   ensureMasterCategory(val);
   const arr = getCategorySelection(ctx);
   if (!arr.includes(val)) arr.push(val);
+  const sorted = sortCategoriesByLibrary(arr);
+  if (ctx === 'u') S.up.categories = sorted;
+  else S.eCatsPicked = sorted;
   renderCategoryChips(ctx);
   renderCategoryManager();
   renderCategoryFilter();
@@ -5628,6 +5641,9 @@ function toggleMasterCategoryPicked(cat, ctx) {
   const idx = arr.indexOf(cat);
   if (idx >= 0) arr.splice(idx, 1);
   else arr.push(cat);
+  const sorted = sortCategoriesByLibrary(arr);
+  if (ctx === 'u') S.up.categories = sorted;
+  else S.eCatsPicked = sorted;
   renderCategoryChips(ctx);
 }
 function renderCategoryPool(ctx) {
@@ -5639,7 +5655,9 @@ function renderCategoryPool(ctx) {
   ).join('');
 }
 function renderCategoryChips(ctx) {
-  const a = getCategorySelection(ctx);
+  const a = sortCategoriesByLibrary(getCategorySelection(ctx));
+  if (ctx === 'u') S.up.categories = a;
+  else S.eCatsPicked = a;
   const wid = ctx === 'u' ? 'u-cw' : 'e-cw';
   const iid = ctx === 'u' ? 'u-ci' : 'e-ci';
   const wrap = document.getElementById(wid);
@@ -5666,6 +5684,8 @@ function ckeyup(e, ctx) {
     const a = getCategorySelection(ctx);
     if (a.length) {
       a.pop();
+      if (ctx === 'u') S.up.categories = sortCategoriesByLibrary(a);
+      else S.eCatsPicked = sortCategoriesByLibrary(a);
       renderCategoryChips(ctx);
     }
   }
