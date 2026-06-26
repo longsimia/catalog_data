@@ -458,7 +458,7 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
   outline:none;transition:border-color .2s}
 .fc:focus{border-color:var(--gold)}
 .fc::placeholder{color:var(--muted)}
-textarea.fc{min-height:72px;resize:vertical}
+textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .sh{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);
   margin-bottom:.65rem;margin-top:1.4rem;padding-bottom:.22rem;border-bottom:1px solid var(--border)}
 .sh:first-child{margin-top:0}
@@ -1215,7 +1215,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       </div>
       <div class="fg">
         <label id="u-desc-label">文字說明</label>
-        <textarea class="fc" id="u-d"></textarea>
+        <textarea class="fc" id="u-d" oninput="autoGrowTextarea(this)"></textarea>
       </div>
 
       <div class="sh" id="u-preview-title">預覽媒體</div>
@@ -1408,7 +1408,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       </div>
       <div class="tag-pool" id="e-tag-pool"></div>
     </div>
-    <div class="fg"><label id="e-desc-label">文字說明</label><textarea class="fc" id="e-d"></textarea></div>
+    <div class="fg"><label id="e-desc-label">文字說明</label><textarea class="fc" id="e-d" oninput="autoGrowTextarea(this)"></textarea></div>
     <div class="sh" id="e-preview-title">預覽媒體</div>
     <div class="dz" id="e-dz-p" onclick="document.getElementById('e-fi-p').click()"
       ondragover="dzO(event,'e-dz-p')" ondragleave="dzL('e-dz-p')" ondrop="dzD(event,'eprev')">
@@ -2390,6 +2390,17 @@ function toggleTheme() {
   setTheme(next);
 }
 
+function autoGrowTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
+function refreshDescriptionTextareas() {
+  autoGrowTextarea(document.getElementById('u-d'));
+  autoGrowTextarea(document.getElementById('e-d'));
+}
+
 let mobileCtrlLastY = 0;
 let mobileCtrlTicking = false;
 
@@ -3009,6 +3020,7 @@ async function init() {
   applyTheme(getTheme());
   decorateStaticIcons();
   applyGalleryView(getGalleryView());
+  refreshDescriptionTextareas();
   syncMobileCtrlHeight();
   mobileCtrlLastY = Math.max(window.scrollY || window.pageYOffset || 0, 0);
   updateMobileCtrlVisibility();
@@ -3370,6 +3382,17 @@ function updateCatSel() { renderCategoryFilter(); }
 function updCatDl() { renderCategoryPool('u'); renderCategoryPool('e'); }
 
 function resetLoaded() { S.F.page = 1; }
+function scrollContainerToTop(container, behavior = 'smooth') {
+  if (!container) return;
+  if (typeof container.scrollTo === 'function') {
+    container.scrollTo({ top: 0, behavior });
+    return;
+  }
+  container.scrollTop = 0;
+}
+function scrollUploadPanelToTop(behavior = 'smooth') {
+  scrollContainerToTop(document.getElementById('tab-up'), behavior);
+}
 function goPage(page) {
   S.F.page = Math.max(1, Number(page) || 1);
   renderGallery();
@@ -6091,6 +6114,7 @@ async function doUp() {
         toast(`「${title || '未命名項目'}」已上傳成功 ✓`, 'ok');
         confirmClrForm();
         setTab('up');
+        scrollUploadPanelToTop();
       } else {
         toast('上傳失敗：' + readResponseErrorText(xhr.responseText, xhr.status), 'err');
       }
@@ -6106,6 +6130,7 @@ async function doUp() {
 
 function resetUploadFormState() {
   ['u-t','u-a','u-alt','u-d','u-url'].forEach(id => document.getElementById(id).value = '');
+  autoGrowTextarea(document.getElementById('u-d'));
   renderPermissionSelectOptions('u-perm', 'public');
   document.getElementById('u-ci').value         = '';
   document.getElementById('pg').innerHTML         = '';
@@ -7661,6 +7686,7 @@ function openEdit(id) {
   document.getElementById('e-alt').value = item.subtitle     || item.translatedTitle || '';
   document.getElementById('e-ci').value  = '';
   document.getElementById('e-d').value   = item.description  || '';
+  autoGrowTextarea(document.getElementById('e-d'));
   document.getElementById('e-url').value = item.sourceUrl    || item.originalUrl || '';
   renderPermissionSelectOptions('e-perm', item.permission || 'public');
   document.getElementById('e-fi-p').value = '';
