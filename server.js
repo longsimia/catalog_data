@@ -1010,6 +1010,11 @@ const readCfg = () => {
     cfg.collections = collections;
     dirty = true;
   }
+  const previewShareLinks = normalizePreviewShareLinks(cfg.previewShareLinks, cfg);
+  if (JSON.stringify(cfg.previewShareLinks || {}) !== JSON.stringify(previewShareLinks)) {
+    cfg.previewShareLinks = previewShareLinks;
+    dirty = true;
+  }
   const userUiPrefs = getUserUiPrefs(cfg);
   if (JSON.stringify(cfg.userUiPrefs || {}) !== JSON.stringify(userUiPrefs)) {
     cfg.userUiPrefs = userUiPrefs;
@@ -2383,6 +2388,78 @@ function resolveSharedPreview(cfg, token = '') {
   const preview = resolvePreview(item, previewIndex, share.collection);
   if (!preview) return null;
   return { share, item, preview, previewIndex };
+}
+
+function buildPreviewShareTargetKey(share = {}) {
+  return [
+    sanitizeCollectionKey(share.collection || 'scenario'),
+    String(share.itemId || '').trim(),
+    String(share.fileKey || '').trim() || String(share.relativePath || '').replace(/\\/g, '/').trim()
+  ].join('::');
+}
+
+function normalizePreviewShareLinks(existingLinks = {}, cfg = null) {
+  const sourceLinks = existingLinks && typeof existingLinks === 'object' && !Array.isArray(existingLinks) ? existingLinks : {};
+  const collections = getCollectionsConfig(cfg);
+  const catCache = new Map();
+  const seenTargets = new Set();
+  const orderedEntries = Object.entries(sourceLinks)
+    .map(([token, entry], index) => ({
+      token: String(token || '').trim(),
+      entry,
+      index,
+      createdAt: Number(entry?.createdAt) || 0
+    }))
+    .sort((a, b) => {
+      if (a.createdAt && b.createdAt && a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+      if (a.createdAt && !b.createdAt) return -1;
+      if (!a.createdAt && b.createdAt) return 1;
+      return a.index - b.index;
+    });
+  const normalized = {};
+
+  for (const { token, entry } of orderedEntries) {
+    if (!token || !entry || typeof entry !== 'object') continue;
+    const rawCollection = String(entry.collection || '').trim().toLowerCase();
+    const collection = sanitizeCollectionKey(rawCollection || 'scenario', { collections });
+    if (rawCollection && collection !== rawCollection) continue;
+    const share = {
+      collection,
+      itemId: String(entry.itemId || '').trim(),
+      fileKey: String(entry.fileKey || '').trim(),
+      relativePath: String(entry.relativePath || '').replace(/\\/g, '/').trim(),
+      createdAt: Number(entry.createdAt) || Date.now()
+    };
+    if (!share.itemId || (!share.fileKey && !share.relativePath)) continue;
+    const targetKey = buildPreviewShareTargetKey(share);
+    if (seenTargets.has(targetKey)) continue;
+
+    if (!catCache.has(share.collection)) {
+      catCache.set(share.collection, readCat(share.collection));
+    }
+    const cat = catCache.get(share.collection);
+    const item = (cat?.items || []).find(candidate => candidate.id === share.itemId);
+    if (!item) continue;
+    const previewIndex = resolvePreviewFileIndexByShare(item, share);
+    if (previewIndex < 0) continue;
+    const preview = resolvePreview(item, previewIndex, share.collection);
+    if (!preview) continue;
+
+    seenTargets.add(targetKey);
+    normalized[token] = share;
+  }
+
+  return normalized;
+}
+
+function cleanupPreviewShareLinksInConfig(cfg = null) {
+  const currentCfg = cfg && typeof cfg === 'object' ? cfg : readCfg();
+  const normalizedLinks = normalizePreviewShareLinks(currentCfg.previewShareLinks || {}, currentCfg);
+  if (JSON.stringify(currentCfg.previewShareLinks || {}) !== JSON.stringify(normalizedLinks)) {
+    currentCfg.previewShareLinks = normalizedLinks;
+    writeJSON(CFG_FILE, currentCfg);
+  }
+  return currentCfg;
 }
 
 function findExistingPreviewShareToken(existingLinks = {}, target = {}) {
@@ -3898,6 +3975,7 @@ app.put('/api/collections-config', auth, (req, res) => {
     cfg.collections = nextCollections;
     saveCfg(cfg);
     removedCollections.forEach(key => deleteCollectionStorage(key, { collections: currentCollections }));
+    cleanupPreviewShareLinksInConfig();
     res.json({ ok: true, collections: cfg.collections });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -4118,6 +4196,7 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), async (r
     await ensureThumbsForKeys(keptPreviewKeys);
 
     saveCat(cat, collection);
+    cleanupPreviewShareLinksInConfig();
     res.json({ ok: true, item: it });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4196,6 +4275,7 @@ app.post('/api/items/:id/file', auth, upload.fields([
     await ensureThumbsForKeys(download.downloadFiles.map(file => file.key));
 
     saveCat(cat, collection);
+    cleanupPreviewShareLinksInConfig();
     res.json({ ok: true, item: it });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4217,6 +4297,7 @@ app.delete('/api/items/:id/file', auth, (req, res) => {
     it.downloadUrl = null;
 
     saveCat(cat, collection);
+    cleanupPreviewShareLinksInConfig();
     res.json({ ok: true, item: it });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4240,6 +4321,7 @@ app.delete('/api/items/:id', auth, (req, res) => {
       _deletedAt: new Date().toISOString()
     });
     saveTrash(trash, collection);
+    cleanupPreviewShareLinksInConfig();
     res.json({ ok: true, item: removed });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -4273,6 +4355,7 @@ app.post('/api/items/batch-delete', auth, (req, res) => {
       _deletedAt: now
     })));
     saveTrash(trash, collection);
+    cleanupPreviewShareLinksInConfig();
     res.json({ ok: true, count: removed.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
