@@ -1856,7 +1856,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
   </style>
   <script>
     (() => {
-      const mode = localStorage.getItem('theme-mode') === 'light' ? 'light' : 'dark';
+      const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
       document.documentElement.dataset.theme = mode;
       document.addEventListener('DOMContentLoaded', () => {
         document.body.dataset.theme = mode;
@@ -1916,7 +1916,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     }
 
     document.getElementById('theme-btn')?.addEventListener('click', toggleTheme);
-    applyTheme(localStorage.getItem('theme-mode') === 'light' ? 'light' : 'dark');
+    applyTheme(localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light');
     document.querySelectorAll('.docx-image').forEach(img => {
       img.addEventListener('click', () => openZoom(img.src));
     });
@@ -2023,7 +2023,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   </style>
   <script>
     (() => {
-      const mode = localStorage.getItem('theme-mode') === 'light' ? 'light' : 'dark';
+      const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
       document.documentElement.dataset.theme = mode;
       document.addEventListener('DOMContentLoaded', () => {
         document.body.dataset.theme = mode;
@@ -2083,7 +2083,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     }
 
     document.getElementById('theme-btn')?.addEventListener('click', toggleTheme);
-    applyTheme(localStorage.getItem('theme-mode') === 'light' ? 'light' : 'dark');
+    applyTheme(localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light');
   </script>
   ${isTxt ? `<script>
     const editor = document.getElementById('editor');
@@ -2684,7 +2684,7 @@ function renderPreviewHubPageV2(item, previews, token, collection = 'scenario') 
   </style>
   <script>
     (() => {
-      const mode = localStorage.getItem('theme-mode') === 'light' ? 'light' : 'dark';
+      const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
       document.documentElement.dataset.theme = mode;
       document.addEventListener('DOMContentLoaded', () => {
         document.body.dataset.theme = mode;
@@ -3379,7 +3379,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
   </div>
   <script>
     (() => {
-      const mode = localStorage.getItem('theme-mode') === 'light' ? 'light' : 'dark';
+      const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
       document.documentElement.dataset.theme = mode;
       document.body.dataset.theme = mode;
     })();
@@ -3536,7 +3536,7 @@ function renderPreviewShareShell(token = '', options = {}) {
   </div>
   <script>
     (() => {
-      const mode = localStorage.getItem('theme-mode') === 'light' ? 'light' : 'dark';
+      const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
       document.documentElement.dataset.theme = mode;
       document.body.dataset.theme = mode;
     })();

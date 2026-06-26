@@ -1598,7 +1598,7 @@ const getToken = () => localStorage.getItem('adm-token') || '';
 const setToken = t  => localStorage.setItem('adm-token', t);
 const getAuthUsername = () => localStorage.getItem('adm-user') || '';
 const setAuthUsername = v => localStorage.setItem('adm-user', v || '');
-const getTheme = () => localStorage.getItem('theme-mode') || 'dark';
+const getTheme = () => localStorage.getItem('theme-mode') || 'light';
 const setTheme = theme => localStorage.setItem('theme-mode', theme);
 const getGalleryView = () => localStorage.getItem('gallery-view') === 'list' ? 'list' : 'grid';
 const setGalleryViewStorage = view => localStorage.setItem('gallery-view', view === 'list' ? 'list' : 'grid');
