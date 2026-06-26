@@ -858,7 +858,15 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       "search search search"
       "cat cat tag"
       "view pg pg";
-    gap:.5rem;align-items:center;justify-content:stretch
+    gap:.5rem;align-items:center;justify-content:stretch;
+    transition:transform .28s var(--ease),opacity .22s var(--ease),margin-bottom .28s var(--ease);
+    transform:translateY(0);opacity:1;
+  }
+  body.mobile-ctrl-collapsed .ctrl{
+    transform:translateY(calc(-100% - .6rem));
+    opacity:.01;
+    pointer-events:none;
+    margin-bottom:calc(-1 * var(--mobile-ctrl-height, 0px));
   }
   .ctrl-view-btn{grid-area:view;order:unset;justify-self:start;align-self:stretch;flex:0 0 42px}
   .sw{grid-area:search;order:unset;min-width:0;max-width:none;width:100%}
@@ -2378,6 +2386,43 @@ function toggleTheme() {
   setTheme(next);
 }
 
+let mobileCtrlLastY = 0;
+let mobileCtrlTicking = false;
+
+function syncMobileCtrlHeight() {
+  const ctrl = document.querySelector('.ctrl');
+  if (!ctrl) return;
+  document.body.style.setProperty('--mobile-ctrl-height', `${Math.ceil(ctrl.offsetHeight)}px`);
+}
+
+function updateMobileCtrlVisibility() {
+  mobileCtrlTicking = false;
+  const isMobile = window.innerWidth <= 700;
+  if (!isMobile) {
+    document.body.classList.remove('mobile-ctrl-collapsed');
+    return;
+  }
+  const y = Math.max(window.scrollY || window.pageYOffset || 0, 0);
+  const delta = y - mobileCtrlLastY;
+  const ctrl = document.querySelector('.ctrl');
+  const threshold = 10;
+  if (!ctrl) return;
+  if (y <= 12) {
+    document.body.classList.remove('mobile-ctrl-collapsed');
+  } else if (delta > threshold) {
+    document.body.classList.add('mobile-ctrl-collapsed');
+  } else if (delta < -threshold) {
+    document.body.classList.remove('mobile-ctrl-collapsed');
+  }
+  mobileCtrlLastY = y;
+}
+
+function handleMobileCtrlScroll() {
+  if (mobileCtrlTicking) return;
+  mobileCtrlTicking = true;
+  requestAnimationFrame(updateMobileCtrlVisibility);
+}
+
 function applyGalleryView(view) {
   const mode = view === 'list' ? 'list' : 'grid';
   document.body.dataset.galleryView = mode;
@@ -2971,11 +3016,19 @@ async function init() {
   applyTheme(getTheme());
   decorateStaticIcons();
   applyGalleryView(getGalleryView());
+  syncMobileCtrlHeight();
+  mobileCtrlLastY = Math.max(window.scrollY || window.pageYOffset || 0, 0);
+  updateMobileCtrlVisibility();
   await loadCollections();
   applyCollectionUI();
   ensureConnBadge();
   window.addEventListener('online', () => checkConn(false));
 window.addEventListener('offline', () => setConnState('offline'));
+  window.addEventListener('scroll', handleMobileCtrlScroll, { passive: true });
+  window.addEventListener('resize', () => {
+    syncMobileCtrlHeight();
+    updateMobileCtrlVisibility();
+  });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       checkConn(true);
