@@ -1215,8 +1215,14 @@ function getPreviewMediaMimeType(ext = '') {
   return PREVIEWABLE_MEDIA_MIME[String(ext || '').toLowerCase()] || 'application/octet-stream';
 }
 
-function getPreviewableFiles(item) {
-  const files = normalizeDownloadFiles(item);
+function getPreviewableFiles(item, collection = 'scenario', cfg = null) {
+  const mode = getCollectionConfig(collection, cfg).mode;
+  const files = mode === 'image'
+    ? getImageBundleFiles(item)
+    : normalizeDownloadFiles(item).map(file => ({
+        ...file,
+        abs: path.join(UPLOADS, file.key)
+      }));
   const results = [];
   const seen = new Set();
   const supported = new Set(['.pdf', '.txt', '.docx', '.html', '.htm', ...Object.keys(PREVIEWABLE_MEDIA_MIME)]);
@@ -1230,7 +1236,7 @@ function getPreviewableFiles(item) {
     results.push({
       ...file,
       ext,
-      abs: path.join(UPLOADS, file.key)
+      abs: file.abs || path.join(UPLOADS, file.key)
     });
   });
   return results;
@@ -2277,8 +2283,8 @@ function buildPreviewPdf(text, title) {
   return Buffer.from(pdf, 'utf8');
 }
 
-function resolvePreview(item, previewIndex = 0) {
-  const files = getPreviewableFiles(item);
+function resolvePreview(item, previewIndex = 0, collection = 'scenario') {
+  const files = getPreviewableFiles(item, collection);
   const file = files[Number(previewIndex)];
   if (!file) return null;
   if (!fs.existsSync(file.abs)) return null;
@@ -2338,7 +2344,7 @@ function resolvePreview(item, previewIndex = 0) {
 }
 
 function resolvePreviewFileIndexByShare(item, share = {}) {
-  const files = getPreviewableFiles(item);
+  const files = getPreviewableFiles(item, share.collection || 'scenario');
   const idx = files.findIndex(file => {
     if (share.fileKey && file?.key === share.fileKey) return true;
     if (share.relativePath && String(file?.relativePath || '').replace(/\\/g, '/') === share.relativePath) return true;
@@ -2370,7 +2376,7 @@ function resolveSharedPreview(cfg, token = '') {
   if (!item) return null;
   const previewIndex = resolvePreviewFileIndexByShare(item, share);
   if (previewIndex < 0) return null;
-  const preview = resolvePreview(item, previewIndex);
+  const preview = resolvePreview(item, previewIndex, share.collection);
   if (!preview) return null;
   return { share, item, preview, previewIndex };
 }
@@ -3047,7 +3053,7 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).json({ error: '項目不存在' });
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限查看這個項目' });
-    const files = getPreviewableFiles(item).filter(file => fs.existsSync(file.abs));
+    const files = getPreviewableFiles(item, collection).filter(file => fs.existsSync(file.abs));
     if (!files.length) return res.json({ supported: false, url: '', count: 0 });
     const url = files.length === 1
       ? withCollection(`/preview-open/${item.id}/0`, collection)
@@ -3085,7 +3091,7 @@ app.post('/api/items/:id/preview-share', auth, (req, res) => {
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).json({ error: '項目不存在' });
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限查看這個項目' });
-    const files = getPreviewableFiles(item).filter(file => fs.existsSync(file.abs));
+    const files = getPreviewableFiles(item, collection).filter(file => fs.existsSync(file.abs));
     const previewIndex = Number(req.body?.index);
     const file = files[previewIndex];
     if (!file) return res.status(404).json({ error: '找不到可分享的附件' });
@@ -3181,7 +3187,7 @@ app.get('/preview-hub/:id', auth, (req, res) => {
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).send('Item not found');
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).send('Forbidden');
-    const files = getPreviewableFiles(item).filter(file => fs.existsSync(file.abs));
+    const files = getPreviewableFiles(item, collection).filter(file => fs.existsSync(file.abs));
     if (!files.length) return res.status(404).send('No previewable files');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(renderPreviewHubPageV2(item, files, getTokenFromReq(req), collection));
@@ -3559,7 +3565,7 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
     if (!item) return res.status(404).json({ error: '項目不存在' });
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限查看這個項目' });
     const previewIndex = Number(req.params.index) || 0;
-    const preview = resolvePreview(item, previewIndex);
+    const preview = resolvePreview(item, previewIndex, collection);
     if (!preview) return res.status(415).json({ error: '這個檔案格式目前不支援線上閱覽' });
     return sendResolvedPreview(res, item, preview, previewIndex, {
       collection,
@@ -3580,7 +3586,7 @@ app.put('/api/preview/:id/:index', auth, (req, res) => {
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).json({ error: '項目不存在' });
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限編輯這個項目' });
-    const file = getPreviewableFiles(item)[Number(req.params.index) || 0];
+    const file = getPreviewableFiles(item, collection)[Number(req.params.index) || 0];
     if (!file || file.ext !== '.txt') {
       return res.status(415).json({ error: '只有 TXT 文件支援線上編輯與儲存' });
     }
