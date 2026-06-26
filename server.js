@@ -1968,10 +1968,9 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       transition:background .2s ease,color .2s ease;
     }
     .page{width:min(100%,720px);margin:0 auto;padding:24px 24px 72px}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:6px}
-    .topbar-actions{justify-content:flex-end}
-    .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .meta{margin-bottom:18px}
+    .meta-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+    .meta-head .title{flex:1;min-width:0}
     .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
     .meta-times{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;font-size:15px;color:var(--muted)}
     .meta-times time,.meta-times #metaLabelWrap,.meta-times #metaLabelText,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
@@ -2018,6 +2017,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .article a:hover{text-decoration:underline}
     @media (max-width: 720px){
       .page{padding:15px 20px 48px}
+      .meta-head{gap:12px}
       .article,.article-body,.editor{font-size:16px;line-height:1.88}
     }
   </style>
@@ -2033,14 +2033,14 @@ function renderTextPreviewPage(item, file, text, options = {}) {
 </head>
 <body>
   <main class="page">
-    <div class="topbar topbar-actions">
-      <div class="actions">
-        ${isTxt && canEditTxt ? `<button type="button" class="save-btn" id="saveBtn" title="會直接覆寫雲端上的原始檔案">儲存</button>` : ''}
-        <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
-      </div>
-    </div>
     <header class="meta">
-      <h1 class="title">${pageTitle}</h1>
+      <div class="meta-head">
+        <h1 class="title">${pageTitle}</h1>
+        <div class="actions">
+          ${isTxt && canEditTxt ? `<button type="button" class="save-btn" id="saveBtn" title="會直接覆寫雲端上的原始檔案">儲存</button>` : ''}
+          <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
+        </div>
+      </div>
       ${metaHtml}
     </header>
     <div class="divider" aria-hidden="true"></div>
