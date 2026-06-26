@@ -1787,62 +1787,68 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
   <title>${pageTitle}</title>
   <style>
     :root{
-      --bg:#111118;--paper:#15151d;--text:#e8e2d6;--muted:#8e8a98;--line:#28283a;--accent:#c9a84c;
-      --accent-soft:rgba(201,168,76,.12);--btn-text:#140f00;
-      --shadow:0 18px 40px rgba(0,0,0,.22);--bg-top:#07070f;--bg-glow:rgba(201,168,76,.07)
+      --bg:#fff;--text:#222;--muted:#777;--line:#e8e8e8;--link:#2f6db5;
     }
-    html{color-scheme:dark}
-    html[data-theme="light"],body[data-theme="light"]{
-      color-scheme:light;
-      --bg:#e6e6e6;--paper:#ffffff;--text:#3b342d;--muted:#9b9084;--line:#ece5db;--accent:#a18d79;
-      --accent-soft:rgba(161,141,121,.07);--btn-text:#fff;
-      --shadow:0 18px 34px rgba(87,72,56,.09), 0 0 0 1px rgba(120,98,75,.06);--bg-top:#e6e6e6;--bg-glow:transparent
+    html[data-theme="dark"]{
+      --bg:#111118;--text:#ece7df;--muted:#9a958d;--line:#2a2a34;--link:#8fb6ff;
     }
     *{box-sizing:border-box}
-    body{margin:0;font-family:"Noto Serif TC","Microsoft JhengHei","PingFang TC",serif;background:radial-gradient(ellipse 70% 50% at 50% 0%, var(--bg-glow), transparent 70%),linear-gradient(180deg,var(--bg-top) 0%,var(--bg) 100%);color:var(--text);transition:background .25s ease,color .25s ease}
-    body[data-theme="light"]{background:var(--bg)}
-    .wrap{width:min(calc(21cm + 36px),100%);margin:0 auto;padding:28px 18px 72px}
-    .meta{margin:0 0 32px}
-    .meta-hero{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-    .meta strong{display:block;font-size:clamp(24px,3vw,34px);line-height:1.35}
-    .meta strong.preview-title{font-size:28px;line-height:1.16}
-    .meta-subtitle{margin:12px 0 0;color:var(--muted);font-size:17px;line-height:1.75}
-    .meta-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-    .theme-btn{width:29px;height:29px;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--text);transition:all .25s ease;box-shadow:none;flex:0 0 29px}
-    .theme-btn:hover{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
-    .ico{display:inline-flex;align-items:center;justify-content:center;width:.92rem;height:.92rem;flex-shrink:0}
-    .ico svg{width:100%;height:100%;display:block}
-    .paper{background:var(--paper);border:1px solid var(--line);border-radius:0;padding:28px 1.6cm 22px;box-shadow:var(--shadow);width:21cm;max-width:100%}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+    body{
+      font-family:Georgia,"Times New Roman","Noto Serif TC","Songti TC","PMingLiU",serif;
+      text-rendering:optimizeLegibility;
+      -webkit-font-smoothing:antialiased;
+      transition:background .2s ease,color .2s ease;
+    }
+    .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+    .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
+    .actions{display:flex;align-items:center;gap:10px}
+    .icon-btn{
+      width:30px;height:30px;border:none;background:transparent;color:var(--muted);
+      display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0
+    }
+    .icon-btn:hover{color:var(--text)}
+    .icon{width:18px;height:18px;display:block}
+    .meta{margin-bottom:36px}
+    .title{margin:0;font-size:28px;line-height:1.16;font-weight:700;letter-spacing:.01em}
+    .sub{margin-top:12px;font-size:17px;line-height:1.75;color:var(--muted)}
+    .article{
+      font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word;
+    }
     .docx-block + .docx-block{margin-top:0}
-    .docx-paragraph{margin:0 0 1.1em;white-space:pre-wrap;word-break:break-word;line-height:1.9;font-size:17px}
-    .docx-heading-1,.docx-heading-2,.docx-heading-3,.docx-heading-4,.docx-heading-5,.docx-heading-6{font-family:"Noto Serif TC","Microsoft JhengHei","PingFang TC",serif;font-weight:700;line-height:1.45;margin:1.4em 0 .7em}
-    .docx-heading-1{font-size:1.9rem}
-    .docx-heading-2{font-size:1.55rem}
-    .docx-heading-3{font-size:1.3rem}
-    .docx-heading-4{font-size:1.15rem}
+    .docx-paragraph{margin:0 0 1.35em;white-space:pre-wrap;word-break:break-word;line-height:1.92;font-size:16px}
+    .docx-heading-1,.docx-heading-2,.docx-heading-3,.docx-heading-4,.docx-heading-5,.docx-heading-6{font-family:inherit;font-weight:700;line-height:1.35}
+    .docx-heading-1,.docx-heading-2{margin:2.4em 0 .9em;font-size:28px}
+    .docx-heading-3{margin:2.1em 0 .85em;font-size:24px}
+    .docx-heading-4{margin:1.8em 0 .8em;font-size:20px}
     .docx-heading-5,.docx-heading-6{font-size:1rem}
     .docx-align-center{text-align:center}
     .docx-align-right{text-align:right}
     .docx-align-both{text-align:justify}
     .docx-toc-entry{font-size:1rem}
     .docx-empty{opacity:.55}
-    .docx-image{display:block;max-width:100%;height:auto;margin:12px auto;border-radius:10px}
+    .docx-image{display:block;max-width:100%;height:auto;margin:1.5em auto;border-radius:0;cursor:zoom-in}
     .docx-table-wrap{overflow-x:auto;margin:0 0 1.2em}
     .docx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px;line-height:1.7}
     .docx-table td,.docx-table th{border:1px solid var(--line);padding:10px 12px;vertical-align:top}
     .docx-table p{margin:0 0 .7em}
     .docx-table p:last-child{margin-bottom:0}
-    .docx-link{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
-    .docx-link:hover{opacity:.8}
+    .docx-link,.article a{color:var(--link);text-decoration:none}
+    .docx-link:hover,.article a:hover{text-decoration:underline}
     .docx-anchor{display:block;position:relative;top:-8px;visibility:hidden}
-    .docx-page-divider{border:none;border-top:1px dashed var(--line);margin:1.6em 0}
+    .docx-page-divider{border:none;border-top:1px solid var(--line);margin:2em 0}
+    .article blockquote{margin:1.8em 0;padding-left:18px;border-left:3px solid #d7d7d7;color:#444}
+    html[data-theme="dark"] .article blockquote{border-left-color:#8f8679;color:#d2cbc2}
     .docx-zoom{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.72);z-index:999}
     .docx-zoom.on{display:flex}
     .docx-zoom img{max-width:min(96vw,1400px);max-height:92vh;object-fit:contain;border:1px solid rgba(255,255,255,.18);background:#000}
-    @media (max-width: 860px){
-      .wrap{padding-inline:10px}
-      .paper{width:100%;padding:22px 18px 18px}
-      .docx-paragraph{font-size:16px;line-height:1.8}
+    .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+    @media (max-width: 720px){
+      .page{padding:30px 20px 48px}
+      .sub{font-size:16px}
+      .docx-heading-1,.docx-heading-2{font-size:24px}
+      .docx-heading-3{font-size:20px}
       .docx-table{font-size:14px}
     }
   </style>
@@ -1857,21 +1863,25 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
   </script>
 </head>
 <body>
-  <main class="wrap">
-    <section class="meta">
-      <div class="meta-hero meta-top">
-        <button class="theme-btn" id="theme-btn" type="button" aria-label="切換顯示模式"></button>
+  <main class="page">
+    <div class="topbar">
+      <div class="brand">Docx Preview</div>
+      <div class="actions">
+        <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
       </div>
-      <strong class="preview-title">${pageTitle}</strong>
-      <p class="meta-subtitle">${docxSubtitle}</p>
-    </section>
-    <article class="paper">${blockHtml || '<p class="docx-paragraph docx-empty">&nbsp;</p>'}</article>
+    </div>
+    <header class="meta">
+      <h1 class="title">${pageTitle}</h1>
+      <div class="sub">${docxSubtitle}</div>
+    </header>
+    <article class="article">${blockHtml || '<p class="docx-paragraph docx-empty">&nbsp;</p>'}</article>
+    <div class="footer">Read-only preview.</div>
   </main>
   <div class="docx-zoom" id="docxZoom" aria-hidden="true"><img id="docxZoomImg" alt=""></div>
   <script>
     const themeIcon = kind => kind === 'moon'
-      ? '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg></span>'
-      : '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6M18.7 18.7l-1.6-1.6M6.9 6.9 5.3 5.3"/></svg></span>';
+      ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>'
+      : '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6M18.7 18.7l-1.6-1.6M6.9 6.9 5.3 5.3"/></svg>';
 
     function applyTheme(theme) {
       const mode = theme === 'light' ? 'light' : 'dark';
@@ -1879,10 +1889,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       document.body.dataset.theme = mode;
       localStorage.setItem('theme-mode', mode);
       const btn = document.getElementById('theme-btn');
-      if (btn) {
-        btn.innerHTML = mode === 'light' ? themeIcon('moon') : themeIcon('sun');
-        btn.setAttribute('title', mode === 'light' ? '切換為深色模式' : '切換為淺色模式');
-      }
+      if (btn) btn.innerHTML = mode === 'light' ? themeIcon('moon') : themeIcon('sun');
     }
 
     function toggleTheme() {
@@ -1927,7 +1934,6 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   const txtMainTitleRaw = path.parse(file?.name || path.basename(file?.key || 'document')).name || previewLabel;
   const txtSubtitleRaw = item?.translatedTitle || item?.title || txtMainTitleRaw;
   const pageTitle = escapeXml(isTxt ? txtMainTitleRaw : previewLabel);
-  const itemTitle = escapeXml(item?.translatedTitle || item?.title || '文件線上閱覽');
   const txtSubtitle = escapeXml(txtSubtitleRaw);
   const rawBody = escapeXml(String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
   const displayBody = rawBody || escapeXml(normalizePreviewText(text));
@@ -1942,58 +1948,72 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   <title>${pageTitle}</title>
   <style>
     :root{
-      --bg:#111118;--paper:#15151d;--text:#e8e2d6;--muted:#8e8a98;--line:#28283a;--accent:#c9a84c;
-      --accent-soft:rgba(201,168,76,.12);--btn-text:#140f00;
-      --shadow:0 18px 40px rgba(0,0,0,.22);--bg-top:#07070f;--bg-glow:rgba(201,168,76,.07)
+      --bg:#fff;--text:#222;--muted:#777;--line:#e8e8e8;--link:#2f6db5;
     }
-    html{color-scheme:dark}
-    html[data-theme="light"],body[data-theme="light"]{
-      color-scheme:light;
-      --bg:#f1f3f5;--paper:#ffffff;--text:#3b342d;--muted:#9b9084;--line:#ece5db;--accent:#a18d79;
-      --accent-soft:rgba(161,141,121,.07);--btn-text:#fff;
-      --shadow:0 18px 34px rgba(87,72,56,.09), 0 0 0 1px rgba(120,98,75,.06);--bg-top:#f1f3f5;--bg-glow:transparent
+    html[data-theme="dark"]{
+      --bg:#111118;--text:#ece7df;--muted:#9a958d;--line:#2a2a34;--link:#8fb6ff;
     }
     *{box-sizing:border-box}
-    body{margin:0;font-family:"Noto Serif TC","Microsoft JhengHei","PingFang TC",serif;background:radial-gradient(ellipse 70% 50% at 50% 0%, var(--bg-glow), transparent 70%),linear-gradient(180deg,var(--bg-top) 0%,var(--bg) 100%);color:var(--text);transition:background .25s ease,color .25s ease}
-    body[data-theme="light"]{background:var(--bg)}
-    .wrap{max-width:980px;margin:0 auto;padding:28px 18px 54px}
-    .meta{margin-bottom:32px}
-    .meta-hero{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-    .meta-label{font-family:"Noto Serif TC","Microsoft JhengHei","PingFang TC",serif;font-size:16px;line-height:1.25;font-weight:600;color:var(--text)}
-    .meta strong{display:block;font-size:clamp(24px,3vw,34px);line-height:1.35}
-    .meta strong.txt-title{font-size:28px;line-height:1.16}
-    .meta-subtitle{margin:12px 0 0;color:var(--muted);font-size:17px;line-height:1.75}
-    .meta p{margin:10px 0 0;color:var(--muted);line-height:1.7}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+    body{
+      font-family:Georgia,"Times New Roman","Noto Serif TC","Songti TC","PMingLiU",serif;
+      text-rendering:optimizeLegibility;
+      -webkit-font-smoothing:antialiased;
+      transition:background .2s ease,color .2s ease;
+    }
+    .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+    .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
+    .meta{margin-bottom:36px}
+    .title{margin:0;font-size:28px;line-height:1.16;font-weight:700;letter-spacing:.01em}
+    .sub{margin-top:12px;font-size:17px;line-height:1.75;color:var(--muted)}
     .meta-times{margin-top:12px;display:grid;gap:4px;color:var(--muted);font-size:14px;line-height:1.6}
     .meta-times span{display:block}
     .meta-times .inline-time{display:flex;flex-wrap:nowrap;align-items:baseline;gap:0;white-space:nowrap}
     .meta-times .inline-time time,.meta-times .inline-time #updatedByWrap,.meta-times .inline-time #updatedByText{display:inline;white-space:nowrap}
-    .meta-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-    .meta-head{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
-    .meta-copy{min-width:min(100%,440px);flex:1}
     .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .theme-btn{width:29px;height:29px;padding:0;display:inline-flex;align-items:center;justify-content:center;gap:.4rem;cursor:pointer;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--text);font-size:.8rem;font-family:inherit;transition:all .25s ease;box-shadow:none;flex:0 0 29px}
-    .theme-btn:hover{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
-    .ico{display:inline-flex;align-items:center;justify-content:center;width:.92rem;height:.92rem;flex-shrink:0}
-    .ico svg{width:100%;height:100%;display:block}
-    .btn{appearance:none;border:1px solid var(--line);background:var(--paper);color:var(--text);border-radius:999px;padding:10px 16px;font:inherit;font-size:14px;cursor:pointer;box-shadow:0 10px 24px rgba(0,0,0,.12)}
-    .btn:hover{border-color:var(--accent)}
-    .btn:disabled{opacity:.6;cursor:wait}
-    .btn-primary{background:var(--accent);color:var(--btn-text);border-color:var(--accent)}
-    .btn-plain{box-shadow:none}
-    .paper{background:var(--paper);border:1px solid var(--line);border-radius:0;padding:28px 1.6cm 22px;box-shadow:var(--shadow)}
-    pre,.editor{margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.95;font-size:${isTxt ? '16px' : '17px'};font-family:inherit}
-    .editor{display:block;width:100%;min-height:0;border:none;outline:none;resize:none;overflow:hidden;background:transparent;color:inherit}
-    .status{min-height:22px;margin-top:12px;color:var(--muted);font-size:14px}
+    .icon-btn{
+      width:30px;height:30px;border:none;background:transparent;color:var(--muted);
+      display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0
+    }
+    .icon-btn:hover{color:var(--text)}
+    .icon{width:18px;height:18px;display:block}
+    .save-btn{
+      border:none;background:transparent;color:var(--muted);padding:0 2px;
+      font:inherit;font-size:14px;cursor:pointer
+    }
+    .save-btn:hover{color:var(--text)}
+    .save-btn:disabled{opacity:.6;cursor:wait}
+    .article{font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word}
+    .article-body,.editor{
+      margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.92;font-size:16px;
+      font-family:inherit;letter-spacing:.01em
+    }
+    .editor{
+      display:block;width:100%;min-height:0;border:none;outline:none;resize:none;overflow:hidden;
+      background:transparent;color:inherit;padding:0
+    }
+    .status{min-height:22px;margin-top:20px;color:var(--muted);font-size:14px}
     .status[data-state="error"]{color:#a33d2d}
     .status[data-state="success"]{color:#2d7a54}
     .leave-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:50}
     .leave-modal.on{display:flex}
     .leave-modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.65)}
-    .leave-modal-card{position:relative;z-index:1;width:min(92vw,420px);background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow);padding:20px 22px;border-radius:18px}
+    .leave-modal-card{position:relative;z-index:1;width:min(92vw,420px);background:var(--bg);border:1px solid var(--line);padding:20px 22px;border-radius:18px}
     .leave-modal-card h3{margin:0 0 10px;font-size:20px;line-height:1.35;color:var(--text)}
     .leave-modal-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.7}
     .leave-modal-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}
+    .leave-modal-actions button{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:8px 14px;font:inherit;cursor:pointer}
+    .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+    .article blockquote{margin:1.8em 0;padding-left:18px;border-left:3px solid #d7d7d7;color:#444}
+    html[data-theme="dark"] .article blockquote{border-left-color:#8f8679;color:#d2cbc2}
+    .article a{color:var(--link);text-decoration:none}
+    .article a:hover{text-decoration:underline}
+    @media (max-width: 720px){
+      .page{padding:30px 20px 48px}
+      .sub{font-size:16px}
+      .article,.article-body,.editor{font-size:16px;line-height:1.88}
+    }
   </style>
   <script>
     (() => {
@@ -2006,29 +2026,26 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   </script>
 </head>
 <body>
-  <main class="wrap">
-    <section class="meta">
-      <div class="meta-hero meta-top">
-        <button class="theme-btn" id="theme-btn" type="button" aria-label="切換顯示模式"></button>
-        ${isTxt ? '' : `<span class="meta-label">${itemTitle}</span>`}
+  <main class="page">
+    <div class="topbar">
+      <div class="brand">Text Preview</div>
+      <div class="actions">
+        ${isTxt && canEditTxt ? `<button type="button" class="save-btn" id="saveBtn" title="會直接覆寫雲端上的原始檔案">儲存</button>` : ''}
+        <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
       </div>
-      <div class="meta-head">
-        <div class="meta-copy">
-          <strong class="${isTxt ? 'txt-title' : ''}">${pageTitle}</strong>
-          ${isTxt ? `<p class="meta-subtitle">${txtSubtitle}</p>` : ''}
-          ${isTxt ? metaHtml : ''}
-        </div>
-        ${isTxt && canEditTxt ? `<div class="actions">
-          <button type="button" class="btn btn-primary" id="saveBtn" title="會直接覆寫雲端上的原始檔案">儲存</button>
-        </div>` : ''}
-      </div>
-    </section>
-    <article class="paper">
+    </div>
+    <header class="meta">
+      <h1 class="title">${pageTitle}</h1>
+      <div class="sub">${txtSubtitle}</div>
+      ${metaHtml}
+    </header>
+    <article class="article">
       ${isTxt
         ? `<textarea id="editor" class="editor" spellcheck="false"${canEditTxt ? '' : ' readonly'}>${rawBody}</textarea>
       <div class="status" id="saveStatus" aria-live="polite"${canEditTxt ? '' : ' style="display:none"'}></div>`
-        : `<pre>${displayBody}</pre>`}
+        : `<pre class="article-body">${displayBody}</pre>`}
     </article>
+    <div class="footer">${canEditTxt ? 'Editable preview.' : 'Read-only preview.'}</div>
   </main>
   ${isTxt && canEditTxt ? `<div class="leave-modal" id="leaveModal" aria-hidden="true">
     <div class="leave-modal-bg" id="leaveModalBg"></div>
@@ -2043,8 +2060,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   </div>` : ''}
   <script>
     const themeIcon = kind => kind === 'moon'
-      ? '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg></span>'
-      : '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6M18.7 18.7l-1.6-1.6M6.9 6.9 5.3 5.3"/></svg></span>';
+      ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>'
+      : '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6M18.7 18.7l-1.6-1.6M6.9 6.9 5.3 5.3"/></svg>';
 
     function applyTheme(theme) {
       const mode = theme === 'light' ? 'light' : 'dark';
@@ -2052,10 +2069,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       document.body.dataset.theme = mode;
       localStorage.setItem('theme-mode', mode);
       const btn = document.getElementById('theme-btn');
-      if (btn) {
-        btn.innerHTML = mode === 'light' ? themeIcon('moon') : themeIcon('sun');
-        btn.setAttribute('title', mode === 'light' ? '切換為深色模式' : '切換為淺色模式');
-      }
+      if (btn) btn.innerHTML = mode === 'light' ? themeIcon('moon') : themeIcon('sun');
     }
 
     function toggleTheme() {
