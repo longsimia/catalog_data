@@ -1721,6 +1721,17 @@ function getTextEditMeta(item, fileKey, absPath) {
   };
 }
 
+function formatReadOnlyMeta(options = {}) {
+  const createdAtLabel = escapeXml(options.createdAtLabel || '');
+  const updatedAtLabel = escapeXml(options.updatedAtLabel || '');
+  const updatedByLabel = escapeXml(options.updatedByLabel || '');
+  if (!createdAtLabel && !updatedAtLabel && !updatedByLabel) return '';
+  return `<div class="meta-times">
+    <span>建立時間：<time id="createdAtText">${createdAtLabel}</time></span>
+    <span class="inline-time">最後儲存：<time id="updatedAtText">${updatedAtLabel}</time><span id="updatedByWrap"${updatedByLabel ? '' : ' style="display:none"'}>&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;<span id="updatedByText">${updatedByLabel}</span></span></span>
+  </div>`;
+}
+
 /*
 function getPreviewSourceText(file) {
   if (!file?.abs || !fs.existsSync(file.abs)) throw new Error('找不到預覽來源檔案');
@@ -1756,8 +1767,11 @@ function normalizePreviewText(text) {
 }
 
 function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
-  const pageTitle = escapeXml(getPreviewLabel(file));
-  const itemTitle = escapeXml(item?.translatedTitle || item?.title || '文件線上閱覽');
+  const previewLabel = getPreviewLabel(file);
+  const docxMainTitleRaw = path.parse(file?.name || path.basename(file?.key || 'document')).name || previewLabel;
+  const docxSubtitleRaw = item?.translatedTitle || item?.title || docxMainTitleRaw;
+  const pageTitle = escapeXml(docxMainTitleRaw);
+  const docxSubtitle = escapeXml(docxSubtitleRaw);
   const kind = 'Docx 文件閱覽';
   const blockHtml = blocks.map((block, idx) => {
     if (block.type === 'pagebreak') return `<hr class="docx-page-divider" data-idx="${idx}">`;
@@ -1790,8 +1804,9 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .wrap{width:min(calc(21cm + 36px),100%);margin:0 auto;padding:28px 18px 72px}
     .meta{margin:0 0 32px}
     .meta-hero{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-    .meta-label{font-family:"Noto Serif TC","Microsoft JhengHei","PingFang TC",serif;font-size:16px;line-height:1.25;font-weight:600;color:var(--text)}
     .meta strong{display:block;font-size:clamp(24px,3vw,34px);line-height:1.35}
+    .meta strong.preview-title{font-size:28px;line-height:1.16}
+    .meta-subtitle{margin:12px 0 0;color:var(--muted);font-size:17px;line-height:1.75}
     .meta-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
     .theme-btn{width:29px;height:29px;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--text);transition:all .25s ease;box-shadow:none;flex:0 0 29px}
     .theme-btn:hover{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
@@ -1846,9 +1861,9 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     <section class="meta">
       <div class="meta-hero meta-top">
         <button class="theme-btn" id="theme-btn" type="button" aria-label="切換顯示模式"></button>
-        <span class="meta-label">${itemTitle}</span>
       </div>
-      <strong>${pageTitle}</strong>
+      <strong class="preview-title">${pageTitle}</strong>
+      <p class="meta-subtitle">${docxSubtitle}</p>
     </section>
     <article class="paper">${blockHtml || '<p class="docx-paragraph docx-empty">&nbsp;</p>'}</article>
   </main>
@@ -1917,9 +1932,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   const rawBody = escapeXml(String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
   const displayBody = rawBody || escapeXml(normalizePreviewText(text));
   const canEditTxt = !!options.canEditTxt;
-  const createdAtLabel = escapeXml(options.createdAtLabel || '');
-  const updatedAtLabel = escapeXml(options.updatedAtLabel || '');
-  const updatedByLabel = escapeXml(options.updatedByLabel || '');
+  const metaHtml = formatReadOnlyMeta(options);
   const noContextMenuScript = options.disableContextMenu ? `\n  ${getNoContextMenuScript()}` : '';
   return `<!doctype html>
 <html lang="zh-Hant">
@@ -2003,10 +2016,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
         <div class="meta-copy">
           <strong class="${isTxt ? 'txt-title' : ''}">${pageTitle}</strong>
           ${isTxt ? `<p class="meta-subtitle">${txtSubtitle}</p>` : ''}
-          ${isTxt ? `<div class="meta-times">
-            <span>建立時間：<time id="createdAtText">${createdAtLabel}</time></span>
-            <span class="inline-time">最後儲存：<time id="updatedAtText">${updatedAtLabel}</time><span id="updatedByWrap"${updatedByLabel ? '' : ' style="display:none"'}>&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;<span id="updatedByText">${updatedByLabel}</span></span></span>
-          </div>` : ''}
+          ${isTxt ? metaHtml : ''}
         </div>
         ${isTxt && canEditTxt ? `<div class="actions">
           <button type="button" class="btn btn-primary" id="saveBtn" title="會直接覆寫雲端上的原始檔案">儲存</button>
@@ -3437,9 +3447,10 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
         document.body.appendChild(embed);
         return;
       }
-      const blob = await resp.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.location.replace(blobUrl);
+      const html = await resp.text();
+      document.open();
+      document.write(html);
+      document.close();
     }
 
     openPreview().catch(() => {
@@ -3615,7 +3626,9 @@ function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(disableContextMenu ? applyNoContextMenuToHtml(preview.text || '') : (preview.text || ''));
   }
-  const textEditMeta = preview.file?.ext === '.txt' ? getTextEditMeta(item, preview.file.key, preview.file.abs) : null;
+  const textEditMeta = preview.file?.ext === '.txt'
+    ? getTextEditMeta(item, preview.file.key, preview.file.abs)
+    : null;
   preview.html = preview.file?.ext === '.docx'
     ? renderDocxPreviewPage(item, preview.file, preview.blocks || [], { disableContextMenu })
     : renderTextPreviewPage(item, preview.file, preview.text, {
