@@ -6,39 +6,15 @@
 <title id="page-title">CATALOG</title>
 <script>
 (() => {
-  const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
-  document.documentElement.dataset.theme = mode;
+  if (localStorage.getItem('theme-mode') === 'dark') {
+    document.documentElement.dataset.theme = 'dark';
+  }
 })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#111118;--bg2:#1a1a22;--card:#1d1d26;--panel:#15151d;
-  --text:#e8e2d6;--muted:#8e8a98;
-  --gold:#c9a84c;--gdim:#7a6230;--gglow:rgba(201,168,76,.12);
-  --border:#28283a;--ok:#3eaf6f;--err:#e05252;
-  --usage-uploads:#8f6c4e;--usage-thumbs:#b79978;--usage-config:#6c866e;--usage-other:#7f8898;
-  --usage-bar-fill:color-mix(in srgb,var(--text) 22%, var(--admin-gold,var(--gold)) 78%);
-  --header-top:#07070f;--header-glow:rgba(201,168,76,.07);
-  --ctrl-bg:rgba(17,17,24,.97);--hbg-bg:rgba(0,0,0,.4);
-  --topbar-height:82px;--topbar-btn-size:46px;
-  --overlay-blend:overlay;--elev:0 10px 40px rgba(0,0,0,.55),0 0 0 1px var(--gglow);
-  --toast-shadow:0 4px 24px rgba(0,0,0,.45);
-  --modal-bg:rgba(0,0,0,.88);--overlay-bg:rgba(0,0,0,.65);--loading-bg:rgba(0,0,0,.72);
-  --r:7px;--ease:cubic-bezier(.32,.72,0,1);
-}
-html{color-scheme:dark}
-*{margin:0;padding:0;box-sizing:border-box}
-html,body,*{scrollbar-width:thin;scrollbar-color:var(--muted) var(--bg2)}
-*::-webkit-scrollbar{width:12px;height:12px}
-*::-webkit-scrollbar-track{background:var(--bg2)}
-*::-webkit-scrollbar-thumb{background:color-mix(in srgb, var(--muted) 78%, transparent);border:2px solid var(--bg2);border-radius:999px}
-*::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb, var(--gold) 52%, var(--muted))}
-body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);line-height:1.65;min-height:100vh;transition:background .25s var(--ease),color .25s var(--ease)}
-html[data-theme="light"],
-body[data-theme="light"]{
-  color-scheme:light;
   --bg:#ffffff;--bg2:#f8f5ef;--card:#ffffff;--panel:#fdfbf8;
   --text:#3b342d;--muted:#9b9084;
   --gold:#a18d79;--gdim:#d8cec2;--gglow:rgba(161,141,121,.07);
@@ -48,59 +24,84 @@ body[data-theme="light"]{
   --usage-bar-fill:color-mix(in srgb,var(--text) 18%, var(--admin-gold,var(--gold)) 82%);
   --header-top:#fdfbf7;--header-glow:rgba(161,141,121,.04);
   --ctrl-bg:rgba(255,255,255,.94);--hbg-bg:rgba(255,255,255,.92);
+  --topbar-height:82px;--topbar-btn-size:46px;
   --overlay-blend:multiply;--elev:0 18px 34px rgba(87,72,56,.09),0 0 0 1px rgba(120,98,75,.06);
   --toast-shadow:0 8px 22px rgba(87,72,56,.10);
   --modal-bg:rgba(0,0,0,.65);--overlay-bg:rgba(0,0,0,.65);--loading-bg:rgba(255,255,255,.84);
+  --r:7px;--ease:cubic-bezier(.32,.72,0,1);
+}
+html{color-scheme:light}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,*{scrollbar-width:thin;scrollbar-color:var(--muted) var(--bg2)}
+*::-webkit-scrollbar{width:12px;height:12px}
+*::-webkit-scrollbar-track{background:var(--bg2)}
+*::-webkit-scrollbar-thumb{background:color-mix(in srgb, var(--muted) 78%, transparent);border:2px solid var(--bg2);border-radius:999px}
+*::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb, var(--gold) 52%, var(--muted))}
+body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);line-height:1.65;min-height:100vh;transition:background .25s var(--ease),color .25s var(--ease)}
+html[data-theme="dark"],
+body[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111118;--bg2:#1a1a22;--card:#1d1d26;--panel:#15151d;
+  --text:#e8e2d6;--muted:#8e8a98;
+  --gold:#c9a84c;--gdim:#7a6230;--gglow:rgba(201,168,76,.12);
+  --border:#28283a;--ok:#3eaf6f;--err:#e05252;
+  --usage-uploads:#8f6c4e;--usage-thumbs:#b79978;--usage-config:#6c866e;--usage-other:#7f8898;
+  --usage-bar-fill:color-mix(in srgb,var(--text) 22%, var(--admin-gold,var(--gold)) 78%);
+  --header-top:#07070f;--header-glow:rgba(201,168,76,.07);
+  --ctrl-bg:rgba(17,17,24,.97);--hbg-bg:rgba(0,0,0,.4);
+  --overlay-blend:overlay;--elev:0 10px 40px rgba(0,0,0,.55),0 0 0 1px var(--gglow);
+  --toast-shadow:0 4px 24px rgba(0,0,0,.45);
+  --modal-bg:rgba(0,0,0,.88);--overlay-bg:rgba(0,0,0,.65);--loading-bg:rgba(0,0,0,.72);
 }
 
-body[data-theme="light"] .site-title,
-body[data-theme="light"] .card-title,
-body[data-theme="light"] .lb-t,
-body[data-theme="light"] .site-title{
+html:not([data-theme="dark"]) .site-title,
+html:not([data-theme="dark"]) .card-title,
+html:not([data-theme="dark"]) .lb-t,
+html:not([data-theme="dark"]) .site-title{
   color:#5f5245;
 }
 
-body[data-theme="light"] .adm-hd h2,
-body[data-theme="light"] .mh h3,
-body[data-theme="light"] .sh,
-body[data-theme="light"] .manage-page-title h3{
+html:not([data-theme="dark"]) .adm-hd h2,
+html:not([data-theme="dark"]) .mh h3,
+html:not([data-theme="dark"]) .sh,
+html:not([data-theme="dark"]) .manage-page-title h3{
   color:var(--admin-gold);
 }
 
-body[data-theme="light"] .btn-gold{
+html:not([data-theme="dark"]) .btn-gold{
   color:#5E4F36;
 }
 
-body[data-theme="light"] .btn-gold:hover{
+html:not([data-theme="dark"]) .btn-gold:hover{
   color:#140f00;
 }
 
-body[data-theme="light"] .item-count,
-body[data-theme="light"] .site-sub,
-body[data-theme="light"] .card-author,
-body[data-theme="light"] .lb-a,
-body[data-theme="light"] .fg label,
-body[data-theme="light"] .info-box,
-body[data-theme="light"] .us,
-body[data-theme="light"] footer{
+html:not([data-theme="dark"]) .item-count,
+html:not([data-theme="dark"]) .site-sub,
+html:not([data-theme="dark"]) .card-author,
+html:not([data-theme="dark"]) .lb-a,
+html:not([data-theme="dark"]) .fg label,
+html:not([data-theme="dark"]) .info-box,
+html:not([data-theme="dark"]) .us,
+html:not([data-theme="dark"]) footer{
   color:#9b9084;
 }
 
-body[data-theme="light"] .tag,
-body[data-theme="light"] .pill,
-body[data-theme="light"] .chip{
+html:not([data-theme="dark"]) .tag,
+html:not([data-theme="dark"]) .pill,
+html:not([data-theme="dark"]) .chip{
   border-color:#e7dfd3;
 }
-body[data-theme="light"] #man-list-page .mi.sel,
-body[data-theme="light"] .mp-gc.sel,
-body[data-theme="light"] .mp-trash-item.sel{
+html:not([data-theme="dark"]) #man-list-page .mi.sel,
+html:not([data-theme="dark"]) .mp-gc.sel,
+html:not([data-theme="dark"]) .mp-trash-item.sel{
   border-color:#111827;
   background:rgba(63,131,248,.16);
   box-shadow:0 0 0 1px rgba(17,24,39,.16);
 }
-body[data-theme="light"] .mi-chk,
-body[data-theme="light"] .mp-gc-chk,
-body[data-theme="light"] .mp-trash-chk{
+html:not([data-theme="dark"]) .mi-chk,
+html:not([data-theme="dark"]) .mp-gc-chk,
+html:not([data-theme="dark"]) .mp-trash-chk{
   accent-color:#2563eb;
 }
 
@@ -730,8 +731,8 @@ textarea.fc{min-height:72px;resize:vertical}
 .perm-badge{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;padding:.14rem .46rem;border:1px solid var(--border);border-radius:999px;font-size:.66rem;line-height:1.1;color:var(--muted);background:transparent;white-space:nowrap}
 .perm-badge.owner{border-color:#b66a6a;color:#d89a9a;background:rgba(182,106,106,.08)}
 .perm-badge.admin{border-color:#7d6b3d;color:#c9a84c;background:rgba(201,168,76,.08)}
-body[data-theme="light"] .perm-badge.owner{border-color:#c79b9b;color:#9b5858;background:rgba(199,155,155,.12)}
-body[data-theme="light"] .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;background:rgba(141,106,67,.08)}
+html:not([data-theme="dark"]) .perm-badge.owner{border-color:#c79b9b;color:#9b5858;background:rgba(199,155,155,.12)}
+html:not([data-theme="dark"]) .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;background:rgba(141,106,67,.08)}
 .mi-acts{display:flex;gap:.32rem;flex-shrink:0}
 #man-list-page{position:relative}
 #man-list-page .mi{position:absolute;left:0;right:0;top:0;height:64px;box-sizing:border-box;margin-bottom:0}
@@ -877,9 +878,6 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-<script>
-document.body.dataset.theme = document.documentElement.dataset.theme || 'light';
-</script>
 
 <!-- Loading -->
 <div class="ldg" id="ldg">
