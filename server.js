@@ -3578,9 +3578,10 @@ function renderPreviewShareShell(token = '', options = {}) {
         document.body.appendChild(embed);
         return;
       }
-      const blob = await resp.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.location.replace(blobUrl);
+      const html = await resp.text();
+      document.open();
+      document.write(html);
+      document.close();
     }
 
     openPreview().catch(() => {
