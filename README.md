@@ -108,7 +108,7 @@ http://123.123.123.123:3000
 做法是讓你的 Oracle Cloud 主機自己定時執行更新腳本：
 
 ```bash
-printf '%s\n' '*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1' '0 0 1 * * > /home/ubuntu/catalog_update.log' | crontab -
+printf '%s\n' '*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh' '0 0 1 * * > /home/ubuntu/catalog_update.log' | crontab -
 ```
 
 然後執行：
@@ -120,7 +120,7 @@ crontab -l
 你應該會看到：
 
 ```bash
-*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh >> /home/ubuntu/catalog_update.log 2>&1
+*/5 * * * * cd /home/ubuntu/catalog_app && bash update.sh
 0 0 1 * * > /home/ubuntu/catalog_update.log
 ```
 
@@ -132,7 +132,7 @@ crontab -l
 - 有新版本才會開始 reload 並寫入更新紀錄：
   - 進入 `/home/ubuntu/catalog_app`
   - 執行 `update.sh`
-  - 將輸出寫到 `/home/ubuntu/catalog_update.log`
+  - 由腳本自行把最新紀錄插到 `/home/ubuntu/catalog_update.log` 最上方
 - 每個月 1 號 00:00 會自動清空 log 內容
 
 如果你想降低檢查頻率，也可以把 `*/5` 改成`*/10`（每 10 分鐘）或 `*/30`（每 30 分鐘）。
