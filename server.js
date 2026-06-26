@@ -1811,7 +1811,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .icon-btn:hover{color:var(--text)}
     .icon{width:18px;height:18px;display:block}
     .meta{margin-bottom:36px}
-    .title{margin:0;font-size:28px;line-height:1.16;font-weight:700;letter-spacing:.01em}
+    .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
     .sub{margin-top:12px;font-size:17px;line-height:1.75;color:var(--muted)}
     .article{
       font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word;
@@ -1965,7 +1965,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px;padding-bottom:12px;border-bottom:1px solid var(--line)}
     .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .meta{margin-bottom:36px}
-    .title{margin:0;font-size:28px;line-height:1.16;font-weight:700;letter-spacing:.01em}
+    .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
     .sub{margin-top:12px;font-size:17px;line-height:1.75;color:var(--muted)}
     .meta-times{margin-top:12px;display:grid;gap:4px;color:var(--muted);font-size:14px;line-height:1.6}
     .meta-times span{display:block}
