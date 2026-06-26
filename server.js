@@ -1722,13 +1722,16 @@ function getTextEditMeta(item, fileKey, absPath) {
 }
 
 function formatReadOnlyMeta(options = {}) {
+  const label = escapeXml(options.label || '');
   const updatedAtLabel = escapeXml(options.updatedAtLabel || '');
   const updatedByLabel = escapeXml(options.updatedByLabel || '');
-  if (!updatedAtLabel && !updatedByLabel) return '';
+  if (!label && !updatedAtLabel && !updatedByLabel) return '';
   return `<div class="meta-times">
-    <span id="updatedByWrap"${updatedByLabel ? '' : ' style="display:none"'}><span id="updatedByText">${updatedByLabel}</span></span>
-    <span class="meta-dot" id="updatedDot"${updatedByLabel ? '' : ' style="display:none"'} aria-hidden="true"></span>
+    <span id="metaLabelWrap"${label ? '' : ' style="display:none"'}><span id="metaLabelText">${label}</span></span>
+    <span class="meta-dot" id="metaDotPrimary"${label && updatedAtLabel ? '' : ' style="display:none"'} aria-hidden="true"></span>
     <time id="updatedAtText">${updatedAtLabel}</time>
+    <span class="meta-dot" id="updatedDot"${updatedAtLabel && updatedByLabel ? '' : ' style="display:none"'} aria-hidden="true"></span>
+    <span id="updatedByWrap"${updatedByLabel ? '' : ' style="display:none"'}><span id="updatedByText">${updatedByLabel}</span></span>
   </div>`;
 }
 
@@ -1811,9 +1814,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .icon-btn:hover{color:var(--text)}
     .icon{width:18px;height:18px;display:block}
     .meta{margin-bottom:18px}
-    .title-row{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
     .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
-    .sub{font-size:17px;line-height:1.75;color:var(--muted)}
     .article{
       font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word;
     }
@@ -1848,8 +1849,6 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted);text-align:center}
     @media (max-width: 720px){
       .page{padding:30px 20px 48px}
-      .title-row{gap:10px}
-      .sub{font-size:16px}
       .docx-heading-1,.docx-heading-2{font-size:24px}
       .docx-heading-3{font-size:20px}
       .docx-table{font-size:14px}
@@ -1874,10 +1873,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       </div>
     </div>
     <header class="meta">
-      <div class="title-row">
-        <h1 class="title">${pageTitle}</h1>
-        <div class="sub">${docxMetaTitle}</div>
-      </div>
+      <h1 class="title">${pageTitle}</h1>
     </header>
     <div class="divider" aria-hidden="true"></div>
     <article class="article">${blockHtml || '<p class="docx-paragraph docx-empty">&nbsp;</p>'}</article>
@@ -1944,7 +1940,11 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   const rawBody = escapeXml(String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
   const displayBody = rawBody || escapeXml(normalizePreviewText(text));
   const canEditTxt = !!options.canEditTxt;
-  const metaHtml = formatReadOnlyMeta(options);
+  const metaHtml = formatReadOnlyMeta({
+    label: txtMetaTitleRaw,
+    updatedAtLabel: options.updatedAtLabel || '',
+    updatedByLabel: options.updatedByLabel || ''
+  });
   const noContextMenuScript = options.disableContextMenu ? `\n  ${getNoContextMenuScript()}` : '';
   return `<!doctype html>
 <html lang="zh-Hant">
@@ -1969,13 +1969,12 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     }
     .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
     .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+    .topbar-actions{justify-content:flex-end}
     .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .meta{margin-bottom:18px}
-    .title-row{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
     .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
-    .sub{font-size:17px;line-height:1.75;color:var(--muted)}
     .meta-times{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;font-size:15px;color:var(--muted)}
-    .meta-times time,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
+    .meta-times time,.meta-times #metaLabelWrap,.meta-times #metaLabelText,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
     .meta-dot{width:3px;height:3px;border-radius:999px;background:currentColor;opacity:.55}
     .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     .icon-btn{
@@ -2018,8 +2017,6 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .article a:hover{text-decoration:underline}
     @media (max-width: 720px){
       .page{padding:30px 20px 48px}
-      .title-row{gap:10px}
-      .sub{font-size:16px}
       .article,.article-body,.editor{font-size:16px;line-height:1.88}
     }
   </style>
@@ -2035,18 +2032,14 @@ function renderTextPreviewPage(item, file, text, options = {}) {
 </head>
 <body>
   <main class="page">
-    <div class="topbar">
-      <div class="brand">${txtMetaTitle}</div>
+    <div class="topbar topbar-actions">
       <div class="actions">
         ${isTxt && canEditTxt ? `<button type="button" class="save-btn" id="saveBtn" title="會直接覆寫雲端上的原始檔案">儲存</button>` : ''}
         <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
       </div>
     </div>
     <header class="meta">
-      <div class="title-row">
-        <h1 class="title">${pageTitle}</h1>
-        <div class="sub">${txtMetaTitle}</div>
-      </div>
+      <h1 class="title">${pageTitle}</h1>
       ${metaHtml}
     </header>
     <div class="divider" aria-hidden="true"></div>
@@ -2178,12 +2171,14 @@ function renderTextPreviewPage(item, file, text, options = {}) {
         status.textContent = '已儲存';
         const updatedAtText = document.getElementById('updatedAtText');
         if (updatedAtText && data.updatedAtLabel) updatedAtText.textContent = data.updatedAtLabel;
+        const metaDotPrimary = document.getElementById('metaDotPrimary');
         const updatedByText = document.getElementById('updatedByText');
         const updatedByWrap = document.getElementById('updatedByWrap');
         const updatedDot = document.getElementById('updatedDot');
         if (updatedByText && data.updatedByLabel) updatedByText.textContent = data.updatedByLabel;
+        if (metaDotPrimary) metaDotPrimary.style.display = data.updatedAtLabel ? '' : 'none';
         if (updatedByWrap) updatedByWrap.style.display = data.updatedByLabel ? '' : 'none';
-        if (updatedDot) updatedDot.style.display = data.updatedByLabel ? '' : 'none';
+        if (updatedDot) updatedDot.style.display = (data.updatedAtLabel && data.updatedByLabel) ? '' : 'none';
       } catch (err) {
         status.dataset.state = 'error';
         status.textContent = err.message || '儲存失敗';
