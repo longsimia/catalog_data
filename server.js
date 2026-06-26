@@ -3191,6 +3191,12 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
         msg.textContent = '請先登入後台後再開啟這個檔案。';
         return;
       }
+      function applyMediaViewerTheme() {
+        document.documentElement.dataset.theme = 'dark';
+        document.body.dataset.theme = 'dark';
+        document.documentElement.style.background = '#111118';
+        document.body.style.background = '#111118';
+      }
       const url = '/api/preview/' + encodeURIComponent(itemId) + '/' + encodeURIComponent(previewIndex) + (collection === 'scenario' ? '' : ('?c=' + encodeURIComponent(collection)));
       const resp = await fetch(url, {
         headers: { Authorization: 'Bearer ' + token }
@@ -3210,6 +3216,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
         const url = URL.createObjectURL(blob);
         const wrap = document.createElement('div');
         wrap.className = 'media-wrap';
+        applyMediaViewerTheme();
         const audio = document.createElement('audio');
         audio.src = url;
         audio.controls = true;
@@ -3224,6 +3231,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
         const url = URL.createObjectURL(blob);
         const wrap = document.createElement('div');
         wrap.className = 'media-wrap';
+        applyMediaViewerTheme();
         const video = document.createElement('video');
         video.src = url;
         video.controls = true;
@@ -3239,6 +3247,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
         const url = URL.createObjectURL(blob);
         const wrap = document.createElement('div');
         wrap.className = 'media-wrap';
+        applyMediaViewerTheme();
         const img = document.createElement('img');
         img.src = url;
         img.alt = '';
@@ -3315,6 +3324,12 @@ function renderPreviewShareShell(token = '') {
     const msg = document.getElementById('msg');
 
     async function openPreview() {
+      function applyMediaViewerTheme() {
+        document.documentElement.dataset.theme = 'dark';
+        document.body.dataset.theme = 'dark';
+        document.documentElement.style.background = '#111118';
+        document.body.style.background = '#111118';
+      }
       const url = '/api/preview-share/' + encodeURIComponent(token);
       const resp = await fetch(url);
       if (!resp.ok) {
@@ -3332,6 +3347,7 @@ function renderPreviewShareShell(token = '') {
         const mediaUrl = URL.createObjectURL(blob);
         const wrap = document.createElement('div');
         wrap.className = 'media-wrap';
+        applyMediaViewerTheme();
         const audio = document.createElement('audio');
         audio.src = mediaUrl;
         audio.controls = true;
@@ -3346,6 +3362,7 @@ function renderPreviewShareShell(token = '') {
         const mediaUrl = URL.createObjectURL(blob);
         const wrap = document.createElement('div');
         wrap.className = 'media-wrap';
+        applyMediaViewerTheme();
         const video = document.createElement('video');
         video.src = mediaUrl;
         video.controls = true;
@@ -3361,6 +3378,7 @@ function renderPreviewShareShell(token = '') {
         const mediaUrl = URL.createObjectURL(blob);
         const wrap = document.createElement('div');
         wrap.className = 'media-wrap';
+        applyMediaViewerTheme();
         const img = document.createElement('img');
         img.src = mediaUrl;
         img.alt = '';
