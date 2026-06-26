@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title id="page-title">CATALOG</title>
+<script>
+(() => {
+  const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = mode;
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -871,6 +877,9 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+<script>
+document.body.dataset.theme = document.documentElement.dataset.theme || 'light';
+</script>
 
 <!-- Loading -->
 <div class="ldg" id="ldg">
