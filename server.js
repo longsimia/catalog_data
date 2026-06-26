@@ -1907,12 +1907,15 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
 }
 
 function renderTextPreviewPage(item, file, text, options = {}) {
-  const pageTitle = escapeXml(getPreviewLabel(file));
+  const isTxt = file.ext === '.txt';
+  const previewLabel = getPreviewLabel(file);
+  const txtMainTitleRaw = path.parse(file?.name || path.basename(file?.key || 'document')).name || previewLabel;
+  const txtSubtitleRaw = item?.translatedTitle || item?.title || txtMainTitleRaw;
+  const pageTitle = escapeXml(isTxt ? txtMainTitleRaw : previewLabel);
   const itemTitle = escapeXml(item?.translatedTitle || item?.title || '文件線上閱覽');
+  const txtSubtitle = escapeXml(txtSubtitleRaw);
   const rawBody = escapeXml(String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
   const displayBody = rawBody || escapeXml(normalizePreviewText(text));
-  const kind = file.ext === '.docx' ? 'Docx 文件閱覽' : 'TXT 文件閱覽';
-  const isTxt = file.ext === '.txt';
   const canEditTxt = !!options.canEditTxt;
   const createdAtLabel = escapeXml(options.createdAtLabel || '');
   const updatedAtLabel = escapeXml(options.updatedAtLabel || '');
@@ -1945,6 +1948,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .meta-hero{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
     .meta-label{font-family:"Noto Serif TC","Microsoft JhengHei","PingFang TC",serif;font-size:16px;line-height:1.25;font-weight:600;color:var(--text)}
     .meta strong{display:block;font-size:clamp(24px,3vw,34px);line-height:1.35}
+    .meta strong.txt-title{font-size:28px;line-height:1.16}
+    .meta-subtitle{margin:12px 0 0;color:var(--muted);font-size:17px;line-height:1.75}
     .meta p{margin:10px 0 0;color:var(--muted);line-height:1.7}
     .meta-times{margin-top:12px;display:grid;gap:4px;color:var(--muted);font-size:14px;line-height:1.6}
     .meta-times span{display:block}
@@ -1964,7 +1969,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .btn-primary{background:var(--accent);color:var(--btn-text);border-color:var(--accent)}
     .btn-plain{box-shadow:none}
     .paper{background:var(--paper);border:1px solid var(--line);border-radius:0;padding:28px 1.6cm 22px;box-shadow:var(--shadow)}
-    pre,.editor{margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.95;font-size:17px;font-family:inherit}
+    pre,.editor{margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.95;font-size:${isTxt ? '16px' : '17px'};font-family:inherit}
     .editor{display:block;width:100%;min-height:0;border:none;outline:none;resize:none;overflow:hidden;background:transparent;color:inherit}
     .status{min-height:22px;margin-top:12px;color:var(--muted);font-size:14px}
     .status[data-state="error"]{color:#a33d2d}
@@ -1992,11 +1997,12 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     <section class="meta">
       <div class="meta-hero meta-top">
         <button class="theme-btn" id="theme-btn" type="button" aria-label="切換顯示模式"></button>
-        <span class="meta-label">${itemTitle}</span>
+        ${isTxt ? '' : `<span class="meta-label">${itemTitle}</span>`}
       </div>
       <div class="meta-head">
         <div class="meta-copy">
-          <strong>${pageTitle}</strong>
+          <strong class="${isTxt ? 'txt-title' : ''}">${pageTitle}</strong>
+          ${isTxt ? `<p class="meta-subtitle">${txtSubtitle}</p>` : ''}
           ${isTxt ? `<div class="meta-times">
             <span>建立時間：<time id="createdAtText">${createdAtLabel}</time></span>
             <span class="inline-time">最後儲存：<time id="updatedAtText">${updatedAtLabel}</time><span id="updatedByWrap"${updatedByLabel ? '' : ' style="display:none"'}>&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;<span id="updatedByText">${updatedByLabel}</span></span></span>
