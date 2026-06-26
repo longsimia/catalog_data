@@ -1967,7 +1967,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       -webkit-font-smoothing:antialiased;
       transition:background .2s ease,color .2s ease;
     }
-    .page{width:min(100%,720px);margin:0 auto;padding:40px 24px 72px}
+    .page{width:min(100%,720px);margin:0 auto;padding:55px 24px 72px}
     .meta{margin-bottom:18px}
     .meta-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
     .meta-head .title{flex:1;min-width:0}
