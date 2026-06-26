@@ -2423,11 +2423,13 @@ function getPreviewShareMeta(req, cfg, resolved) {
   const url = buildAbsoluteUrl(req, `/preview-share/${encodeURIComponent(token)}`, cfg);
   const imagePath = getPreviewShareEmbedImagePath(item, preview, token);
   const imageUrl = imagePath ? buildAbsoluteUrl(req, imagePath, cfg) : '';
+  const isImageShare = preview?.type === 'media' && String(preview?.mimeType || '').toLowerCase().startsWith('image/');
   return {
     title,
     description,
     url,
-    imageUrl
+    imageUrl,
+    isImageShare
   };
 }
 
@@ -3329,21 +3331,22 @@ function renderPreviewShareShell(token = '', options = {}) {
   const safeDescription = escapeMetaContent(meta.description || '公開閱覽');
   const safeUrl = escapeMetaContent(meta.url || '');
   const safeImageUrl = escapeMetaContent(meta.imageUrl || '');
+  const isImageShare = !!meta.isImageShare && !!safeImageUrl;
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${safeTitle}</title>
-  <meta property="og:title" content="${safeTitle}">
-  <meta property="og:description" content="${safeDescription}">
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="公開閱覽">
+  ${isImageShare ? '' : `<meta property="og:title" content="${safeTitle}">`}
+  ${isImageShare ? '' : `<meta property="og:description" content="${safeDescription}">`}
+  <meta property="og:type" content="${isImageShare ? 'image' : 'website'}">
+  ${isImageShare ? '' : `<meta property="og:site_name" content="公開閱覽">`}
   ${safeUrl ? `<meta property="og:url" content="${safeUrl}">` : ''}
   ${safeImageUrl ? `<meta property="og:image" content="${safeImageUrl}">` : ''}
   <meta name="twitter:card" content="${safeImageUrl ? 'summary_large_image' : 'summary'}">
-  <meta name="twitter:title" content="${safeTitle}">
-  <meta name="twitter:description" content="${safeDescription}">
+  ${isImageShare ? '' : `<meta name="twitter:title" content="${safeTitle}">`}
+  ${isImageShare ? '' : `<meta name="twitter:description" content="${safeDescription}">`}
   ${safeImageUrl ? `<meta name="twitter:image" content="${safeImageUrl}">` : ''}
   <style>
     :root{--bg:#111118;--panel:#15151d;--text:#e8e2d6;--muted:#8e8a98;--border:#28283a}
