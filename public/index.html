@@ -776,6 +776,8 @@ body[data-theme="light"] .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;ba
 .preview-card-media .ico{width:1.35rem;height:1.35rem}
 .preview-card-media span{display:block;font-size:.62rem;line-height:1.35;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .preview-card-name{margin-top:2px;font-size:.62rem;line-height:1.35;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preview-card-wrap{position:relative}
+.preview-card-share{position:absolute;top:6px;right:6px;z-index:2;background:rgba(21,21,29,.82);backdrop-filter:blur(4px)}
 .preview-tree{display:grid;gap:.45rem}
 .preview-tree-node{display:grid;gap:.35rem}
 .preview-entry{display:flex;align-items:center;gap:.5rem;width:100%;padding:.58rem .72rem;border:1px solid var(--border);border-radius:var(--r);
@@ -788,6 +790,9 @@ body[data-theme="light"] .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;ba
 .preview-entry.open .arr{transform:rotate(90deg)}
 .preview-entry .arr .ico,.preview-entry .folder-ico .ico{width:1rem;height:1rem}
 .preview-entry .folder-ico{display:inline-flex;align-items:center;justify-content:center;color:var(--gold)}
+.preview-entry-row{display:flex;align-items:stretch;gap:.45rem}
+.preview-entry-main{flex:1}
+.preview-entry-share{flex:0 0 auto;align-self:center}
 .preview-children{display:grid;gap:.35rem;padding-left:1.15rem;border-left:1px solid var(--border);margin-left:.5rem}
 .preview-item{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);text-decoration:none;color:inherit;transition:transform .18s var(--ease),border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
 .preview-item:hover{transform:translateY(-1px);border-color:var(--gold);box-shadow:var(--toast-shadow);background:var(--bg2)}
@@ -1712,6 +1717,7 @@ function icon(name) {
     list: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span>',
     layoutList: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="4" height="4" rx="1"/><rect x="4" y="10" width="4" height="4" rx="1"/><rect x="4" y="15" width="4" height="4" rx="1"/><path d="M11 7h9"/><path d="M11 12h9"/><path d="M11 17h9"/></svg></span>',
     grid: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>',
+    share: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.3"/><circle cx="6" cy="12" r="2.3"/><circle cx="18" cy="19" r="2.3"/><path d="m8.1 11 7.6-4.3"/><path d="m8.1 13 7.6 4.3"/></svg></span>',
     restore: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg></span>'
   };
   return icons[name] || '';
@@ -3605,6 +3611,7 @@ function syncLightboxDownload(item, downloadData, previewData) {
   previewBtn.style.display = (canPreview && previewData?.supported) ? 'inline-flex' : 'none';
   previewBtn.onclick = (canPreview && previewData?.supported)
     ? () => {
+      if (previewData && !previewData.itemId) previewData.itemId = item.id;
       const files = Array.isArray(previewData?.files) ? previewData.files : [];
         if (files.length === 1 && files[0]?.url && !String(files[0]?.relativePath || '').includes('/')) {
           window.open(files[0].url, '_blank', 'noopener');
@@ -3644,6 +3651,21 @@ async function downloadModalFile(index) {
   const file = Array.isArray(data?.files) ? data.files[index] : null;
   if (!file?.url) return;
   await downloadFromUrl(file.url, file.name || 'download');
+}
+
+async function sharePreviewFile(index) {
+  const data = S.previewModalState?.data;
+  const itemId = String(data?.itemId || '').trim();
+  if (!itemId) { toast('找不到可分享的附件', 'err'); return; }
+  try {
+    const resp = await api('POST', `/api/items/${encodeURIComponent(itemId)}/preview-share`, { index: Number(index) || 0 });
+    const sharePath = String(resp?.sharePath || '').trim();
+    const shareUrl = String(resp?.shareUrl || '').trim() || (sharePath ? new URL(sharePath, window.location.origin).toString() : '');
+    if (!shareUrl) throw new Error('分享連結建立失敗');
+    window.open(shareUrl, '_blank', 'noopener');
+  } catch (e) {
+    toast(e.message || '分享連結建立失敗', 'err');
+  }
 }
 
 async function downloadAllFromModal() {
@@ -3690,7 +3712,11 @@ function renderPreviewListEntries(files, mode = 'preview') {
       const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : 0;
       return `<button class="preview-entry" type="button" onclick="downloadModalFile(${fileIndex})" title="${esc(label)}" aria-label="${esc(label)}"><span class="meta">${iconHtml}<span class="name" title="${esc(label)}">${esc(label)}</span></span><span class="subact">下載</span></button>`;
     }
-    return `<a class="preview-entry" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}"><span class="meta">${iconHtml}<span class="name" title="${esc(label)}">${esc(label)}</span></span></a>`;
+    const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : 0;
+    return `<div class="preview-entry-row">
+      <a class="preview-entry preview-entry-main" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}"><span class="meta">${iconHtml}<span class="name" title="${esc(label)}">${esc(label)}</span></span></a>
+      <button class="ib preview-entry-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="開啟線上閱覽公開連結" aria-label="開啟線上閱覽公開連結">${icon('share')}</button>
+    </div>`;
   }).join('');
 }
 function renderPreviewTreeNodes(node, mode = 'preview') {
@@ -3744,10 +3770,13 @@ function renderPreviewFileGrid(files, mode = 'preview') {
         <div class="preview-card-name" title="${esc(label)}">${esc(label)}</div>
       </button>`;
     }
-    return `<a class="preview-card" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}">
-      ${renderPreviewGridThumb(file, label)}
-      <div class="preview-card-name" title="${esc(label)}">${esc(label)}</div>
-    </a>`;
+    return `<div class="preview-card-wrap">
+      <a class="preview-card" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}">
+        ${renderPreviewGridThumb(file, label)}
+        <div class="preview-card-name" title="${esc(label)}">${esc(label)}</div>
+      </a>
+      <button class="ib preview-card-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="開啟線上閱覽公開連結" aria-label="開啟線上閱覽公開連結">${icon('share')}</button>
+    </div>`;
   }).join('');
   return html ? `<div class="preview-grid">${html}</div>` : '';
 }

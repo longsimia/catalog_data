@@ -946,6 +946,7 @@ const readCfg = () => {
     users: [],
     roleConfig: getDefaultRoleConfig(),
     collectionRoleConfig: {},
+    previewShareLinks: {},
     collections: getDefaultCollectionsConfig(),
     userUiPrefs: {},
     googleClientId: '',
@@ -988,6 +989,10 @@ const readCfg = () => {
   }
   if (!cfg.collectionRoleConfig || typeof cfg.collectionRoleConfig !== 'object' || Array.isArray(cfg.collectionRoleConfig)) {
     cfg.collectionRoleConfig = {};
+    dirty = true;
+  }
+  if (!cfg.previewShareLinks || typeof cfg.previewShareLinks !== 'object' || Array.isArray(cfg.previewShareLinks)) {
+    cfg.previewShareLinks = {};
     dirty = true;
   }
   const collections = getCollectionsConfig(cfg);
@@ -2320,6 +2325,44 @@ function resolvePreview(item, previewIndex = 0) {
   };
 }
 
+function resolvePreviewFileIndexByShare(item, share = {}) {
+  const files = getPreviewableFiles(item);
+  const idx = files.findIndex(file => {
+    if (share.fileKey && file?.key === share.fileKey) return true;
+    if (share.relativePath && String(file?.relativePath || '').replace(/\\/g, '/') === share.relativePath) return true;
+    return false;
+  });
+  return idx;
+}
+
+function getPreviewShareEntry(cfg, token = '') {
+  const key = String(token || '').trim();
+  if (!key) return null;
+  const source = cfg?.previewShareLinks?.[key];
+  if (!source || typeof source !== 'object') return null;
+  return {
+    token: key,
+    collection: sanitizeCollectionKey(source.collection, { collections: getCollectionsConfig(cfg) }),
+    itemId: String(source.itemId || '').trim(),
+    fileKey: String(source.fileKey || '').trim(),
+    relativePath: String(source.relativePath || '').replace(/\\/g, '/').trim(),
+    createdAt: Number(source.createdAt) || Date.now()
+  };
+}
+
+function resolveSharedPreview(cfg, token = '') {
+  const share = getPreviewShareEntry(cfg, token);
+  if (!share?.itemId) return null;
+  const cat = readCat(share.collection);
+  const item = (cat.items || []).find(entry => entry.id === share.itemId);
+  if (!item) return null;
+  const previewIndex = resolvePreviewFileIndexByShare(item, share);
+  if (previewIndex < 0) return null;
+  const preview = resolvePreview(item, previewIndex);
+  if (!preview) return null;
+  return { share, item, preview, previewIndex };
+}
+
 function renderPreviewHubPageV2(item, previews, token, collection = 'scenario') {
   const safeTitle = escapeXml(item?.translatedTitle || item?.title || '線上閱覽');
   const cards = previews.map((file, index) => {
@@ -2935,6 +2978,7 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
       supported: true,
       url,
       count: files.length,
+      itemId: item.id,
       title: item.translatedTitle || item.title || '線上閱覽',
       files: files.map((file, index) => ({
         index,
@@ -2949,6 +2993,42 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
     });
   } catch (e) {
     return res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/items/:id/preview-share', auth, (req, res) => {
+  try {
+    const cfg = readCfg();
+    const collection = getC(req);
+    const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, cfg);
+    if (collectionDenied) return res.status(403).json(collectionDenied);
+    if (!hasRolePermission(req.authUser, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限線上閱覽附件' });
+    const cat = readCat(collection);
+    const item = (cat.items || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: '項目不存在' });
+    if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限查看這個項目' });
+    const files = getPreviewableFiles(item).filter(file => fs.existsSync(file.abs));
+    const previewIndex = Number(req.body?.index);
+    const file = files[previewIndex];
+    if (!file) return res.status(404).json({ error: '找不到可分享的附件' });
+    const token = crypto.randomBytes(24).toString('hex');
+    cfg.previewShareLinks = cfg.previewShareLinks && typeof cfg.previewShareLinks === 'object' ? cfg.previewShareLinks : {};
+    cfg.previewShareLinks[token] = {
+      collection,
+      itemId: item.id,
+      fileKey: String(file.key || '').trim(),
+      relativePath: String(file.relativePath || file.name || '').replace(/\\/g, '/').trim(),
+      createdAt: Date.now()
+    };
+    saveCfg(cfg);
+    const sharePath = `/preview-share/${encodeURIComponent(token)}`;
+    return res.json({
+      ok: true,
+      sharePath,
+      shareUrl: `${req.protocol}://${req.get('host')}${sharePath}`
+    });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
   }
 });
 
@@ -3165,12 +3245,56 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
 </html>`;
 }
 
+function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
+  const collection = options.collection || 'scenario';
+  const canEditTxt = !!options.canEditTxt;
+  const previewSavePath = canEditTxt ? withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}`, collection) : '';
+  if (preview.type === 'media') {
+    res.type(preview.mimeType || getPreviewMediaMimeType(path.extname(preview.filename || '')));
+    if (preview.abs) return res.sendFile(preview.abs);
+  }
+  if (preview.type === 'pdf') {
+    setInlinePdfHeaders(res, preview.filename);
+    if (preview.abs) return res.sendFile(preview.abs);
+  }
+  if (preview.type === 'html-file') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(preview.text || '');
+  }
+  const textEditMeta = preview.file?.ext === '.txt' ? getTextEditMeta(item, preview.file.key, preview.file.abs) : null;
+  preview.html = preview.file?.ext === '.docx'
+    ? renderDocxPreviewPage(item, preview.file, preview.blocks || [])
+    : renderTextPreviewPage(item, preview.file, preview.text, {
+        saveUrl: previewSavePath,
+        createdAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.createdAt) : '',
+        updatedAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.savedAt) : '',
+        updatedByLabel: textEditMeta?.savedBy || '',
+        canEditTxt
+      });
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.send(preview.html);
+}
+
 app.get('/preview-open/:id/:index', (req, res) => {
   if (req.params.index === 'list') {
     return res.status(404).send('Not found');
   }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   return res.send(renderPreviewOpenShell(req.params.id, req.params.index, getC(req)));
+});
+
+app.get('/preview-share/:token', (req, res) => {
+  try {
+    const cfg = readCfg();
+    const resolved = resolveSharedPreview(cfg, req.params.token);
+    if (!resolved) return res.status(404).send('找不到分享的線上閱覽檔案');
+    return sendResolvedPreview(res, resolved.item, resolved.preview, resolved.previewIndex, {
+      collection: resolved.share.collection,
+      canEditTxt: false
+    });
+  } catch (e) {
+    return res.status(500).send(e.message);
+  }
 });
 
 app.get('/api/preview/:id/:index', auth, (req, res) => {
@@ -3186,32 +3310,10 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
     const previewIndex = Number(req.params.index) || 0;
     const preview = resolvePreview(item, previewIndex);
     if (!preview) return res.status(415).json({ error: '這個檔案格式目前不支援線上閱覽' });
-    if (preview.type === 'media') {
-      res.type(preview.mimeType || getPreviewMediaMimeType(path.extname(preview.filename || '')));
-      if (preview.abs) return res.sendFile(preview.abs);
-    }
-    if (preview.type === 'pdf') {
-      setInlinePdfHeaders(res, preview.filename);
-      if (preview.abs) return res.sendFile(preview.abs);
-    }
-    if (preview.type === 'html-file') {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.send(preview.text || '');
-    }
-    const textEditMeta = preview.file?.ext === '.txt' ? getTextEditMeta(item, preview.file.key, preview.file.abs) : null;
-    const canEditTxt = preview.file?.ext === '.txt' && canEditTxtPreview(req.authUser, collection);
-    const previewSavePath = withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}`, collection);
-    preview.html = preview.file?.ext === '.docx'
-      ? renderDocxPreviewPage(item, preview.file, preview.blocks || [])
-      : renderTextPreviewPage(item, preview.file, preview.text, {
-          saveUrl: previewSavePath,
-          createdAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.createdAt) : '',
-          updatedAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.savedAt) : '',
-          updatedByLabel: textEditMeta?.savedBy || '',
-      canEditTxt
-        });
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(preview.html);
+    return sendResolvedPreview(res, item, preview, previewIndex, {
+      collection,
+      canEditTxt: preview.file?.ext === '.txt' && canEditTxtPreview(req.authUser, collection)
+    });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
