@@ -1722,13 +1722,13 @@ function getTextEditMeta(item, fileKey, absPath) {
 }
 
 function formatReadOnlyMeta(options = {}) {
-  const createdAtLabel = escapeXml(options.createdAtLabel || '');
   const updatedAtLabel = escapeXml(options.updatedAtLabel || '');
   const updatedByLabel = escapeXml(options.updatedByLabel || '');
-  if (!createdAtLabel && !updatedAtLabel && !updatedByLabel) return '';
+  if (!updatedAtLabel && !updatedByLabel) return '';
   return `<div class="meta-times">
-    <span>建立時間：<time id="createdAtText">${createdAtLabel}</time></span>
-    <span class="inline-time">最後儲存：<time id="updatedAtText">${updatedAtLabel}</time><span id="updatedByWrap"${updatedByLabel ? '' : ' style="display:none"'}>&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;<span id="updatedByText">${updatedByLabel}</span></span></span>
+    <span id="updatedByWrap"${updatedByLabel ? '' : ' style="display:none"'}><span id="updatedByText">${updatedByLabel}</span></span>
+    <span class="meta-dot" id="updatedDot"${updatedByLabel ? '' : ' style="display:none"'} aria-hidden="true"></span>
+    <time id="updatedAtText">${updatedAtLabel}</time>
   </div>`;
 }
 
@@ -1801,7 +1801,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       transition:background .2s ease,color .2s ease;
     }
     .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
     .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .actions{display:flex;align-items:center;gap:10px}
     .icon-btn{
@@ -1810,7 +1810,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     }
     .icon-btn:hover{color:var(--text)}
     .icon{width:18px;height:18px;display:block}
-    .meta{margin-bottom:36px}
+    .meta{margin-bottom:18px}
     .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
     .sub{margin-top:12px;font-size:17px;line-height:1.75;color:var(--muted)}
     .article{
@@ -1843,6 +1843,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .docx-zoom{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.72);z-index:999}
     .docx-zoom.on{display:flex}
     .docx-zoom img{max-width:min(96vw,1400px);max-height:92vh;object-fit:contain;border:1px solid rgba(255,255,255,.18);background:#000}
+    .divider{height:1px;background:var(--line);margin:0 0 36px}
     .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
     @media (max-width: 720px){
       .page{padding:30px 20px 48px}
@@ -1874,6 +1875,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       <h1 class="title">${pageTitle}</h1>
       <div class="sub">${docxSubtitle}</div>
     </header>
+    <div class="divider" aria-hidden="true"></div>
     <article class="article">${blockHtml || '<p class="docx-paragraph docx-empty">&nbsp;</p>'}</article>
     <div class="footer">Read-only preview.</div>
   </main>
@@ -1962,15 +1964,14 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       transition:background .2s ease,color .2s ease;
     }
     .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
     .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
-    .meta{margin-bottom:36px}
+    .meta{margin-bottom:18px}
     .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
     .sub{margin-top:12px;font-size:17px;line-height:1.75;color:var(--muted)}
-    .meta-times{margin-top:12px;display:grid;gap:4px;color:var(--muted);font-size:14px;line-height:1.6}
-    .meta-times span{display:block}
-    .meta-times .inline-time{display:flex;flex-wrap:nowrap;align-items:baseline;gap:0;white-space:nowrap}
-    .meta-times .inline-time time,.meta-times .inline-time #updatedByWrap,.meta-times .inline-time #updatedByText{display:inline;white-space:nowrap}
+    .meta-times{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;font-size:15px;color:var(--muted)}
+    .meta-times time,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
+    .meta-dot{width:3px;height:3px;border-radius:999px;background:currentColor;opacity:.55}
     .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     .icon-btn{
       width:30px;height:30px;border:none;background:transparent;color:var(--muted);
@@ -2004,6 +2005,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .leave-modal-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.7}
     .leave-modal-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}
     .leave-modal-actions button{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:8px 14px;font:inherit;cursor:pointer}
+    .divider{height:1px;background:var(--line);margin:0 0 36px}
     .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
     .article blockquote{margin:1.8em 0;padding-left:18px;border-left:3px solid #d7d7d7;color:#444}
     html[data-theme="dark"] .article blockquote{border-left-color:#8f8679;color:#d2cbc2}
@@ -2039,6 +2041,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       <div class="sub">${txtSubtitle}</div>
       ${metaHtml}
     </header>
+    <div class="divider" aria-hidden="true"></div>
     <article class="article">
       ${isTxt
         ? `<textarea id="editor" class="editor" spellcheck="false"${canEditTxt ? '' : ' readonly'}>${rawBody}</textarea>
@@ -2169,8 +2172,10 @@ function renderTextPreviewPage(item, file, text, options = {}) {
         if (updatedAtText && data.updatedAtLabel) updatedAtText.textContent = data.updatedAtLabel;
         const updatedByText = document.getElementById('updatedByText');
         const updatedByWrap = document.getElementById('updatedByWrap');
+        const updatedDot = document.getElementById('updatedDot');
         if (updatedByText && data.updatedByLabel) updatedByText.textContent = data.updatedByLabel;
         if (updatedByWrap) updatedByWrap.style.display = data.updatedByLabel ? '' : 'none';
+        if (updatedDot) updatedDot.style.display = data.updatedByLabel ? '' : 'none';
       } catch (err) {
         status.dataset.state = 'error';
         status.textContent = err.message || '儲存失敗';
