@@ -2288,6 +2288,7 @@ function resolvePreview(item, previewIndex = 0) {
       filename: file.name,
       label: getPreviewLabel(file),
       mimeType: getPreviewMediaMimeType(file.ext),
+      file,
       abs: file.abs
     };
   }
@@ -2296,6 +2297,7 @@ function resolvePreview(item, previewIndex = 0) {
       type: 'pdf',
       filename: getPreviewLabel(file),
       label: getPreviewLabel(file),
+      file,
       buffer: null,
       abs: file.abs
     };
