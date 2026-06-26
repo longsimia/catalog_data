@@ -1968,7 +1968,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       transition:background .2s ease,color .2s ease;
     }
     .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:17px}
     .topbar-actions{justify-content:flex-end}
     .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .meta{margin-bottom:18px}
