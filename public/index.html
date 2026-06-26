@@ -301,6 +301,8 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 .lb-tg{display:flex;flex-wrap:wrap;gap:.28rem}
 .lb-desc{font-size:.85rem;color:var(--text);line-height:1.75;opacity:.82;white-space:pre-line;margin:0}
 .lb-acts{display:flex;flex-direction:column;gap:.5rem;margin-top:auto;padding-top:.8rem}
+.lb-preview-row{display:flex;align-items:center;gap:.5rem}
+.lb-preview-row .btn{flex:1;min-width:0}
 .lb-acts-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
 .lb-acts-row .btn,.lb-acts-row a{width:100%}
 .lb-acts-row.single{grid-template-columns:minmax(0,1fr)}
@@ -965,7 +967,10 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       </div>
       <div class="lb-acts">
         <a class="btn btn-out" id="lb-src" href="#" target="_blank" rel="noopener">原文連結</a>
-        <button class="btn btn-out" id="lb-preview" type="button">線上閱覽</button>
+        <div class="lb-preview-row">
+          <button class="btn btn-out" id="lb-preview" type="button">線上閱覽</button>
+          <button class="ib preview-entry-share" id="lb-preview-share" type="button" title="開啟線上閱覽公開連結" aria-label="開啟線上閱覽公開連結">${icon('share')}</button>
+        </div>
         <div class="lb-acts-row" id="lb-bottom-actions">
           <button class="btn btn-out" id="lb-edit" type="button">編輯</button>
           <a class="btn btn-gold" id="lb-dl" href="#" download>下載</a>
@@ -3607,6 +3612,7 @@ function syncLightboxDownload(item, downloadData, previewData) {
   const bottomActions = document.getElementById('lb-bottom-actions');
   const canDownload = canRolePermission('downloadFiles');
   const canPreview = canRolePermission('onlinePreview');
+  const previewShareBtn = document.getElementById('lb-preview-share');
   const files = Array.isArray(downloadData?.files) ? downloadData.files : [];
   const hasDownload = canDownload && (!!downloadData?.allUrl || files.length > 0);
   dlBtn.href   = '#';
@@ -3615,6 +3621,8 @@ function syncLightboxDownload(item, downloadData, previewData) {
   dlBtn.toggleAttribute('disabled', !canDownload);
 
   const previewBtn = document.getElementById('lb-preview');
+  const previewFiles = Array.isArray(previewData?.files) ? previewData.files : [];
+  const hasSinglePreviewFile = canPreview && previewData?.supported && previewFiles.length === 1;
   previewBtn.style.display = (canPreview && previewData?.supported) ? 'inline-flex' : 'none';
   previewBtn.onclick = (canPreview && previewData?.supported)
     ? () => {
@@ -3627,6 +3635,12 @@ function syncLightboxDownload(item, downloadData, previewData) {
         openPreviewModal(previewData);
       }
     : null;
+  if (previewShareBtn) {
+    previewShareBtn.style.display = hasSinglePreviewFile ? 'inline-flex' : 'none';
+    previewShareBtn.onclick = hasSinglePreviewFile
+      ? () => sharePreviewFileDirect(previewData?.itemId || item.id, previewFiles[0]?.index || 0)
+      : null;
+  }
 
   const editBtn = document.getElementById('lb-edit');
   editBtn.style.display = getToken() ? 'inline-flex' : 'none';
@@ -3666,6 +3680,20 @@ async function sharePreviewFile(index) {
   if (!itemId) { toast('找不到可分享的附件', 'err'); return; }
   try {
     const resp = await api('POST', `/api/items/${encodeURIComponent(itemId)}/preview-share`, { index: Number(index) || 0 });
+    const sharePath = String(resp?.sharePath || '').trim();
+    const shareUrl = String(resp?.shareUrl || '').trim() || (sharePath ? new URL(sharePath, window.location.origin).toString() : '');
+    if (!shareUrl) throw new Error('分享連結建立失敗');
+    window.open(shareUrl, '_blank', 'noopener');
+  } catch (e) {
+    toast(e.message || '分享連結建立失敗', 'err');
+  }
+}
+
+async function sharePreviewFileDirect(itemId, index) {
+  const safeItemId = String(itemId || '').trim();
+  if (!safeItemId) { toast('找不到可分享的附件', 'err'); return; }
+  try {
+    const resp = await api('POST', `/api/items/${encodeURIComponent(safeItemId)}/preview-share`, { index: Number(index) || 0 });
     const sharePath = String(resp?.sharePath || '').trim();
     const shareUrl = String(resp?.shareUrl || '').trim() || (sharePath ? new URL(sharePath, window.location.origin).toString() : '');
     if (!shareUrl) throw new Error('分享連結建立失敗');
