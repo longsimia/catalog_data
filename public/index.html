@@ -2396,6 +2396,14 @@ function autoGrowTextarea(el) {
   el.style.height = `${el.scrollHeight}px`;
 }
 
+function autoGrowTextareaAfterPaint(el) {
+  if (!el) return;
+  requestAnimationFrame(() => {
+    autoGrowTextarea(el);
+    requestAnimationFrame(() => autoGrowTextarea(el));
+  });
+}
+
 function refreshDescriptionTextareas() {
   autoGrowTextarea(document.getElementById('u-d'));
   autoGrowTextarea(document.getElementById('e-d'));
@@ -7685,8 +7693,8 @@ function openEdit(id) {
   document.getElementById('e-a').value   = item.creator      || item.author || '';
   document.getElementById('e-alt').value = item.subtitle     || item.translatedTitle || '';
   document.getElementById('e-ci').value  = '';
-  document.getElementById('e-d').value   = item.description  || '';
-  autoGrowTextarea(document.getElementById('e-d'));
+  const editDesc = document.getElementById('e-d');
+  editDesc.value = item.description || '';
   document.getElementById('e-url').value = item.sourceUrl    || item.originalUrl || '';
   renderPermissionSelectOptions('e-perm', item.permission || 'public');
   document.getElementById('e-fi-p').value = '';
@@ -7706,6 +7714,7 @@ function openEdit(id) {
     document.getElementById('man-page')?.classList.add('on');
   }
   document.getElementById('edit-mo').classList.add('on');
+  autoGrowTextareaAfterPaint(editDesc);
 }
 
 function closeEdit() {
