@@ -844,6 +844,8 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 
 /* ── RESPONSIVE ── */
 @media(max-width:700px){
+  body::after{content:'';position:fixed;top:0;left:0;right:0;height:70px;z-index:240;pointer-events:none;
+    background:var(--ctrl-bg);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
   .collection-switch{top:calc((70px - 42px) / 2);left:1rem}
   .collection-switch-btn{min-height:42px;padding:0 .82rem}
   .collection-switch-inline .collection-switch-btn{min-height:30px;padding:0 .65rem;font-size:.8rem}
@@ -853,11 +855,11 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   .ctrl{top:70px;min-height:auto;padding:.7rem .85rem}
   .ctrl-view-btn{order:2;flex:0 0 42px}
   .sw{order:1;flex:1 1 calc(100% - 42px - .5rem);min-width:0}
-  .pgsel{width:100%;justify-content:flex-start}
+  .tf{order:3;flex:1 1 0;min-width:0;width:auto;max-width:calc(50% - .25rem)}
+  .pgsel{order:4;width:100%;justify-content:flex-start}
   .page-jump{width:43px}
   .theme-btn{top:calc((70px - 42px) / 2);right:4.5rem;width:42px;height:42px}
   .hbg{top:calc((70px - 42px) / 2);right:1rem;width:42px;height:42px}
-  .tf{order:3;flex:1 1 0;min-width:0;width:auto;max-width:calc(50% - .25rem)}
   .tf-btn{width:100%;min-width:0}
   .tf-panel{left:0;right:auto;min-width:100%;max-width:none}
   .lb-inner{flex-direction:column;overflow-y:auto}
