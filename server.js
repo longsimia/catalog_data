@@ -1817,7 +1817,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word;
     }
     .docx-block + .docx-block{margin-top:0}
-    .docx-paragraph{margin:0 0 1.35em;white-space:pre-wrap;word-break:break-word;line-height:1.92;font-size:16px}
+    .docx-paragraph{margin:0 0 1.35em;white-space:pre-wrap;word-break:break-word;line-height:1.88;font-size:16px}
     .docx-heading-1,.docx-heading-2,.docx-heading-3,.docx-heading-4,.docx-heading-5,.docx-heading-6{font-family:inherit;font-weight:700;line-height:1.35}
     .docx-heading-1,.docx-heading-2{margin:2.4em 0 .9em;font-size:28px}
     .docx-heading-3{margin:2.1em 0 .85em;font-size:24px}
@@ -1844,7 +1844,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .docx-zoom.on{display:flex}
     .docx-zoom img{max-width:min(96vw,1400px);max-height:92vh;object-fit:contain;border:1px solid rgba(255,255,255,.18);background:#000}
     .divider{height:1px;background:var(--line);margin:0 0 36px}
-    .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+    .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted);text-align:center}
     @media (max-width: 720px){
       .page{padding:30px 20px 48px}
       .sub{font-size:16px}
@@ -2006,7 +2006,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .leave-modal-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}
     .leave-modal-actions button{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:8px 14px;font:inherit;cursor:pointer}
     .divider{height:1px;background:var(--line);margin:0 0 36px}
-    .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted)}
+    .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted);text-align:center}
     .article blockquote{margin:1.8em 0;padding-left:18px;border-left:3px solid #d7d7d7;color:#444}
     html[data-theme="dark"] .article blockquote{border-left-color:#8f8679;color:#d2cbc2}
     .article a{color:var(--link);text-decoration:none}
