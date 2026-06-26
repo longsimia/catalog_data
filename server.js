@@ -29,6 +29,7 @@ const CFG_FILE = path.join(DATA, 'config.json');
 const VALID_COLLECTION_MODES = new Set(['scenario', 'image']);
 const ROLE_PERMISSION_KEYS = [
   'onlinePreview',
+  'createPreviewShare',
   'downloadFiles',
   'uploadItems',
   'editCategories',
@@ -794,6 +795,7 @@ function getDefaultRoleConfig() {
       label: '群主',
       permissions: {
         onlinePreview: true,
+        createPreviewShare: true,
         downloadFiles: true,
         uploadItems: true,
         editCategories: true,
@@ -808,6 +810,7 @@ function getDefaultRoleConfig() {
       label: '管理員',
       permissions: {
         onlinePreview: true,
+        createPreviewShare: true,
         downloadFiles: true,
         uploadItems: true,
         editCategories: true,
@@ -832,6 +835,7 @@ function sanitizeRoleKey(value) {
 function normalizeRolePermissions(srcPermissions = {}, fallbackPermissions = getDefaultRoleConfig().admin.permissions) {
   return {
     onlinePreview: srcPermissions?.onlinePreview === undefined ? fallbackPermissions.onlinePreview : !!srcPermissions.onlinePreview,
+    createPreviewShare: srcPermissions?.createPreviewShare === undefined ? fallbackPermissions.createPreviewShare : !!srcPermissions.createPreviewShare,
     downloadFiles: srcPermissions?.downloadFiles === undefined ? fallbackPermissions.downloadFiles : !!srcPermissions.downloadFiles,
     uploadItems: srcPermissions?.uploadItems === undefined ? fallbackPermissions.uploadItems : !!srcPermissions.uploadItems,
     editCategories: srcPermissions?.editCategories === undefined ? fallbackPermissions.editCategories : !!srcPermissions.editCategories,
@@ -2381,6 +2385,26 @@ function resolveSharedPreview(cfg, token = '') {
   return { share, item, preview, previewIndex };
 }
 
+function findExistingPreviewShareToken(existingLinks = {}, target = {}) {
+  const collection = sanitizeCollectionKey(target.collection || 'scenario');
+  const itemId = String(target.itemId || '').trim();
+  const fileKey = String(target.fileKey || '').trim();
+  const relativePath = String(target.relativePath || '').replace(/\\/g, '/').trim();
+  if (!itemId || (!fileKey && !relativePath)) return '';
+  for (const [token, rawEntry] of Object.entries(existingLinks || {})) {
+    if (!rawEntry || typeof rawEntry !== 'object') continue;
+    const entryCollection = sanitizeCollectionKey(rawEntry.collection || 'scenario');
+    if (entryCollection !== collection) continue;
+    if (String(rawEntry.itemId || '').trim() !== itemId) continue;
+    const entryFileKey = String(rawEntry.fileKey || '').trim();
+    const entryRelativePath = String(rawEntry.relativePath || '').replace(/\\/g, '/').trim();
+    if ((fileKey && entryFileKey === fileKey) || (relativePath && entryRelativePath === relativePath)) {
+      return token;
+    }
+  }
+  return '';
+}
+
 function createPreviewShareToken(existingLinks = {}) {
   for (let i = 0; i < 8; i += 1) {
     const token = crypto.randomBytes(9).toString('base64')
@@ -3087,6 +3111,7 @@ app.post('/api/items/:id/preview-share', auth, (req, res) => {
     const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, cfg);
     if (collectionDenied) return res.status(403).json(collectionDenied);
     if (!hasRolePermission(req.authUser, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限線上閱覽附件' });
+    if (!hasRolePermission(req.authUser, 'createPreviewShare', collection)) return res.status(403).json({ error: '你沒有權限建立公開線上閱覽' });
     const cat = readCat(collection);
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).json({ error: '項目不存在' });
@@ -3096,15 +3121,19 @@ app.post('/api/items/:id/preview-share', auth, (req, res) => {
     const file = files[previewIndex];
     if (!file) return res.status(404).json({ error: '找不到可分享的附件' });
     cfg.previewShareLinks = cfg.previewShareLinks && typeof cfg.previewShareLinks === 'object' ? cfg.previewShareLinks : {};
-    const token = createPreviewShareToken(cfg.previewShareLinks);
-    cfg.previewShareLinks[token] = {
+    const shareEntry = {
       collection,
       itemId: item.id,
       fileKey: String(file.key || '').trim(),
       relativePath: String(file.relativePath || file.name || '').replace(/\\/g, '/').trim(),
       createdAt: Date.now()
     };
-    saveCfg(cfg);
+    let token = findExistingPreviewShareToken(cfg.previewShareLinks, shareEntry);
+    if (!token) {
+      token = createPreviewShareToken(cfg.previewShareLinks);
+      cfg.previewShareLinks[token] = shareEntry;
+      saveCfg(cfg);
+    }
     const sharePath = `/preview-share/${encodeURIComponent(token)}`;
     return res.json({
       ok: true,

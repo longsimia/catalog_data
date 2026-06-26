@@ -3613,6 +3613,8 @@ function syncLightboxDownload(item, downloadData, previewData) {
   const bottomActions = document.getElementById('lb-bottom-actions');
   const canDownload = canRolePermission('downloadFiles');
   const canPreview = canRolePermission('onlinePreview');
+  const canCreatePreviewShare = canRolePermission('createPreviewShare');
+  const canEditInfo = canRolePermission('editItemInfo');
   const previewShareBtn = document.getElementById('lb-preview-share');
   const files = Array.isArray(downloadData?.files) ? downloadData.files : [];
   const hasDownload = canDownload && (!!downloadData?.allUrl || files.length > 0);
@@ -3637,16 +3639,16 @@ function syncLightboxDownload(item, downloadData, previewData) {
       }
     : null;
   if (previewShareBtn) {
-    previewShareBtn.style.display = hasSinglePreviewFile ? 'inline-flex' : 'none';
-    previewShareBtn.onclick = hasSinglePreviewFile
+    previewShareBtn.style.display = (hasSinglePreviewFile && canCreatePreviewShare) ? 'inline-flex' : 'none';
+    previewShareBtn.onclick = (hasSinglePreviewFile && canCreatePreviewShare)
       ? () => sharePreviewFileDirect(previewData?.itemId || item.id, previewFiles[0]?.index || 0)
       : null;
   }
 
   const editBtn = document.getElementById('lb-edit');
-  editBtn.style.display = getToken() ? 'inline-flex' : 'none';
+  editBtn.style.display = (getToken() && canEditInfo) ? 'inline-flex' : 'none';
   editBtn.onclick = () => {
-    if (!getToken()) return;
+    if (!getToken() || !canEditInfo) return;
     openEdit(item.id);
   };
 
@@ -3741,6 +3743,7 @@ function shouldRenderPreviewAsGrid(file) {
 }
 function renderPreviewListEntries(files, mode = 'preview') {
   const list = Array.isArray(files) ? files : [];
+  const canCreatePreviewShare = canRolePermission('createPreviewShare');
   return list.map(file => {
     const label = file?.treeName || file?.name || '未命名附件';
     const iconHtml = `<span class="ico" aria-hidden="true">${icon(getPreviewTreeIconName(file))}</span>`;
@@ -3751,7 +3754,7 @@ function renderPreviewListEntries(files, mode = 'preview') {
     const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : 0;
     return `<div class="preview-entry-row">
       <a class="preview-entry preview-entry-main" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}"><span class="meta">${iconHtml}<span class="name" title="${esc(label)}">${esc(label)}</span></span></a>
-      <button class="ib preview-entry-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="公開線上閱覽" aria-label="公開線上閱覽">${icon('share')}</button>
+      ${canCreatePreviewShare ? `<button class="ib preview-entry-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="公開線上閱覽" aria-label="公開線上閱覽">${icon('share')}</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -3797,6 +3800,7 @@ function renderPreviewGridThumb(file, label) {
 }
 function renderPreviewFileGrid(files, mode = 'preview') {
   const list = Array.isArray(files) ? files : [];
+  const canCreatePreviewShare = canRolePermission('createPreviewShare');
   const html = list.map((file, index) => {
     const label = file?.treeName || file?.name || `image-${index + 1}`;
     const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : index;
@@ -3811,7 +3815,7 @@ function renderPreviewFileGrid(files, mode = 'preview') {
         ${renderPreviewGridThumb(file, label)}
         <div class="preview-card-name" title="${esc(label)}">${esc(label)}</div>
       </a>
-      <button class="ib preview-card-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="公開線上閱覽" aria-label="公開線上閱覽">${icon('share')}</button>
+      ${canCreatePreviewShare ? `<button class="ib preview-card-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="公開線上閱覽" aria-label="公開線上閱覽">${icon('share')}</button>` : ''}
     </div>`;
   }).join('');
   return html ? `<div class="preview-grid">${html}</div>` : '';
@@ -4463,6 +4467,7 @@ function getRolePermissionGroups() {
   return [
     ['項目內容', [
       ['onlinePreview', '線上閱覽'],
+      ['createPreviewShare', '建立公開閱覽'],
       ['downloadFiles', '下載檔案'],
       ['uploadItems', '上傳項目'],
       ['editItemInfo', '編輯項目資訊'],
@@ -4570,6 +4575,7 @@ function addRoleConfigRow() {
     label,
     permissions: {
       onlinePreview: false,
+      createPreviewShare: false,
       downloadFiles: false,
       uploadItems: false,
       editItemInfo: false,
