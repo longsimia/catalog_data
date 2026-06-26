@@ -2388,6 +2388,49 @@ function applyNoContextMenuToHtml(html = '') {
   return `${html}${script}`;
 }
 
+function getRequestOrigin(req, cfg = null) {
+  const uploadOrigin = String(cfg?.uploadOrigin || '').trim();
+  if (uploadOrigin) return uploadOrigin;
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+function buildAbsoluteUrl(req, targetPath = '', cfg = null) {
+  return new URL(String(targetPath || ''), `${getRequestOrigin(req, cfg)}/`).toString();
+}
+
+function escapeMetaContent(value) {
+  return escapeXml(String(value || '')).replace(/\r?\n/g, ' ').trim();
+}
+
+function getPreviewShareEmbedImagePath(item = {}, preview = null, token = '') {
+  const imageExts = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+  const previewFile = preview?.file || null;
+  if (previewFile?.key && imageExts.has(String(previewFile.ext || '').toLowerCase())) {
+    return getThumbUrl(previewFile.key) || `/api/preview-share/${encodeURIComponent(token)}`;
+  }
+  const thumbKeys = collectThumbSourceKeys(item);
+  if (thumbKeys.length) return getThumbUrl(thumbKeys[0]);
+  return '';
+}
+
+function getPreviewShareMeta(req, cfg, resolved) {
+  const item = resolved?.item || {};
+  const preview = resolved?.preview || {};
+  const token = String(resolved?.share?.token || '').trim();
+  const title = item.translatedTitle || item.title || preview.label || preview.filename || '公開閱覽';
+  const fileLabel = preview.label || preview.filename || '附件';
+  const description = `${title}｜${fileLabel}`;
+  const url = buildAbsoluteUrl(req, `/preview-share/${encodeURIComponent(token)}`, cfg);
+  const imagePath = getPreviewShareEmbedImagePath(item, preview, token);
+  const imageUrl = imagePath ? buildAbsoluteUrl(req, imagePath, cfg) : '';
+  return {
+    title,
+    description,
+    url,
+    imageUrl
+  };
+}
+
 function renderPreviewHubPageV2(item, previews, token, collection = 'scenario') {
   const safeTitle = escapeXml(item?.translatedTitle || item?.title || '線上閱覽');
   const cards = previews.map((file, index) => {
@@ -3279,14 +3322,29 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
 </html>`;
 }
 
-function renderPreviewShareShell(token = '') {
-  const safeToken = escapeXml(String(token || '').trim());
+function renderPreviewShareShell(token = '', options = {}) {
+  const meta = options.meta || {};
+  const pageTitle = meta.title ? `${meta.title}｜公開閱覽` : '公開閱覽';
+  const safeTitle = escapeMetaContent(pageTitle);
+  const safeDescription = escapeMetaContent(meta.description || '公開閱覽');
+  const safeUrl = escapeMetaContent(meta.url || '');
+  const safeImageUrl = escapeMetaContent(meta.imageUrl || '');
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>公開閱覽</title>
+  <title>${safeTitle}</title>
+  <meta property="og:title" content="${safeTitle}">
+  <meta property="og:description" content="${safeDescription}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="公開閱覽">
+  ${safeUrl ? `<meta property="og:url" content="${safeUrl}">` : ''}
+  ${safeImageUrl ? `<meta property="og:image" content="${safeImageUrl}">` : ''}
+  <meta name="twitter:card" content="${safeImageUrl ? 'summary_large_image' : 'summary'}">
+  <meta name="twitter:title" content="${safeTitle}">
+  <meta name="twitter:description" content="${safeDescription}">
+  ${safeImageUrl ? `<meta name="twitter:image" content="${safeImageUrl}">` : ''}
   <style>
     :root{--bg:#111118;--panel:#15151d;--text:#e8e2d6;--muted:#8e8a98;--border:#28283a}
     html{color-scheme:dark}
@@ -3456,7 +3514,9 @@ app.get('/preview-share/:token', (req, res) => {
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).send('找不到分享的線上閱覽檔案');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(renderPreviewShareShell(req.params.token));
+    return res.send(renderPreviewShareShell(req.params.token, {
+      meta: getPreviewShareMeta(req, cfg, resolved)
+    }));
   } catch (e) {
     return res.status(500).send(e.message);
   }
