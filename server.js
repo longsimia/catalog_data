@@ -1769,9 +1769,9 @@ function normalizePreviewText(text) {
 function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
   const previewLabel = getPreviewLabel(file);
   const docxMainTitleRaw = path.parse(file?.name || path.basename(file?.key || 'document')).name || previewLabel;
-  const docxSubtitleRaw = item?.translatedTitle || item?.title || docxMainTitleRaw;
+  const docxMetaTitleRaw = item?.translatedTitle || item?.title || docxMainTitleRaw;
   const pageTitle = escapeXml(docxMainTitleRaw);
-  const docxSubtitle = escapeXml(docxSubtitleRaw);
+  const docxMetaTitle = escapeXml(docxMetaTitleRaw);
   const kind = 'Docx 文件閱覽';
   const blockHtml = blocks.map((block, idx) => {
     if (block.type === 'pagebreak') return `<hr class="docx-page-divider" data-idx="${idx}">`;
@@ -1866,14 +1866,13 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
 <body>
   <main class="page">
     <div class="topbar">
-      <div class="brand">Docx Preview</div>
+      <div class="brand">${docxMetaTitle}</div>
       <div class="actions">
         <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
       </div>
     </div>
     <header class="meta">
       <h1 class="title">${pageTitle}</h1>
-      <div class="sub">${docxSubtitle}</div>
     </header>
     <div class="divider" aria-hidden="true"></div>
     <article class="article">${blockHtml || '<p class="docx-paragraph docx-empty">&nbsp;</p>'}</article>
@@ -1934,9 +1933,9 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   const isTxt = file.ext === '.txt';
   const previewLabel = getPreviewLabel(file);
   const txtMainTitleRaw = path.parse(file?.name || path.basename(file?.key || 'document')).name || previewLabel;
-  const txtSubtitleRaw = item?.translatedTitle || item?.title || txtMainTitleRaw;
+  const txtMetaTitleRaw = item?.translatedTitle || item?.title || txtMainTitleRaw;
   const pageTitle = escapeXml(isTxt ? txtMainTitleRaw : previewLabel);
-  const txtSubtitle = escapeXml(txtSubtitleRaw);
+  const txtMetaTitle = escapeXml(txtMetaTitleRaw);
   const rawBody = escapeXml(String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
   const displayBody = rawBody || escapeXml(normalizePreviewText(text));
   const canEditTxt = !!options.canEditTxt;
@@ -2030,7 +2029,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
 <body>
   <main class="page">
     <div class="topbar">
-      <div class="brand">Text Preview</div>
+      <div class="brand">${txtMetaTitle}</div>
       <div class="actions">
         ${isTxt && canEditTxt ? `<button type="button" class="save-btn" id="saveBtn" title="會直接覆寫雲端上的原始檔案">儲存</button>` : ''}
         <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
@@ -2038,7 +2037,6 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     </div>
     <header class="meta">
       <h1 class="title">${pageTitle}</h1>
-      <div class="sub">${txtSubtitle}</div>
       ${metaHtml}
     </header>
     <div class="divider" aria-hidden="true"></div>
