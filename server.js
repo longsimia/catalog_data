@@ -2016,7 +2016,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .article a{color:var(--link);text-decoration:none}
     .article a:hover{text-decoration:underline}
     @media (max-width: 720px){
-      .page{padding:15px 20px 48px}
+      .page{padding:34.5px 20px 48px}
       .meta-head{gap:12px}
       .article,.article-body,.editor{font-size:16px;line-height:1.88}
     }
