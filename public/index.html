@@ -837,24 +837,29 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 @media(max-width:700px){
   .collection-switch{top:calc((70px - 42px) / 2);left:1rem}
   .collection-switch-btn{min-height:42px;padding:0 .82rem}
+  .collection-switch-inline .collection-switch-btn{min-height:30px;padding:0 .65rem;font-size:.8rem}
   .collection-switch-menu{max-width:min(88vw,320px)}
   .collection-add-row{flex-wrap:wrap}
   .collection-add-row .fc{flex:1 0 100%;max-width:none}
   .ctrl{min-height:auto;padding:.7rem .85rem}
   .ctrl-view-btn{flex:0 0 42px}
-  .sw{flex-basis:100%}
+  .sw{flex:1 1 0;min-width:0}
   .pgsel{width:100%;justify-content:flex-start}
   .page-jump{width:43px}
   .theme-btn{top:calc((70px - 42px) / 2);right:4.5rem;width:42px;height:42px}
   .hbg{top:calc((70px - 42px) / 2);right:1rem;width:42px;height:42px}
-  .tf{width:100%}
-  .tf-btn{width:100%}
+  .tf{flex:1 1 0;min-width:0;width:auto;max-width:calc(50% - .25rem)}
+  .tf-btn{width:100%;min-width:0}
   .tf-panel{left:0;right:auto;min-width:100%;max-width:none}
-  .lb-inner{flex-direction:column}
+  .lb-inner{flex-direction:column;overflow-y:auto}
   .lb-vis{flex:0 0 54vh}
   .lb-slide{padding:1.8rem 2.5rem}
-  .lb-info{flex:0 0 auto;width:100%;max-width:none;border-left:none;border-top:1px solid var(--border);padding:1rem 1.2rem 1.2rem}
+  .lb-info{flex:0 0 auto;width:100%;max-width:none;border-left:none;border-top:1px solid var(--border);padding:1rem 1.2rem 1.2rem;overflow-y:visible}
   .lb-head{top:-1rem;margin:-1rem -1.2rem 0;padding:1rem 1.2rem .75rem}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+  #auth-users-list .fc,
+  #auth-users-list .fs{font-size:.72rem}
+  #auth-users-list .fc::placeholder{font-size:.68rem}
   .mp-view-btns{flex-wrap:wrap;justify-content:flex-end}
   .adm-tabs{flex-wrap:wrap;gap:.3rem}
   .adm-tabs .atb{flex:1 0 auto;justify-content:center;font-size:.78rem}
