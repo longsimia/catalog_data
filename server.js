@@ -1811,8 +1811,9 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .icon-btn:hover{color:var(--text)}
     .icon{width:18px;height:18px;display:block}
     .meta{margin-bottom:18px}
+    .title-row{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
     .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
-    .sub{margin-top:12px;font-size:17px;line-height:1.75;color:var(--muted)}
+    .sub{font-size:17px;line-height:1.75;color:var(--muted)}
     .article{
       font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word;
     }
@@ -1847,6 +1848,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted);text-align:center}
     @media (max-width: 720px){
       .page{padding:30px 20px 48px}
+      .title-row{gap:10px}
       .sub{font-size:16px}
       .docx-heading-1,.docx-heading-2{font-size:24px}
       .docx-heading-3{font-size:20px}
@@ -1872,7 +1874,10 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       </div>
     </div>
     <header class="meta">
-      <h1 class="title">${pageTitle}</h1>
+      <div class="title-row">
+        <h1 class="title">${pageTitle}</h1>
+        <div class="sub">${docxMetaTitle}</div>
+      </div>
     </header>
     <div class="divider" aria-hidden="true"></div>
     <article class="article">${blockHtml || '<p class="docx-paragraph docx-empty">&nbsp;</p>'}</article>
@@ -1966,8 +1971,9 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
     .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .meta{margin-bottom:18px}
+    .title-row{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
     .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
-    .sub{margin-top:12px;font-size:17px;line-height:1.75;color:var(--muted)}
+    .sub{font-size:17px;line-height:1.75;color:var(--muted)}
     .meta-times{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;font-size:15px;color:var(--muted)}
     .meta-times time,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
     .meta-dot{width:3px;height:3px;border-radius:999px;background:currentColor;opacity:.55}
@@ -2012,6 +2018,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .article a:hover{text-decoration:underline}
     @media (max-width: 720px){
       .page{padding:30px 20px 48px}
+      .title-row{gap:10px}
       .sub{font-size:16px}
       .article,.article-body,.editor{font-size:16px;line-height:1.88}
     }
@@ -2036,7 +2043,10 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       </div>
     </div>
     <header class="meta">
-      <h1 class="title">${pageTitle}</h1>
+      <div class="title-row">
+        <h1 class="title">${pageTitle}</h1>
+        <div class="sub">${txtMetaTitle}</div>
+      </div>
       ${metaHtml}
     </header>
     <div class="divider" aria-hidden="true"></div>
