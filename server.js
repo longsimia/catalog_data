@@ -2363,6 +2363,17 @@ function resolveSharedPreview(cfg, token = '') {
   return { share, item, preview, previewIndex };
 }
 
+function createPreviewShareToken(existingLinks = {}) {
+  for (let i = 0; i < 8; i += 1) {
+    const token = crypto.randomBytes(9).toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/g, '');
+    if (token && !existingLinks[token]) return token;
+  }
+  return crypto.randomBytes(12).toString('hex');
+}
+
 function renderPreviewHubPageV2(item, previews, token, collection = 'scenario') {
   const safeTitle = escapeXml(item?.translatedTitle || item?.title || '線上閱覽');
   const cards = previews.map((file, index) => {
@@ -3011,8 +3022,8 @@ app.post('/api/items/:id/preview-share', auth, (req, res) => {
     const previewIndex = Number(req.body?.index);
     const file = files[previewIndex];
     if (!file) return res.status(404).json({ error: '找不到可分享的附件' });
-    const token = crypto.randomBytes(24).toString('hex');
     cfg.previewShareLinks = cfg.previewShareLinks && typeof cfg.previewShareLinks === 'object' ? cfg.previewShareLinks : {};
+    const token = createPreviewShareToken(cfg.previewShareLinks);
     cfg.previewShareLinks[token] = {
       collection,
       itemId: item.id,

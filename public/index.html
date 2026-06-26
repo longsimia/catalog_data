@@ -777,7 +777,9 @@ body[data-theme="light"] .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;ba
 .preview-card-media span{display:block;font-size:.62rem;line-height:1.35;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .preview-card-name{margin-top:2px;font-size:.62rem;line-height:1.35;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .preview-card-wrap{position:relative}
-.preview-card-share{position:absolute;top:6px;right:6px;z-index:2;background:rgba(21,21,29,.82);backdrop-filter:blur(4px)}
+.preview-card-share{position:absolute;top:6px;right:6px;z-index:2;width:21px;height:21px;border-radius:10px;background:transparent;color:var(--muted);border-color:var(--border);backdrop-filter:none}
+.preview-card-share:hover{background:transparent;color:var(--gold);border-color:var(--gold)}
+.preview-card-share .ico{transform:scale(.7)}
 .preview-tree{display:grid;gap:.45rem}
 .preview-tree-node{display:grid;gap:.35rem}
 .preview-entry{display:flex;align-items:center;gap:.5rem;width:100%;padding:.58rem .72rem;border:1px solid var(--border);border-radius:var(--r);
