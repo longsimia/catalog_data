@@ -279,10 +279,10 @@ body[data-collection-mode="image"] .card-title.empty{visibility:hidden}
 .lb-x:hover{outline-color:var(--gold);background:rgba(50,38,10,.7)}
 .lb-inner{display:flex;width:100%;height:100%}
 .lb-vis{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
-.lb-tw{flex:1;overflow:hidden;position:relative}
+.lb-tw{flex:1;overflow:hidden;position:relative;touch-action:pan-y pinch-zoom}
 .lb-track{display:flex;height:100%;transition:transform .32s var(--ease)}
 .lb-slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:3rem 4rem}
-.lb-slide img,.lb-slide video{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;border:1px solid var(--gdim);border-radius:4px}
+.lb-slide img,.lb-slide video{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;border:1px solid var(--gdim);border-radius:4px;-webkit-user-drag:none;user-select:none}
 .lb-slide audio{width:min(720px,100%);max-width:100%}
 .lb-slide-media-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8rem;color:var(--muted);font-size:.92rem}
 .lb-slide-media-empty .ico{width:1.8rem;height:1.8rem;color:var(--gold)}
@@ -883,18 +883,19 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   .tf-btn{width:100%;min-width:0}
   .tf-panel{left:0;right:auto;min-width:100%;max-width:none}
   .lb{overflow:hidden}
-  .lb-inner{flex-direction:column;width:100%;max-width:100%;height:100dvh;overflow:hidden}
+  .lb-inner{flex-direction:column;width:100%;max-width:100%;height:100dvh;overflow-y:auto;overflow-x:hidden}
   .lb-vis{flex:0 0 auto;height:min(52dvh,420px);min-height:260px}
   .lb-tw{min-height:0}
   .lb-slide{padding:.9rem .9rem 2rem}
   .lb-slide img,.lb-slide video{border-radius:8px}
   .lb-nav{display:none !important}
   .lb-dots{bottom:.55rem}
-  .lb-info{flex:1 1 auto;width:100%;max-width:100%;min-width:0;border-left:none;border-top:1px solid var(--border);padding:1rem 1rem 1.15rem;overflow-y:auto;overflow-x:hidden}
+  .lb-info{flex:0 0 auto;width:100%;max-width:100%;min-width:0;border-left:none;border-top:1px solid var(--border);padding:1rem 1rem 1.15rem;overflow:visible}
+  body[data-collection-mode="image"] .lb-info{flex:0 0 auto;width:100%;max-width:100%}
   .lb-head{position:relative;top:auto;margin:0 0 .45rem;padding:0 0 .25rem;min-width:0}
   .lb-title-main,.lb-meta,.lb-desc,.lb-a,.lb-tg{min-width:0}
   .lb-title-row{gap:.75rem}
-  .lb-x{transform:none;width:40px;height:40px;background:var(--card);outline-color:var(--border);flex:0 0 40px}
+  .lb-x{transform:none;width:40px;height:40px;background:var(--card);outline-color:var(--border);color:var(--text);flex:0 0 40px}
   .lb-t{font-size:1.02rem}
   .lb-meta{margin-top:0}
   .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
@@ -1582,7 +1583,7 @@ const S = {
   hostUsage: null,
   previewModalState: null,
   previewTreeOpen: {},
-  dragIdx: null, dragOverIdx: null, dragOverPos: null, justMovedId: null, _tx: 0, manPageOpen: false,
+  dragIdx: null, dragOverIdx: null, dragOverPos: null, justMovedId: null, _tx: 0, _ty: 0, manPageOpen: false,
   tagEditIdx: null, catEditIdx: null, prevDragIdx: null, ePrevDragIdx: null, tagSuggestIdx: -1, authorSuggestIdx: -1,
   tagDragOverIdx: null, tagDragOverPos: null, tagJustMoved: null,
   catDragOverIdx: null, catDragOverPos: null, catJustMoved: null,
@@ -3688,9 +3689,27 @@ async function openLb(id, options = {}) {
   document.body.style.overflow = 'hidden';
   updateShareUrl(id);
 
-  const vis = document.querySelector('.lb-vis');
-  vis.ontouchstart = e => { S._tx = e.touches[0].clientX; };
-  vis.ontouchend   = e => { if (Math.abs(S._tx - e.changedTouches[0].clientX) > 40) lbN(S._tx > e.changedTouches[0].clientX ? 1 : -1); };
+  const touchArea = document.querySelector('.lb-tw');
+  if (touchArea) {
+    touchArea.ontouchstart = e => {
+      const touch = e.touches?.[0];
+      if (!touch) return;
+      S._tx = touch.clientX;
+      S._ty = touch.clientY;
+    };
+    touchArea.ontouchend = e => {
+      const touch = e.changedTouches?.[0];
+      if (!touch) return;
+      const dx = touch.clientX - S._tx;
+      const dy = touch.clientY - S._ty;
+      if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy)) return;
+      lbN(dx < 0 ? 1 : -1);
+    };
+    touchArea.ontouchcancel = () => {
+      S._tx = 0;
+      S._ty = 0;
+    };
+  }
 
   const [downloadData, previewData] = await Promise.all([
     getDownloadDataForItem(item),
