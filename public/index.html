@@ -737,9 +737,9 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 html:not([data-theme="dark"]) .perm-badge.owner{border-color:#c79b9b;color:#9b5858;background:rgba(199,155,155,.12)}
 html:not([data-theme="dark"]) .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;background:rgba(141,106,67,.08)}
 .cover-perm-badge{position:absolute;top:.46rem;right:.46rem;z-index:2;max-width:calc(100% - .92rem)}
-.cover-perm-badge .perm-badge{max-width:100%;background:rgba(255,248,239,.78);box-shadow:0 3px 10px rgba(0,0,0,.08);backdrop-filter:blur(8px)}
-.cover-perm-badge .perm-badge.owner{background:rgba(255,244,244,.8)}
-.cover-perm-badge .perm-badge.admin{background:rgba(255,249,235,.8)}
+.cover-perm-badge .perm-badge{max-width:100%;background:rgba(247,239,220,.94);box-shadow:0 3px 10px rgba(0,0,0,.08);backdrop-filter:blur(8px)}
+.cover-perm-badge .perm-badge.owner{background:rgba(248,228,228,.94)}
+.cover-perm-badge .perm-badge.admin{background:rgba(248,239,214,.95)}
 html[data-theme="dark"] .cover-perm-badge .perm-badge{background:rgba(24,18,12,.78);box-shadow:0 6px 18px rgba(0,0,0,.24)}
 html[data-theme="dark"] .cover-perm-badge .perm-badge.owner{background:rgba(55,28,28,.82)}
 html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,42,20,.82)}
@@ -3451,8 +3451,8 @@ function renderCategoryFilter() {
 function renderManCategoryFilter() {
   const wrap = document.getElementById('mp-cat-filter');
   if (!wrap) return;
-  const all = (S.cat.categories || []).slice();
-  S.MF.cats = (S.MF.cats || []).filter(c => all.includes(c));
+  const all = getGalleryCategoryFilterOptions();
+  S.MF.cats = (S.MF.cats || []).filter(c => c === PRIVATE_CATEGORY_FILTER_KEY ? all.includes(PRIVATE_CATEGORY_FILTER_KEY) : all.includes(c));
   const label = S.MF.cats.length ? `已選 ${S.MF.cats.length} 個類別` : '類別篩選';
   wrap.innerHTML =
     `<button class="btn btn-out tf-btn" type="button" onclick="toggleManCategoryFilter(event)">
@@ -3464,7 +3464,7 @@ function renderManCategoryFilter() {
       ${all.length
         ? all.map(c => `<label class="tf-opt">
             <input type="checkbox" ${S.MF.cats.includes(c) ? 'checked' : ''} onchange="togManCategory('${esc(c)}')">
-            <span>${esc(c)}</span>
+            <span>${esc(getCategoryFilterOptionLabel(c))}</span>
           </label>`).join('')
         : '<div class="tf-empty">目前沒有可篩選的類別</div>'}
     </div>`;
@@ -6723,7 +6723,11 @@ function manRowHtml(item, i, total, top) {
         onblur="commitCardOrderInput(this, '${item.id}')">
       <span class="dh" title="拖曳排序" style="${canEditOrder ? '' : 'opacity:.35;cursor:not-allowed'}">${icon('grip')}</span>
     ${th?.src && th.kind === 'image'
-      ? `<img class="mth" src="${esc(th.src)}" loading="lazy" onerror="this.style.display='none'">`
+      ? (() => {
+          const displaySrc = th.thumbSrc || th.src;
+          const fallbackAttrs = imgThumbFallbackAttrs(displaySrc, th.src);
+          return `<img class="mth" src="${esc(displaySrc)}" loading="lazy"${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
+        })()
       : th?.src && th.kind === 'video'
       ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"></video>`
       : th?.src && th.kind === 'audio'
@@ -6771,7 +6775,11 @@ function manPageListRowHtml(item, i, total, top) {
       onblur="commitCardOrderInput(this, '${item.id}')">
     <input type="checkbox" class="mi-chk" ${sel ? 'checked' : ''} onclick="event.stopPropagation();mpClick(event,'${item.id}',${i},'toggle')" tabindex="-1" aria-label="選取">
     <span class="dh" title="${canDrag ? '拖曳排序' : hasManActiveFilters() ? '篩選或搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
-    ${th?.src && th.kind === 'image' ? `<img class="mth" src="${esc(th.src)}" loading="lazy" onerror="this.style.display='none'">` :
+    ${th?.src && th.kind === 'image' ? (() => {
+        const displaySrc = th.thumbSrc || th.src;
+        const fallbackAttrs = imgThumbFallbackAttrs(displaySrc, th.src);
+        return `<img class="mth" src="${esc(displaySrc)}" loading="lazy"${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
+      })() :
       th?.src && th.kind === 'video' ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"></video>` :
       th?.src && th.kind === 'audio' ? `<div class="mth" style="display:flex;align-items:center;justify-content:center;color:var(--gold)">${icon('audio')}</div>` :
       '<div class="mth"></div>'}
@@ -6805,7 +6813,11 @@ function manPageGridCardHtml(item, i) {
     <input type="checkbox" class="mp-gc-chk" ${sel ? 'checked' : ''} onclick="event.stopPropagation();mpClick(event,'${item.id}',${i},'toggle')" tabindex="-1" aria-label="選取">
     <span class="mp-gc-grip dh" title="${canDrag ? '拖曳排序' : hasManActiveFilters() ? '篩選或搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
     ${coverBadge}
-    ${th?.src && th.kind === 'image' ? `<img class="mp-gc-img" src="${esc(th.src)}" loading="lazy" onerror="this.style.display='none'">` :
+    ${th?.src && th.kind === 'image' ? (() => {
+        const displaySrc = th.thumbSrc || th.src;
+        const fallbackAttrs = imgThumbFallbackAttrs(displaySrc, th.src);
+        return `<img class="mp-gc-img" src="${esc(displaySrc)}" loading="lazy"${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
+      })() :
       th?.src && th.kind === 'video' ? `<video class="mp-gc-img" src="${esc(th.src)}" muted playsinline preload="metadata"></video>` :
       `<div class="mp-gc-no-img">${icon(th?.kind === 'audio' ? 'audio' : 'image')}</div>`}
     <div class="mp-gc-info">
@@ -6841,9 +6853,11 @@ function getManFilteredItems() {
   const q = (S.mpQ || '').toLowerCase().trim();
   const cats = S.MF.cats || [];
   const tags = S.MF.tags || [];
+  const hasPrivateFilter = cats.includes(PRIVATE_CATEGORY_FILTER_KEY);
+  const selectedCats = cats.filter(cat => cat !== PRIVATE_CATEGORY_FILTER_KEY);
   if (q) {
     items = items.filter(item =>
-    (item.title || '').toLowerCase().includes(q) ||
+      (item.title || '').toLowerCase().includes(q) ||
     (item.subtitle || '').toLowerCase().includes(q) ||
     (item.author || item.creator || '').toLowerCase().includes(q) ||
     (item.tags || []).some(t => t.toLowerCase().includes(q))
@@ -6853,7 +6867,8 @@ function getManFilteredItems() {
     items = items.filter(item => {
       const itemCats = getItemCategories(item);
       const itemTags = item.tags || [];
-      const catMatch = cats.length > 0 && cats.some(c => itemCats.includes(c));
+      const catMatch = (selectedCats.length > 0 && selectedCats.some(c => itemCats.includes(c)))
+        || (hasPrivateFilter && isPrivateItemPermission(item.permission));
       const tagMatch = tags.length > 0 && tags.some(t => itemTags.includes(t));
       return catMatch || tagMatch;
     });
