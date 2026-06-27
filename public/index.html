@@ -1631,7 +1631,8 @@ const S = {
   mpMarqueeIgnoreClickUntil: 0,
   manPendingTrash: new Set(),
   saveTrashIds: [],
-  batchDeleteIds: []
+  batchDeleteIds: [],
+  catalogViewSaveTimer: null
 };
 const IMG_EXTS = new Set(['jpg','jpeg','png','gif','webp','avif','bmp','svg']);
 function isImageFile(name) {
@@ -1655,6 +1656,57 @@ const setTheme = theme => localStorage.setItem('theme-mode', theme);
 const getGalleryView = () => localStorage.getItem('gallery-view') === 'list' ? 'list' : 'grid';
 const setGalleryViewStorage = view => localStorage.setItem('gallery-view', view === 'list' ? 'list' : 'grid');
 const setCollectionStorage = value => localStorage.setItem('catalog-coll', value || 'scenario');
+const CATALOG_VIEW_STATE_KEY = 'catalog-view-state';
+
+function getCatalogViewStateMap() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CATALOG_VIEW_STATE_KEY) || '{}');
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  } catch {
+    return {};
+  }
+}
+function getCatalogViewState(collection = S.collection) {
+  const key = sanitizeCollectionKey(collection);
+  const map = getCatalogViewStateMap();
+  const state = map[key];
+  if (!state || typeof state !== 'object') return null;
+  return {
+    page: Math.max(1, Number(state.page) || 1),
+    scrollY: Math.max(0, Number(state.scrollY) || 0)
+  };
+}
+function saveCatalogViewState(partial = {}, collection = S.collection) {
+  const key = sanitizeCollectionKey(collection);
+  const map = getCatalogViewStateMap();
+  const prev = map[key] && typeof map[key] === 'object' ? map[key] : {};
+  map[key] = {
+    page: Math.max(1, Number(partial.page ?? prev.page) || 1),
+    scrollY: Math.max(0, Number(partial.scrollY ?? prev.scrollY) || 0)
+  };
+  localStorage.setItem(CATALOG_VIEW_STATE_KEY, JSON.stringify(map));
+  return map[key];
+}
+function persistCurrentCatalogScroll() {
+  saveCatalogViewState({ scrollY: Math.max(window.scrollY || window.pageYOffset || 0, 0) });
+}
+function scheduleCatalogScrollPersistence() {
+  clearTimeout(S.catalogViewSaveTimer);
+  S.catalogViewSaveTimer = setTimeout(() => {
+    S.catalogViewSaveTimer = null;
+    persistCurrentCatalogScroll();
+  }, 120);
+}
+function restoreCatalogViewState() {
+  const state = getCatalogViewState();
+  if (!state) return;
+  S.F.page = Math.max(1, Number(state.page) || 1);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: Math.max(0, Number(state.scrollY) || 0), behavior: 'auto' });
+    });
+  });
+}
 
 function normalizeCollectionMode(value) {
   return COLLECTIONS[value] ? value : 'scenario';
@@ -3026,6 +3078,7 @@ async function loadCatalog(showLoading = true) {
   }
   if (showLoading) hideLdg();
   renderGallery(); renderPills(); updateCatSel();
+  restoreCatalogViewState();
   if (document.getElementById('adm-body')?.style.display === 'flex') {
     loadCfgForm();
     renderMan();
@@ -3048,7 +3101,8 @@ async function setCollection(next, options = {}) {
   if (document.getElementById('edit-mo')?.classList.contains('on')) closeEdit();
   S.collection = target;
   setCollectionStorage(target);
-  S.F = { ...S.F, q: '', cats: [], tags: [], page: 1 };
+  const savedView = getCatalogViewState(target);
+  S.F = { ...S.F, q: '', cats: [], tags: [], page: savedView?.page || 1 };
   resetUploadFormState();
   const search = document.getElementById('search-in');
   if (search) search.value = '';
@@ -3072,10 +3126,15 @@ async function init() {
   updateMobileCtrlVisibility();
   await loadCollections();
   applyCollectionUI();
+  const savedView = getCatalogViewState(S.collection);
+  if (savedView?.page) S.F.page = savedView.page;
   ensureConnBadge();
   window.addEventListener('online', () => checkConn(false));
 window.addEventListener('offline', () => setConnState('offline'));
-  window.addEventListener('scroll', handleMobileCtrlScroll, { passive: true });
+  window.addEventListener('scroll', () => {
+    handleMobileCtrlScroll();
+    scheduleCatalogScrollPersistence();
+  }, { passive: true });
   window.addEventListener('resize', () => {
     syncMobileCtrlHeight();
     updateMobileCtrlVisibility();
@@ -3089,6 +3148,7 @@ window.addEventListener('offline', () => setConnState('offline'));
     }
   });
   window.addEventListener('pagehide', () => {
+    persistCurrentCatalogScroll();
     if (S.manPageOpen && S.manLockHeld && getToken()) {
       releaseManagePageLock(true).catch(() => {});
     }
@@ -3273,6 +3333,8 @@ function renderGallery() {
   document.getElementById('hd-c').textContent = n > 0 ? `共 ${n} 件` : '';
 
   if (!items.length) {
+    S.F.page = 1;
+    saveCatalogViewState({ page: 1 });
     grid.innerHTML = '';
     empty.style.display = 'block';
     renderPager(0);
@@ -3289,6 +3351,7 @@ function renderGallery() {
 
   const totalPages = Math.max(1, Math.ceil(items.length / S.F.pageSize));
   if (S.F.page > totalPages) S.F.page = totalPages;
+  saveCatalogViewState({ page: S.F.page });
   const start = (S.F.page - 1) * S.F.pageSize;
   const shown = items.slice(start, start + S.F.pageSize);
 
@@ -3431,7 +3494,10 @@ function restoreManCategoryFilterState(keepOpen, scrollTop) {
 function updateCatSel() { renderCategoryFilter(); }
 function updCatDl() { renderCategoryPool('u'); renderCategoryPool('e'); }
 
-function resetLoaded() { S.F.page = 1; }
+function resetLoaded() {
+  S.F.page = 1;
+  saveCatalogViewState({ page: 1, scrollY: 0 });
+}
 function scrollContainerToTop(container, behavior = 'smooth') {
   if (!container) return;
   if (typeof container.scrollTo === 'function') {
@@ -3445,6 +3511,7 @@ function scrollUploadPanelToTop(behavior = 'smooth') {
 }
 function goPage(page) {
   S.F.page = Math.max(1, Number(page) || 1);
+  saveCatalogViewState({ page: S.F.page, scrollY: 0 });
   renderGallery();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
