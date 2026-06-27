@@ -6786,11 +6786,11 @@ function manPageListRowHtml(item, i, total, top) {
     <div class="mi-info">
       <div class="mi-title-row">
         <div class="mi-t">${esc(item.title)}</div>
-        ${permissionBadgeHtml(item.permission)}
       </div>
       <div class="mi-m">${esc(getItemMetaLabel(item))}</div>
     </div>
     <div class="mi-acts">
+      ${permissionBadgeHtml(item.permission)}
       <button class="ib" onclick="event.stopPropagation();openEdit('${esc(item.id)}')" title="編輯" ${canEditInfo ? '' : 'disabled'}>${icon('edit')}</button>
     </div>
   </div>`;
