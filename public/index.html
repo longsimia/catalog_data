@@ -1804,6 +1804,22 @@ function getItemCategories(item) {
   if (Array.isArray(item.categories)) return sortCategoriesByLibrary(item.categories);
   return item.category ? sortCategoriesByLibrary([item.category]) : [];
 }
+const PRIVATE_CATEGORY_FILTER_KEY = '__private__';
+const PRIVATE_CATEGORY_FILTER_LABEL = '非公開';
+function isPrivateItemPermission(permission) {
+  return normalizePermissionValue(permission || 'public') !== 'public';
+}
+function hasVisiblePrivateItems(items = S.cat.items || []) {
+  return (items || []).some(item => isPrivateItemPermission(item?.permission));
+}
+function getGalleryCategoryFilterOptions() {
+  const options = (S.cat.categories || []).slice();
+  if (hasVisiblePrivateItems()) options.unshift(PRIVATE_CATEGORY_FILTER_KEY);
+  return options;
+}
+function getCategoryFilterOptionLabel(value) {
+  return value === PRIVATE_CATEGORY_FILTER_KEY ? PRIVATE_CATEGORY_FILTER_LABEL : value;
+}
 function sortCategoriesByLibrary(categories) {
   const picked = [...new Set((categories || []).filter(Boolean))];
   const order = S.cat.categories || [];
@@ -3100,6 +3116,8 @@ function applyUI() {
 function filtered() {
   let items = S.cat.items || [];
   const { q, cats, tags } = S.F;
+  const hasPrivateFilter = cats.includes(PRIVATE_CATEGORY_FILTER_KEY);
+  const selectedCats = cats.filter(cat => cat !== PRIVATE_CATEGORY_FILTER_KEY);
   if (q) {
     const lq = q.toLowerCase();
     items = items.filter(i =>
@@ -3113,7 +3131,8 @@ function filtered() {
     items = items.filter(i => {
       const itemCats = getItemCategories(i);
       const itemTags = i.tags || [];
-      const catMatch = cats.length > 0 && cats.some(c => itemCats.includes(c));
+      const catMatch = (selectedCats.length > 0 && selectedCats.some(c => itemCats.includes(c)))
+        || (hasPrivateFilter && isPrivateItemPermission(i.permission));
       const tagMatch = tags.length > 0 && tags.some(t => itemTags.includes(t));
       return catMatch || tagMatch;
     });
@@ -3334,7 +3353,8 @@ function renderManTagFilter() {
     </div>`;
 }
 function renderCategoryFilter() {
-  const all = (S.cat.categories || []).slice();
+  const all = getGalleryCategoryFilterOptions();
+  S.F.cats = (S.F.cats || []).filter(c => c === PRIVATE_CATEGORY_FILTER_KEY ? all.includes(PRIVATE_CATEGORY_FILTER_KEY) : all.includes(c));
   const label = S.F.cats.length ? `已選 ${S.F.cats.length} 個類別` : '類別篩選';
   document.getElementById('cat-filter').innerHTML =
     `<button class="btn btn-out tf-btn" type="button" onclick="toggleCategoryFilter(event)">
@@ -3346,7 +3366,7 @@ function renderCategoryFilter() {
       ${all.length
         ? all.map(c => `<label class="tf-opt">
             <input type="checkbox" ${S.F.cats.includes(c) ? 'checked' : ''} onchange="togCategory('${esc(c)}')">
-            <span>${esc(c)}</span>
+            <span>${esc(getCategoryFilterOptionLabel(c))}</span>
           </label>`).join('')
         : '<div class="tf-empty">目前沒有可篩選的類別</div>'}
     </div>`;
