@@ -736,8 +736,9 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .perm-badge.admin{border-color:#7d6b3d;color:#c9a84c;background:rgba(201,168,76,.08)}
 html:not([data-theme="dark"]) .perm-badge.owner{border-color:#c79b9b;color:#9b5858;background:rgba(199,155,155,.12)}
 html:not([data-theme="dark"]) .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;background:rgba(141,106,67,.08)}
-.cover-perm-badge{position:absolute;top:.46rem;right:.46rem;z-index:2;max-width:calc(100% - .92rem);padding:.2rem .5rem;background:rgba(255,248,239,.94);backdrop-filter:blur(8px);box-shadow:0 3px 10px rgba(0,0,0,.08)}
-html[data-theme="dark"] .cover-perm-badge{background:rgba(24,18,12,.88);box-shadow:0 6px 18px rgba(0,0,0,.24)}
+.cover-perm-badge{position:absolute;top:.46rem;right:.46rem;z-index:2;max-width:calc(100% - .92rem)}
+.cover-perm-badge .perm-badge{max-width:100%;background:var(--card);box-shadow:0 3px 10px rgba(0,0,0,.08)}
+html[data-theme="dark"] .cover-perm-badge .perm-badge{background:rgba(24,18,12,.88);box-shadow:0 6px 18px rgba(0,0,0,.24)}
 .mp-gc .cover-perm-badge{right:2.15rem;max-width:calc(100% - 2.62rem)}
 .mi-acts{display:flex;gap:.32rem;flex-shrink:0}
 #man-list-page{position:relative}
