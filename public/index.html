@@ -3790,6 +3790,7 @@ async function openLb(id, options = {}) {
   document.getElementById('lb').classList.add('on');
   document.body.style.overflow = 'hidden';
   updateShareUrl(id);
+  resetLightboxScroll();
 
   const touchArea = document.querySelector('.lb-tw');
   if (touchArea) {
@@ -4154,6 +4155,7 @@ function closeLb() {
   closePreviewModal();
   document.getElementById('lb').classList.remove('on');
   document.body.style.overflow = '';
+  resetLightboxScroll();
   S.lbItemId = null;
   clearShareUrl();
 }
@@ -4171,6 +4173,16 @@ function lbStepItem(d) {
 function lbSync()  {
   document.getElementById('lbt').style.transform = `translateX(-${S.lbSlide * 100}%)`;
   document.querySelectorAll('.lb-dot').forEach((d, i) => d.classList.toggle('on', i === S.lbSlide));
+}
+
+function resetLightboxScroll() {
+  document.querySelectorAll('.lb-inner,.lb-info').forEach(el => {
+    if (!el) return;
+    el.scrollTop = 0;
+    if (typeof el.scrollTo === 'function') {
+      el.scrollTo({ top: 0, behavior: 'auto' });
+    }
+  });
 }
 
 document.addEventListener('keydown', e => {
