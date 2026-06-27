@@ -230,6 +230,7 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justif
 .card-cover-audio .ico{width:1.4rem;height:1.4rem}
 .card-cover-audio span{font-size:.76rem;color:var(--muted)}
 .card-ph{width:100%;aspect-ratio:4/3;display:block;background:var(--bg2)}
+.card-cover-wrap{position:relative}
 .card-body{padding:.68rem .8rem;display:flex;flex-direction:column;min-height:86px}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.45rem;margin-bottom:.22rem}
 .card-title{font-family:'Noto Serif TC',serif;font-size:.86rem;color:var(--gold);line-height:1.35;margin-bottom:.18rem;
@@ -735,6 +736,9 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .perm-badge.admin{border-color:#7d6b3d;color:#c9a84c;background:rgba(201,168,76,.08)}
 html:not([data-theme="dark"]) .perm-badge.owner{border-color:#c79b9b;color:#9b5858;background:rgba(199,155,155,.12)}
 html:not([data-theme="dark"]) .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;background:rgba(141,106,67,.08)}
+.cover-perm-badge{position:absolute;top:.46rem;right:.46rem;z-index:2;max-width:calc(100% - .92rem);padding:.2rem .5rem;background:rgba(255,248,239,.94);backdrop-filter:blur(8px);box-shadow:0 3px 10px rgba(0,0,0,.08)}
+html[data-theme="dark"] .cover-perm-badge{background:rgba(24,18,12,.88);box-shadow:0 6px 18px rgba(0,0,0,.24)}
+.mp-gc .cover-perm-badge{right:2.15rem;max-width:calc(100% - 2.62rem)}
 .mi-acts{display:flex;gap:.32rem;flex-shrink:0}
 #man-list-page{position:relative}
 #man-list-page .mi{position:absolute;left:0;right:0;top:0;height:64px;box-sizing:border-box;margin-bottom:0}
@@ -1994,6 +1998,10 @@ function permissionBadgeHtml(permission) {
   const meta = getPermissionMeta(permission);
   if (!meta.label) return '';
   return `<span class="perm-badge ${meta.cls}" title="${esc(meta.label)}">${esc(meta.label)}</span>`;
+}
+function coverPermissionBadgeHtml(permission) {
+  const badge = permissionBadgeHtml(permission);
+  return badge ? `<div class="cover-perm-badge">${badge}</div>` : '';
 }
 function getItemCategoryLabel(item) {
   const cats = getItemCategories(item);
@@ -3274,16 +3282,17 @@ function galleryGridCardHtml(item, idx) {
   const def = getCollectionDef();
   const creator = item.creator || item.author || '';
   const subtitle = item.subtitle || item.translatedTitle || '';
+  const coverBadge = coverPermissionBadgeHtml(item.permission);
   if (entry.mode === 'image') {
     return `<div class="card" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
-          ${renderCardCover(coverEntry, item.title)}
+          <div class="card-cover-wrap">${renderCardCover(coverEntry, item.title)}${coverBadge}</div>
           <div class="card-body">
             <div class="card-title${item.title ? '' : ' empty'}">${esc(item.title || '\u00A0')}</div>
           </div>
         </div>`;
   }
   return `<div class="card" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
-        ${renderCardCover(coverEntry, item.title)}
+        <div class="card-cover-wrap">${renderCardCover(coverEntry, item.title)}${coverBadge}</div>
         <div class="card-body">
           <div class="card-head">
             <div class="card-title">${esc(item.title)}</div>
@@ -6781,6 +6790,7 @@ function manPageGridCardHtml(item, i) {
   const canEditOrder = canRolePermission('editItemOrder');
   const canDrag = canEditOrder && !hasManActiveFilters();
   const classes = ['mp-gc', sel ? 'sel' : '', S.justMovedId === item.id ? 'moved' : ''].filter(Boolean).join(' ');
+  const coverBadge = coverPermissionBadgeHtml(item.permission);
   return `<div class="${classes}" data-id="${esc(item.id)}" data-i="${i}"
     draggable="${canDrag ? 'true' : 'false'}"
     onclick="mpClick(event,'${item.id}',${i})"
@@ -6789,6 +6799,7 @@ function manPageGridCardHtml(item, i) {
     ondrop="dDp(event,${i})" ondragend="dEd(event)">
     <input type="checkbox" class="mp-gc-chk" ${sel ? 'checked' : ''} onclick="event.stopPropagation();mpClick(event,'${item.id}',${i},'toggle')" tabindex="-1" aria-label="選取">
     <span class="mp-gc-grip dh" title="${canDrag ? '拖曳排序' : hasManActiveFilters() ? '篩選或搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
+    ${coverBadge}
     ${th?.src && th.kind === 'image' ? `<img class="mp-gc-img" src="${esc(th.src)}" loading="lazy" onerror="this.style.display='none'">` :
       th?.src && th.kind === 'video' ? `<video class="mp-gc-img" src="${esc(th.src)}" muted playsinline preload="metadata"></video>` :
       `<div class="mp-gc-no-img">${icon(th?.kind === 'audio' ? 'audio' : 'image')}</div>`}
