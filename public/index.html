@@ -1660,7 +1660,7 @@ const CATALOG_VIEW_STATE_KEY = 'catalog-view-state';
 
 function getCatalogViewStateMap() {
   try {
-    const raw = JSON.parse(localStorage.getItem(CATALOG_VIEW_STATE_KEY) || '{}');
+    const raw = JSON.parse(sessionStorage.getItem(CATALOG_VIEW_STATE_KEY) || '{}');
     return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   } catch {
     return {};
@@ -1684,7 +1684,7 @@ function saveCatalogViewState(partial = {}, collection = S.collection) {
     page: Math.max(1, Number(partial.page ?? prev.page) || 1),
     scrollY: Math.max(0, Number(partial.scrollY ?? prev.scrollY) || 0)
   };
-  localStorage.setItem(CATALOG_VIEW_STATE_KEY, JSON.stringify(map));
+  sessionStorage.setItem(CATALOG_VIEW_STATE_KEY, JSON.stringify(map));
   return map[key];
 }
 function persistCurrentCatalogScroll() {
