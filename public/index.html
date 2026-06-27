@@ -3854,7 +3854,9 @@ function syncLightboxItem(item, options = {}) {
   lbAlt.hidden = !subtitleText;
   lbAuthor.textContent = authorText;
   lbAuthor.hidden = !authorText;
-  lbTags.innerHTML = getItemTags(item).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+  lbTags.innerHTML = [permissionBadgeHtml(item.permission), ...getItemTags(item).map(t => `<span class="tag">${esc(t)}</span>`)]
+    .filter(Boolean)
+    .join('');
   lbDesc.textContent = item.description || '';
   lbSync();
 }
