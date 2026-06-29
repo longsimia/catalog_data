@@ -232,12 +232,12 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justif
 .card-ph{width:100%;aspect-ratio:4/3;display:block;background:var(--bg2)}
 .card-cover-wrap{position:relative}
 .card-cover-tools{position:absolute;top:.46rem;right:.46rem;z-index:3;display:flex;align-items:center;justify-content:flex-end;gap:.36rem;max-width:calc(100% - .92rem)}
-.card-cover-actionbar{position:absolute;top:.7rem;left:50%;z-index:5;display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--panel) 15%, transparent);box-shadow:0 10px 24px rgba(0,0,0,.16);transform:translateX(-50%);overflow:hidden}
-.card-cover-actionbar button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:.38rem .82rem;border:none;background:color-mix(in srgb,var(--panel) 15%, transparent);color:var(--text);font-size:.76rem;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .18s var(--ease),color .18s var(--ease)}
-.card-cover-actionbar button + button{border-left:1px solid var(--border)}
+.card-cover-actionbar{position:absolute;top:.7rem;left:50%;z-index:5;display:flex;align-items:center;gap:0;border:1px solid color-mix(in srgb,var(--border) 70%, transparent);border-radius:12px;background:color-mix(in srgb,var(--panel) 15%, transparent);box-shadow:0 10px 24px rgba(0,0,0,.16);transform:translateX(-50%);overflow:hidden}
+.card-cover-actionbar button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:.38rem .82rem;border:none;background:color-mix(in srgb,var(--panel) 15%, transparent);color:color-mix(in srgb,var(--text) 70%, transparent);font-size:.76rem;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .18s var(--ease),color .18s var(--ease)}
+.card-cover-actionbar button + button{border-left:1px solid color-mix(in srgb,var(--border) 70%, transparent)}
 .card-cover-actionbar button:hover{background:var(--bg2);color:var(--gold)}
-.card-cover-actionbar .primary{background:color-mix(in srgb,var(--bg2) 15%, transparent);color:var(--gold);font-weight:500}
-.card-cover-actionbar .primary:hover{background:var(--gglow)}
+.card-cover-actionbar .primary{background:color-mix(in srgb,var(--bg2) 15%, transparent);color:color-mix(in srgb,var(--gold) 70%, transparent);font-weight:500}
+.card-cover-actionbar .primary:hover{background:var(--bg2)}
 .card-cover-actionbar .icon-only{padding:.38rem .68rem;min-width:36px}
 .card-cover-crop-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--gold);border-radius:10px;background:color-mix(in srgb,var(--bg2) 30%, transparent);color:var(--gold);cursor:pointer;opacity:0;pointer-events:none;transform:translateY(-3px);transition:opacity .18s var(--ease),transform .18s var(--ease),background .18s var(--ease),border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease);box-shadow:0 8px 18px rgba(0,0,0,.12);backdrop-filter:blur(10px)}
 .card-cover-crop-btn:hover{background:color-mix(in srgb,var(--gglow) 30%, transparent);border-color:var(--gold);color:var(--gold)}
