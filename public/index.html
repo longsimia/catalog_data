@@ -4414,7 +4414,7 @@ function syncLightboxDownload(item, downloadData, previewData) {
   dlBtn.style.display = hasDownload ? 'flex' : 'none';
   const showPreview = !!previewData?.supported;
   const showDownload = hasDownload;
-  const showEdit = !!getToken();
+  const showEdit = !!(getToken() && canEditInfo);
   bottomActions.style.display = (showEdit || showDownload) ? 'grid' : 'none';
   bottomActions.classList.toggle('single', !(showEdit && showDownload));
 }
