@@ -2495,10 +2495,39 @@ function toggleTheme() {
   setTheme(next);
 }
 
+function getTextareaScrollContainer(el) {
+  return el?.closest('.mb2,.tab,.manage-page-body,.preview-shell,.lb-info,.lb-inner') || null;
+}
+
+function keepTextareaVisibleInContainer(el, container) {
+  if (!el || !container || document.activeElement !== el) return;
+  const containerRect = container.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const margin = 18;
+  const visibleTop = containerRect.top + margin;
+  const visibleBottom = containerRect.bottom - margin;
+  if (elRect.bottom > visibleBottom) {
+    container.scrollTop += elRect.bottom - visibleBottom;
+  } else if (elRect.top < visibleTop) {
+    container.scrollTop -= visibleTop - elRect.top;
+  }
+}
+
 function autoGrowTextarea(el) {
   if (!el) return;
+  const container = getTextareaScrollContainer(el);
+  const prevHeight = el.offsetHeight;
+  const prevScrollTop = container?.scrollTop || 0;
+  const prevTop = container ? (el.getBoundingClientRect().top - container.getBoundingClientRect().top) : 0;
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight}px`;
+  if (container) {
+    const nextTop = el.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    container.scrollTop = prevScrollTop + (nextTop - prevTop);
+    if (el.offsetHeight > prevHeight || document.activeElement === el) {
+      requestAnimationFrame(() => keepTextareaVisibleInContainer(el, container));
+    }
+  }
 }
 
 function autoGrowTextareaAfterPaint(el) {
