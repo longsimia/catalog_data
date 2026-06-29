@@ -1960,7 +1960,9 @@ function canInlineCropGalleryCover(item, coverEntry = null) {
 }
 function getGalleryCoverToolsHtml(item, coverEntry = null) {
   const badge = coverPermissionBadgeHtml(item?.permission);
-  if (!canInlineCropGalleryCover(item, coverEntry)) return badge;
+  if (!canInlineCropGalleryCover(item, coverEntry)) {
+    return badge ? `<div class="card-cover-tools">${badge}</div>` : '';
+  }
   const isActive = S.galleryCoverEditId === item.id;
   return `<div class="card-cover-tools">
     ${badge}
@@ -2981,7 +2983,9 @@ function stopGalleryCoverCropDrag(event) {
 }
 function getGalleryCoverToolsHtml(item, coverEntry = null) {
   const badge = coverPermissionBadgeHtml(item?.permission);
-  if (!canInlineCropGalleryCover(item, coverEntry)) return badge;
+  if (!canInlineCropGalleryCover(item, coverEntry)) {
+    return badge ? `<div class="card-cover-tools">${badge}</div>` : '';
+  }
   const isActive = S.galleryCoverEditId === item.id;
   const actionbar = isActive ? `<div class="card-cover-actionbar" onclick="event.stopPropagation()">
     <button type="button" onclick="cancelGalleryCoverEdit(event,'${esc(item.id)}')">取消</button>
