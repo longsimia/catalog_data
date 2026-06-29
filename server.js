@@ -2020,6 +2020,14 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .leave-modal-card{position:relative;z-index:1;width:min(92vw,420px);background:var(--bg);border:1px solid var(--line);padding:20px 22px;border-radius:18px}
     .leave-modal-card h3{margin:0 0 10px;font-size:20px;line-height:1.35;color:var(--text)}
     .leave-modal-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.7}
+    .format-modal-card{width:min(94vw,860px)}
+    .format-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
+    .format-action-btn{
+      min-height:72px;padding:16px 18px;border:1px solid var(--line);border-radius:18px;background:transparent;color:var(--text);
+      font:inherit;font-size:15px;line-height:1.6;text-align:left;cursor:pointer;transition:border-color .18s ease,background .18s ease,color .18s ease
+    }
+    .format-action-btn:hover{border-color:var(--text);background:rgba(127,127,127,.06)}
+    .format-action-btn-wide{grid-column:1 / -1}
     .leave-modal-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}
     .leave-modal-actions button{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:8px 14px;font:inherit;cursor:pointer}
     .divider{height:1px;background:var(--line);margin:0 0 36px}
@@ -2032,6 +2040,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       .page{padding:40px 20px 48px}
       .meta-head{gap:12px}
       .article,.article-body,.editor{font-size:16px;line-height:1.88}
+      .format-grid{grid-template-columns:1fr}
+      .format-action-btn-wide{grid-column:auto}
     }
   </style>
   <script>
@@ -2050,6 +2060,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       <div class="meta-head">
         <h1 class="title">${pageTitle}</h1>
         <div class="actions">
+          ${isTxt && canEditTxt ? `<button type="button" class="save-btn" id="formatBtn" title="開啟格式化排版工具">格式化</button>` : ''}
           ${isTxt && canEditTxt ? `<button type="button" class="save-btn" id="saveBtn" title="會直接覆寫雲端上的原始檔案">儲存</button>` : ''}
           <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
         </div>
@@ -2065,6 +2076,27 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     </article>
     <div class="footer">${canEditTxt ? 'Editable preview.' : 'Read-only preview.'}</div>
   </main>
+  ${isTxt && canEditTxt ? `<div class="leave-modal" id="formatModal" aria-hidden="true">
+    <div class="leave-modal-bg" id="formatModalBg"></div>
+    <div class="leave-modal-card format-modal-card" role="dialog" aria-modal="true" aria-labelledby="formatModalTitle">
+      <h3 id="formatModalTitle">格式化排版</h3>
+      <p>選一個動作直接套用到目前全文內容。</p>
+      <div class="format-grid">
+        <button type="button" class="format-action-btn" data-action="keep_blank_line">在段落與段落間保留一個空列</button>
+        <button type="button" class="format-action-btn" data-action="trim_blank_lines">去除段落與段落間多餘的空列</button>
+        <button type="button" class="format-action-btn" data-action="cjk_spacing">在中英文之間插入空白</button>
+        <button type="button" class="format-action-btn" data-action="indent_add">在段首插入縮排</button>
+        <button type="button" class="format-action-btn" data-action="indent_remove">去除段首縮排</button>
+        <button type="button" class="format-action-btn" data-action="cn_to_twp">簡體中文 轉 繁體中文(台灣)</button>
+        <button type="button" class="format-action-btn" data-action="cn_to_t">簡體中文 轉 繁體中文</button>
+        <button type="button" class="format-action-btn" data-action="t_to_cn">繁體中文 轉 簡體中文</button>
+        <button type="button" class="format-action-btn format-action-btn-wide" data-action="punct_fullwidth">半角符號轉全角符號</button>
+      </div>
+      <div class="leave-modal-actions">
+        <button type="button" class="btn btn-plain" id="formatCloseBtn">關閉</button>
+      </div>
+    </div>
+  </div>` : ''}
   ${isTxt && canEditTxt ? `<div class="leave-modal" id="leaveModal" aria-hidden="true">
     <div class="leave-modal-bg" id="leaveModalBg"></div>
     <div class="leave-modal-card" role="dialog" aria-modal="true" aria-labelledby="leaveModalTitle">
@@ -2098,6 +2130,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     document.getElementById('theme-btn')?.addEventListener('click', toggleTheme);
     applyTheme(localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light');
   </script>
+  ${isTxt && canEditTxt ? `<script src="/vendor/opencc-js/full.js"></script>` : ''}
   ${isTxt ? `<script>
     const editor = document.getElementById('editor');
 
@@ -2113,6 +2146,12 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     editor?.addEventListener('input', resizeEditor);
   </script>` : ''}
   ${isTxt && canEditTxt ? `<script>
+    const INDENT = '　　';
+    const formatBtn = document.getElementById('formatBtn');
+    const formatModal = document.getElementById('formatModal');
+    const formatModalBg = document.getElementById('formatModalBg');
+    const formatCloseBtn = document.getElementById('formatCloseBtn');
+    const formatActionBtns = Array.from(document.querySelectorAll('.format-action-btn'));
     const saveBtn = document.getElementById('saveBtn');
     const status = document.getElementById('saveStatus');
     const saveUrlRaw = ${JSON.stringify(options.saveUrl || '')};
@@ -2121,12 +2160,197 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     const leaveModalBg = document.getElementById('leaveModalBg');
     const leaveStayBtn = document.getElementById('leaveStayBtn');
     const leaveConfirmBtn = document.getElementById('leaveConfirmBtn');
+    const openccReady = typeof OpenCC !== 'undefined' && typeof OpenCC.Converter === 'function';
+    const cnToTwp = openccReady ? OpenCC.Converter({ from: 'cn', to: 'twp' }) : null;
+    const cnToT = openccReady ? OpenCC.Converter({ from: 'cn', to: 't' }) : null;
+    const tToCn = openccReady ? OpenCC.Converter({ from: 't', to: 'cn' }) : null;
     let lastSavedText = editor ? editor.value : '';
     let allowLeave = false;
     let leaveViaHistory = false;
 
+    function setStatusMessage(message, state = '') {
+      if (!status) return;
+      status.dataset.state = state;
+      status.textContent = message || '';
+    }
+
+    function normalizeLineEndings(text) {
+      return String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    }
+
     function hasUnsavedChanges() {
       return !!editor && editor.value !== lastSavedText;
+    }
+
+    function formatParagraphIndent(text) {
+      const lines = normalizeLineEndings(text).split('\n');
+      let prevBlank = true;
+      return lines.map(line => {
+        const isBlank = !line.trim();
+        if (isBlank) {
+          prevBlank = true;
+          return line;
+        }
+        if (prevBlank && !line.startsWith(INDENT)) {
+          prevBlank = false;
+          return INDENT + line;
+        }
+        prevBlank = false;
+        return line;
+      }).join('\n');
+    }
+
+    function removeParagraphIndent(text) {
+      return normalizeLineEndings(text).replace(/(^|\n)　　/g, '$1');
+    }
+
+    function keepSingleBlankLineBetweenParagraphs(text) {
+      return normalizeLineEndings(text).replace(/\n[\t \u3000]*\n+/g, '\n\n');
+    }
+
+    function trimExtraBlankLines(text) {
+      return normalizeLineEndings(text).replace(/\n[\t \u3000]*\n+/g, '\n');
+    }
+
+    function addCjkSpacing(text) {
+      let next = normalizeLineEndings(text);
+      next = next.replace(/([\p{Script=Han}])([A-Za-z0-9@#&%+\-=*_\/\\|]+)/gu, '$1 $2');
+      next = next.replace(/([A-Za-z0-9@#&%+\-=*_\/\\|]+)([\p{Script=Han}])/gu, '$1 $2');
+      return next.replace(/ {2,}/g, ' ');
+    }
+
+    function halfwidthPunctuationToFullwidth(text) {
+      return Array.from(normalizeLineEndings(text)).map(ch => {
+        const code = ch.charCodeAt(0);
+        if (code >= 0x21 && code <= 0x7E && !/[A-Za-z0-9]/.test(ch)) {
+          return String.fromCharCode(code + 0xFEE0);
+        }
+        return ch;
+      }).join('');
+    }
+
+    function applyParagraphIndent() {
+      if (!editor) return;
+      const nextValue = formatParagraphIndent(editor.value);
+      if (nextValue === editor.value) {
+        if (status && status.dataset.state !== 'error') {
+          status.dataset.state = '';
+          status.textContent = '所有段落首行都已經有縮排。';
+        }
+        return;
+      }
+      editor.value = nextValue;
+      resizeEditor();
+      syncDirtyState();
+      editor.focus();
+      if (status && status.dataset.state !== 'error') {
+        status.dataset.state = '';
+        status.textContent = '已替所有段落首行補上兩個全形空格。';
+      }
+    }
+
+    function stripParagraphIndent(text) {
+      return normalizeLineEndings(text).replace(/(^|\n)\u3000\u3000/g, '$1');
+    }
+
+    function closeFormatModal() {
+      if (!formatModal) return;
+      formatModal.classList.remove('on');
+      formatModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openFormatModal() {
+      if (!formatModal) return;
+      formatModal.classList.add('on');
+      formatModal.setAttribute('aria-hidden', 'false');
+      formatCloseBtn?.focus();
+    }
+
+    function applyEditorTransform(nextValue, successMessage, unchangedMessage = '內容沒有需要調整的地方。') {
+      if (!editor) return;
+      if (nextValue === editor.value) {
+        setStatusMessage(unchangedMessage);
+        closeFormatModal();
+        return;
+      }
+      editor.value = nextValue;
+      resizeEditor();
+      syncDirtyState();
+      editor.focus();
+      setStatusMessage(successMessage);
+      closeFormatModal();
+    }
+
+    function runFormatAction(action) {
+      if (!editor) return;
+      const value = editor.value || '';
+      switch (action) {
+        case 'keep_blank_line':
+          applyEditorTransform(keepSingleBlankLineBetweenParagraphs(value), '已整理成段落之間保留一個空列。', '目前段落之間已經是單一空列。');
+          return;
+        case 'trim_blank_lines':
+          applyEditorTransform(trimExtraBlankLines(value), '已去除段落之間多餘的空列。', '目前沒有多餘空列。');
+          return;
+        case 'cjk_spacing':
+          applyEditorTransform(addCjkSpacing(value), '已在中英文之間補上空白。', '目前中英文間距看起來已經整理好了。');
+          return;
+        case 'indent_add':
+          applyEditorTransform(formatParagraphIndent(value), '已替所有段落首行補上兩個全形空格。', '所有段落首行都已經有縮排。');
+          return;
+        case 'indent_remove':
+          applyEditorTransform(stripParagraphIndent(value), '已移除段首縮排。', '目前沒有可移除的段首縮排。');
+          return;
+        case 'cn_to_twp':
+          if (!cnToTwp) {
+            setStatusMessage('簡繁轉換字庫尚未就緒。', 'error');
+            closeFormatModal();
+            return;
+          }
+          applyEditorTransform(cnToTwp(value), '已轉成繁體中文（台灣）。');
+          return;
+        case 'cn_to_t':
+          if (!cnToT) {
+            setStatusMessage('簡繁轉換字庫尚未就緒。', 'error');
+            closeFormatModal();
+            return;
+          }
+          applyEditorTransform(cnToT(value), '已轉成繁體中文。');
+          return;
+        case 't_to_cn':
+          if (!tToCn) {
+            setStatusMessage('簡繁轉換字庫尚未就緒。', 'error');
+            closeFormatModal();
+            return;
+          }
+          applyEditorTransform(tToCn(value), '已轉成簡體中文。');
+          return;
+        case 'punct_fullwidth':
+          applyEditorTransform(halfwidthPunctuationToFullwidth(value), '已將半角符號轉成全角符號。', '目前沒有需要轉換的半角符號。');
+          return;
+        default:
+          closeFormatModal();
+      }
+    }
+
+    function continueIndentedParagraph(event) {
+      if (!editor || event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.isComposing || editor.readOnly) return;
+      const indent = '　　';
+      const start = editor.selectionStart ?? 0;
+      const end = editor.selectionEnd ?? start;
+      if (start !== end) return;
+      const value = editor.value || '';
+      const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+      const currentLine = value.slice(lineStart, start);
+      if (!currentLine.startsWith(indent)) return;
+      event.preventDefault();
+      const insertText = '\n' + indent;
+      editor.value = value.slice(0, start) + insertText + value.slice(end);
+      const nextPos = start + insertText.length;
+      editor.selectionStart = nextPos;
+      editor.selectionEnd = nextPos;
+      resizeEditor();
+      syncDirtyState();
     }
 
     function syncDirtyState() {
@@ -2207,12 +2431,65 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       event.returnValue = '';
     }
 
+    function syncDirtyState() {
+      if (!status || status.dataset.state === 'error') return;
+      if (hasUnsavedChanges()) {
+        setStatusMessage('尚有未儲存的變更。');
+      } else if (status.textContent === '尚有未儲存的變更。') {
+        setStatusMessage('');
+      }
+    }
+
+    async function saveText() {
+      if (!saveUrl) return;
+      saveBtn.disabled = true;
+      setStatusMessage('儲存中…');
+      try {
+        const res = await fetch(saveUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (localStorage.getItem('adm-token') || '')
+          },
+          body: JSON.stringify({ text: editor.value })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '儲存失敗');
+        lastSavedText = editor.value;
+        setStatusMessage('已儲存。', 'success');
+        const updatedAtText = document.getElementById('updatedAtText');
+        if (updatedAtText && data.updatedAtLabel) updatedAtText.textContent = data.updatedAtLabel;
+        const metaDotPrimary = document.getElementById('metaDotPrimary');
+        const updatedByText = document.getElementById('updatedByText');
+        const updatedByWrap = document.getElementById('updatedByWrap');
+        const updatedDot = document.getElementById('updatedDot');
+        if (updatedByText && data.updatedByLabel) updatedByText.textContent = data.updatedByLabel;
+        if (metaDotPrimary) metaDotPrimary.style.display = data.updatedAtLabel ? '' : 'none';
+        if (updatedByWrap) updatedByWrap.style.display = data.updatedByLabel ? '' : 'none';
+        if (updatedDot) updatedDot.style.display = (data.updatedAtLabel && data.updatedByLabel) ? '' : 'none';
+      } catch (err) {
+        setStatusMessage(err.message || '儲存失敗', 'error');
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }
+
     editor?.addEventListener('input', syncDirtyState);
+    editor?.addEventListener('keydown', continueIndentedParagraph);
+    formatBtn?.addEventListener('click', openFormatModal);
+    formatModalBg?.addEventListener('click', closeFormatModal);
+    formatCloseBtn?.addEventListener('click', closeFormatModal);
+    formatActionBtns.forEach(btn => btn.addEventListener('click', () => runFormatAction(btn.dataset.action || '')));
     saveBtn?.addEventListener('click', saveText);
     leaveModalBg?.addEventListener('click', closeLeaveModal);
     leaveStayBtn?.addEventListener('click', closeLeaveModal);
     leaveConfirmBtn?.addEventListener('click', confirmLeave);
     document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && formatModal?.classList.contains('on')) {
+        event.preventDefault();
+        closeFormatModal();
+        return;
+      }
       if (event.key === 'Escape' && leaveModal?.classList.contains('on')) {
         event.preventDefault();
         closeLeaveModal();
@@ -2916,6 +3193,7 @@ function removeStoredFile(key) {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(ROOT, 'public')));
+app.use('/vendor/opencc-js', express.static(path.join(ROOT, 'node_modules', 'opencc-js', 'dist', 'umd')));
 app.use('/uploads',
   (req, res, next) => {
     if (path.basename(req.path).startsWith('dl.')) {
