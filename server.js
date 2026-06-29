@@ -658,6 +658,8 @@ function normalizeItemSharedFields(item) {
   const sourceUrl = typeof item?.sourceUrl === 'string'
     ? item.sourceUrl.trim()
     : (typeof item?.originalUrl === 'string' ? item.originalUrl.trim() : '');
+  const coverFocusX = Number.isFinite(Number(item?.coverFocusX)) ? Math.max(0, Math.min(100, Number(item.coverFocusX))) : 50;
+  const coverFocusY = Number.isFinite(Number(item?.coverFocusY)) ? Math.max(0, Math.min(100, Number(item.coverFocusY))) : 50;
   return {
     ...item,
     subtitle,
@@ -665,7 +667,9 @@ function normalizeItemSharedFields(item) {
     creator,
     author: creator,
     sourceUrl,
-    originalUrl: sourceUrl
+    originalUrl: sourceUrl,
+    coverFocusX,
+    coverFocusY
   };
 }
 
@@ -4119,6 +4123,8 @@ app.post('/api/upload/:itemId', auth,
       const subtitle = String(req.body.subtitle || req.body.translatedTitle || '').trim();
       const creator = String(req.body.creator || req.body.author || '').trim();
       const sourceUrl = String(req.body.sourceUrl || req.body.originalUrl || '').trim();
+      const coverFocusX = Number.isFinite(Number(req.body.coverFocusX)) ? Math.max(0, Math.min(100, Number(req.body.coverFocusX))) : 50;
+      const coverFocusY = Number.isFinite(Number(req.body.coverFocusY)) ? Math.max(0, Math.min(100, Number(req.body.coverFocusY))) : 50;
       const download = persistDownloadFiles(id, dlFiles, subtitle || req.body.title || 'download', collection);
 
       let tags = [];
@@ -4142,6 +4148,8 @@ app.post('/api/upload/:itemId', auth,
         description: req.body.description || '',
         sourceUrl,
         originalUrl: sourceUrl,
+        coverFocusX,
+        coverFocusY,
         coverKey:    previewKeys[0] || null,
         previewKeys,
         downloadKey: download.downloadKey,
@@ -4173,13 +4181,15 @@ app.put('/api/items/:id', auth, (req, res) => {
     if (!it) return res.status(404).json({ error: '項目不存在' });
     if (!canAccessItemByRole(it, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限修改這個項目' });
 
-    const { title, creator, author, subtitle, translatedTitle, category, categories, tags, description, sourceUrl, originalUrl, permission } = req.body;
+    const { title, creator, author, subtitle, translatedTitle, category, categories, tags, description, sourceUrl, originalUrl, permission, coverFocusX, coverFocusY } = req.body;
     const nextCategories = Array.isArray(categories)
       ? categories.filter(v => typeof v === 'string').map(v => v.trim()).filter(Boolean)
       : (typeof category === 'string' && category.trim() ? [category.trim()] : it.categories || []);
     const nextCreator = String(creator || author || '').trim();
     const nextSubtitle = String(subtitle || translatedTitle || '').trim();
     const nextSourceUrl = String(sourceUrl || originalUrl || '').trim();
+    const nextCoverFocusX = Number.isFinite(Number(coverFocusX)) ? Math.max(0, Math.min(100, Number(coverFocusX))) : (Number.isFinite(Number(it.coverFocusX)) ? Number(it.coverFocusX) : 50);
+    const nextCoverFocusY = Number.isFinite(Number(coverFocusY)) ? Math.max(0, Math.min(100, Number(coverFocusY))) : (Number.isFinite(Number(it.coverFocusY)) ? Number(it.coverFocusY) : 50);
     Object.assign(it, {
       title,
       creator: nextCreator,
@@ -4192,7 +4202,9 @@ app.put('/api/items/:id', auth, (req, res) => {
       tags: tags || it.tags,
       description,
       sourceUrl: nextSourceUrl,
-      originalUrl: nextSourceUrl
+      originalUrl: nextSourceUrl,
+      coverFocusX: nextCoverFocusX,
+      coverFocusY: nextCoverFocusY
     });
 
     saveCat(cat, collection);
