@@ -268,6 +268,7 @@ body[data-collection-mode="image"] .card-title.empty{visibility:hidden}
 .pager-btn[disabled],.pager-num[disabled]{opacity:.38;cursor:not-allowed}
 .pager-btn[disabled]:hover,.pager-num[disabled]:hover{border-color:var(--border);color:var(--text)}
 .pager-num.on{border-color:var(--gold);color:var(--gold);background:var(--gglow)}
+.pager-ellipsis{display:inline-flex;align-items:flex-end;justify-content:center;min-width:30px;height:38px;padding:0 .35rem;border:none;background:transparent;color:var(--muted);font-size:1.05rem;line-height:1;pointer-events:none;transform:translateY(2px)}
 #scroll-sentinel{height:1px;width:100%}
 
 /* ── LIGHTBOX ── */
@@ -3233,7 +3234,7 @@ function renderPager(totalItems) {
     pages.push(`<button class="pager-num${n === S.F.page ? ' on' : ''}" type="button" onclick="goPage(${n})">${n}</button>`);
   };
   const addEllipsis = key => {
-    pages.push(`<span class="pager-num" style="pointer-events:none;min-width:30px;padding:0 .35rem" data-k="${key}">…</span>`);
+    pages.push(`<span class="pager-ellipsis" data-k="${key}">…</span>`);
   };
 
   const maxVisible = 7;
@@ -7887,6 +7888,7 @@ function openEdit(id) {
     document.getElementById('man-page')?.classList.add('on');
   }
   document.getElementById('edit-mo').classList.add('on');
+  resetEditModalScroll();
   autoGrowTextareaAfterPaint(editDesc);
 }
 
@@ -7904,6 +7906,15 @@ function closeEdit() {
   closePickPreviewPanels();
   S.editAdminWasOpen = false;
   S.editManagePageWasOpen = false;
+}
+
+function resetEditModalScroll() {
+  const modal = document.querySelector('#edit-mo .mb2');
+  if (!modal) return;
+  modal.scrollTop = 0;
+  if (typeof modal.scrollTo === 'function') {
+    modal.scrollTo({ top: 0, behavior: 'auto' });
+  }
 }
 
 document.getElementById('edit-mo')?.addEventListener('click', e => {
