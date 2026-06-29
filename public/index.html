@@ -2517,16 +2517,13 @@ function autoGrowTextarea(el) {
   if (!el) return;
   const container = getTextareaScrollContainer(el);
   const prevHeight = el.offsetHeight;
-  const prevScrollTop = container?.scrollTop || 0;
-  const prevTop = container ? (el.getBoundingClientRect().top - container.getBoundingClientRect().top) : 0;
   el.style.height = 'auto';
-  el.style.height = `${el.scrollHeight}px`;
-  if (container) {
-    const nextTop = el.getBoundingClientRect().top - container.getBoundingClientRect().top;
-    container.scrollTop = prevScrollTop + (nextTop - prevTop);
-    if (el.offsetHeight > prevHeight || document.activeElement === el) {
-      requestAnimationFrame(() => keepTextareaVisibleInContainer(el, container));
-    }
+  const nextHeight = el.scrollHeight;
+  el.style.height = `${nextHeight}px`;
+  const heightDelta = nextHeight - prevHeight;
+  if (container && heightDelta > 0 && document.activeElement === el) {
+    container.scrollTop += heightDelta;
+    requestAnimationFrame(() => keepTextareaVisibleInContainer(el, container));
   }
 }
 
