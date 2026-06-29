@@ -7623,6 +7623,31 @@ function restoreCardOrderRowDrag(input) {
   delete row.dataset.dragLocked;
   row.draggable = true;
 }
+function getEditableControlTarget(target) {
+  return target?.closest?.('input, textarea, select, [contenteditable="true"]') || null;
+}
+function lockDraggableAncestorsForControl(control) {
+  let node = control?.parentElement || null;
+  while (node) {
+    if (node.getAttribute?.('draggable') === 'true') {
+      if (node.dataset.dragControlLock !== '1') {
+        node.dataset.dragControlLock = '1';
+        node.draggable = false;
+      }
+    }
+    node = node.parentElement;
+  }
+}
+function unlockDraggableAncestorsForControl(control) {
+  let node = control?.parentElement || null;
+  while (node) {
+    if (node.dataset?.dragControlLock === '1') {
+      delete node.dataset.dragControlLock;
+      node.draggable = true;
+    }
+    node = node.parentElement;
+  }
+}
 function commitCardOrderInput(input, itemId) {
   restoreCardOrderRowDrag(input);
   const idx = getItemIndexById(itemId);
@@ -8168,6 +8193,21 @@ function resetEditModalScroll() {
 document.getElementById('edit-mo')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeEdit();
 });
+document.addEventListener('pointerdown', event => {
+  const control = getEditableControlTarget(event.target);
+  if (!control) return;
+  lockDraggableAncestorsForControl(control);
+}, true);
+document.addEventListener('focusin', event => {
+  const control = getEditableControlTarget(event.target);
+  if (!control) return;
+  lockDraggableAncestorsForControl(control);
+}, true);
+document.addEventListener('focusout', event => {
+  const control = getEditableControlTarget(event.target);
+  if (!control) return;
+  unlockDraggableAncestorsForControl(control);
+}, true);
 document.addEventListener('pointermove', moveEditCoverFocusDrag);
 document.addEventListener('pointerup', stopEditCoverFocusDrag);
 document.addEventListener('pointercancel', stopEditCoverFocusDrag);
