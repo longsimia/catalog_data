@@ -687,13 +687,9 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .cover-focus-reset{min-height:30px;padding:.28rem .62rem;font-size:.74rem;white-space:nowrap}
 .cover-focus-stage{position:relative;width:min(100%,320px);aspect-ratio:4/3;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel);cursor:grab;touch-action:none}
 .cover-focus-stage.dragging{cursor:grabbing}
-.cover-focus-image{position:absolute;inset:0;background-size:cover;background-repeat:no-repeat}
-.cover-focus-grid{position:absolute;inset:0;background-image:linear-gradient(to right, rgba(255,255,255,.16) 1px, transparent 1px),linear-gradient(to bottom, rgba(255,255,255,.16) 1px, transparent 1px);background-size:33.333% 100%,100% 33.333%;pointer-events:none;opacity:.45}
-.cover-focus-crosshair{position:absolute;width:18px;height:18px;margin:-9px 0 0 -9px;border:2px solid rgba(255,255,255,.95);border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.22),0 2px 10px rgba(0,0,0,.28);pointer-events:none}
-.cover-focus-crosshair::before,.cover-focus-crosshair::after{content:'';position:absolute;left:50%;top:50%;background:rgba(255,255,255,.95);transform:translate(-50%,-50%)}
-.cover-focus-crosshair::before{width:2px;height:24px}
-.cover-focus-crosshair::after{width:24px;height:2px}
-.cover-focus-values{font-size:.73rem;color:var(--muted)}
+.cover-focus-image{position:absolute;inset:0;width:100%;height:100%;display:block}
+.cover-focus-mask{position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.14));pointer-events:none}
+.cover-focus-chip{position:absolute;left:.55rem;bottom:.55rem;display:inline-flex;align-items:center;gap:.28rem;padding:.2rem .5rem;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(0,0,0,.42);color:#fff;font-size:.69rem;backdrop-filter:blur(10px);pointer-events:none}
 .prev-grip{position:absolute;top:.32rem;left:.32rem;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
   border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(0,0,0,.38);color:#fff;backdrop-filter:blur(8px)}
 .prev-order{position:absolute;right:.32rem;bottom:.32rem;display:inline-flex;align-items:center;justify-content:center;min-width:1.7rem;height:1.7rem;
@@ -1617,7 +1613,7 @@ const S = {
   catDragOverIdx: null, catDragOverPos: null, catJustMoved: null,
   prevDragOverIdx: null, prevJustMovedKey: null,
   ePrevDragOverIdx: null, ePrevJustMovedKey: null,
-  eCoverFocusX: 50, eCoverFocusY: 50, eCoverFocusDragging: false,
+  eCoverFocusX: 50, eCoverFocusY: 50, eCoverFocusDragging: false, eCoverFocusDragStartX: 0, eCoverFocusDragStartY: 0, eCoverFocusOriginX: 50, eCoverFocusOriginY: 50,
   fileDragIdx: null, eFileDragIdx: null, fileDragOverIdx: null, eFileDragOverIdx: null,
   fileDragOverPos: null, eFileDragOverPos: null,
   fileJustMovedKey: null, eFileJustMovedKey: null,
@@ -2858,28 +2854,63 @@ function getEditCoverFocusPreviewEntry() {
     kind: entry?.kind === 'new' ? getMediaKindFromFile(entry?.file) : getMediaKindFromName(entry?.src || entry?.value || '')
   };
 }
+function updateEditCoverFocusPreview() {
+  const media = document.getElementById('e-cover-focus-media');
+  if (!media) return;
+  media.style.objectPosition = `${S.eCoverFocusX}% ${S.eCoverFocusY}%`;
+}
 function resetEditCoverFocus() {
   S.eCoverFocusX = 50;
   S.eCoverFocusY = 50;
   renderEditCoverFocusEditor();
 }
-function applyEditCoverFocusFromPointer(clientX, clientY) {
+function getEditCoverFocusMediaMetrics() {
   const stage = document.getElementById('e-cover-focus-stage');
-  if (!stage) return;
-  const rect = stage.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
-  S.eCoverFocusX = Math.round(Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)) * 10) / 10;
-  S.eCoverFocusY = Math.round(Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100)) * 10) / 10;
-  renderEditCoverFocusEditor();
+  const media = document.getElementById('e-cover-focus-media');
+  if (!stage || !media) return null;
+  const stageRect = stage.getBoundingClientRect();
+  const stageWidth = stageRect.width || stage.clientWidth || 0;
+  const stageHeight = stageRect.height || stage.clientHeight || 0;
+  if (!stageWidth || !stageHeight) return null;
+  const naturalWidth = media.tagName === 'VIDEO'
+    ? (media.videoWidth || 0)
+    : (media.naturalWidth || 0);
+  const naturalHeight = media.tagName === 'VIDEO'
+    ? (media.videoHeight || 0)
+    : (media.naturalHeight || 0);
+  if (!naturalWidth || !naturalHeight) return null;
+  const scale = Math.max(stageWidth / naturalWidth, stageHeight / naturalHeight);
+  const renderWidth = naturalWidth * scale;
+  const renderHeight = naturalHeight * scale;
+  return {
+    overflowX: Math.max(0, renderWidth - stageWidth),
+    overflowY: Math.max(0, renderHeight - stageHeight)
+  };
 }
 function startEditCoverFocusDrag(event) {
   if (event.button !== undefined && event.button !== 0) return;
   S.eCoverFocusDragging = true;
-  applyEditCoverFocusFromPointer(event.clientX, event.clientY);
+  S.eCoverFocusDragStartX = event.clientX;
+  S.eCoverFocusDragStartY = event.clientY;
+  S.eCoverFocusOriginX = Number(S.eCoverFocusX) || 50;
+  S.eCoverFocusOriginY = Number(S.eCoverFocusY) || 50;
+  document.getElementById('e-cover-focus-stage')?.classList.add('dragging');
 }
 function moveEditCoverFocusDrag(event) {
   if (!S.eCoverFocusDragging) return;
-  applyEditCoverFocusFromPointer(event.clientX, event.clientY);
+  const metrics = getEditCoverFocusMediaMetrics();
+  if (!metrics) return;
+  const dx = event.clientX - S.eCoverFocusDragStartX;
+  const dy = event.clientY - S.eCoverFocusDragStartY;
+  const nextX = metrics.overflowX > 0
+    ? S.eCoverFocusOriginX - (dx / metrics.overflowX) * 100
+    : 50;
+  const nextY = metrics.overflowY > 0
+    ? S.eCoverFocusOriginY - (dy / metrics.overflowY) * 100
+    : 50;
+  S.eCoverFocusX = Math.round(Math.max(0, Math.min(100, nextX)) * 10) / 10;
+  S.eCoverFocusY = Math.round(Math.max(0, Math.min(100, nextY)) * 10) / 10;
+  updateEditCoverFocusPreview();
 }
 function stopEditCoverFocusDrag() {
   S.eCoverFocusDragging = false;
@@ -2897,23 +2928,22 @@ function renderEditCoverFocusEditor() {
   const x = Math.max(0, Math.min(100, Number(S.eCoverFocusX) || 50));
   const y = Math.max(0, Math.min(100, Number(S.eCoverFocusY) || 50));
   const mediaHtml = preview.kind === 'video'
-    ? `<video class="cover-focus-image" src="${esc(preview.fullSrc || preview.src)}" muted playsinline preload="metadata" style="object-fit:cover;object-position:${x}% ${y}%"></video>`
-    : `<img class="cover-focus-image" src="${esc(preview.src)}" alt="" style="object-fit:cover;object-position:${x}% ${y}%">`;
+    ? `<video class="cover-focus-image" id="e-cover-focus-media" src="${esc(preview.fullSrc || preview.src)}" muted playsinline preload="metadata" style="object-fit:cover;object-position:${x}% ${y}%"></video>`
+    : `<img class="cover-focus-image" id="e-cover-focus-media" src="${esc(preview.src)}" alt="" style="object-fit:cover;object-position:${x}% ${y}%">`;
   wrap.innerHTML = `
     <div class="cover-focus-editor">
       <div class="cover-focus-head">
         <div>
           <div class="cover-focus-title">首頁封面顯示範圍</div>
-          <div class="cover-focus-hint">拖曳下方預覽來調整圖庫首頁卡片封面的位置。</div>
+          <div class="cover-focus-hint">直接拖曳封面圖片，看到的就是首頁卡片實際顯示範圍。</div>
         </div>
         <button class="btn btn-out cover-focus-reset" type="button" onclick="resetEditCoverFocus()">置中</button>
       </div>
       <div class="cover-focus-stage${S.eCoverFocusDragging ? ' dragging' : ''}" id="e-cover-focus-stage" onpointerdown="startEditCoverFocusDrag(event)">
         ${mediaHtml}
-        <div class="cover-focus-grid"></div>
-        <div class="cover-focus-crosshair" style="left:${x}%;top:${y}%"></div>
+        <div class="cover-focus-mask"></div>
+        <div class="cover-focus-chip">${icon('move')}<span>拖曳調整封面</span></div>
       </div>
-      <div class="cover-focus-values">X ${x.toFixed(1)}% / Y ${y.toFixed(1)}%</div>
     </div>`;
 }
 function renderLightboxMedia(entry) {
