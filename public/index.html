@@ -1877,8 +1877,21 @@ function isPrivateItemPermission(permission) {
 function hasVisiblePrivateItems(items = S.cat.items || []) {
   return (items || []).some(item => isPrivateItemPermission(item?.permission));
 }
+function getGalleryTagFilterOptions() {
+  const order = (S.cat.tags || []).slice();
+  const used = [...new Set((S.cat.items || []).flatMap(item => getItemTags(item)).filter(Boolean))];
+  return [
+    ...order.filter(tag => used.includes(tag)),
+    ...used.filter(tag => !order.includes(tag))
+  ];
+}
 function getGalleryCategoryFilterOptions() {
-  const options = (S.cat.categories || []).slice();
+  const order = (S.cat.categories || []).slice();
+  const used = [...new Set((S.cat.items || []).flatMap(item => getItemCategories(item)).filter(Boolean))];
+  const options = [
+    ...order.filter(cat => used.includes(cat)),
+    ...used.filter(cat => !order.includes(cat))
+  ];
   if (hasVisiblePrivateItems()) options.unshift(PRIVATE_CATEGORY_FILTER_KEY);
   return options;
 }
@@ -3483,8 +3496,9 @@ function fitCardTags() {
 //  FILTERS
 // ════════════════════════════════════════════════════
 function renderPills() {
-  const all = (S.cat.tags || []).slice();
+  const all = getGalleryTagFilterOptions();
   const label = S.F.tags.length ? `已選 ${S.F.tags.length} 個標籤` : '標籤篩選';
+  S.F.tags = (S.F.tags || []).filter(t => all.includes(t));
   document.getElementById('pills').innerHTML =
     `<button class="btn btn-out tf-btn" type="button" onclick="toggleTagFilter(event)">
       <span class="lab">${esc(label)}</span>

@@ -1139,7 +1139,16 @@ function filterCatalogForViewer(cat, role = 'public') {
     ...rawCats.filter(c => !catOrder.includes(c))
   ];
 
-  const result = { ...cat, items, tags: visibleTags, categories: visibleCategories };
+  const result = {
+    ...cat,
+    items,
+    tags: role === 'public'
+      ? visibleTags
+      : [...tagOrder, ...rawTags.filter(t => !tagOrder.includes(t))],
+    categories: role === 'public'
+      ? visibleCategories
+      : [...catOrder, ...rawCats.filter(c => !catOrder.includes(c))]
+  };
 
   // 只有未登入訪客才清除下載相關欄位
   if (role === 'public') return sanitizeCatalogForPublic(result);
