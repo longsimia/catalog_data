@@ -231,6 +231,15 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justif
 .card-cover-audio span{font-size:.76rem;color:var(--muted)}
 .card-ph{width:100%;aspect-ratio:4/3;display:block;background:var(--bg2)}
 .card-cover-wrap{position:relative}
+.card-cover-tools{position:absolute;top:.46rem;right:.46rem;z-index:3;display:flex;align-items:center;justify-content:flex-end;gap:.36rem;max-width:calc(100% - .92rem)}
+.card-cover-crop-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:rgba(20,16,12,.68);color:#fff;cursor:pointer;backdrop-filter:blur(10px);opacity:0;pointer-events:none;transform:translateY(-3px);transition:opacity .18s var(--ease),transform .18s var(--ease),background .18s var(--ease),border-color .18s var(--ease)}
+.card-cover-crop-btn:hover{background:rgba(45,32,8,.84);border-color:var(--gold);color:var(--gold)}
+.card:hover .card-cover-crop-btn,.card.cover-crop-on .card-cover-crop-btn{opacity:1;pointer-events:auto;transform:none}
+.card.cover-crop-on .card-cover-crop-btn{background:rgba(45,32,8,.9);border-color:var(--gold);color:var(--gold)}
+.card.cover-crop-on{z-index:4}
+.card.cover-crop-on .card-cover-wrap{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.card.cover-crop-on .card-cover-wrap.dragging{cursor:grabbing}
+.card.cover-crop-on .card-cover,.card.cover-crop-on .card-cover-video{-webkit-user-drag:none;user-select:none;pointer-events:none}
 .card-body{padding:.68rem .8rem;display:flex;flex-direction:column;min-height:86px}
 .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.45rem;margin-bottom:.22rem}
 .card-title{font-family:'Noto Serif TC',serif;font-size:.86rem;color:var(--gold);line-height:1.35;margin-bottom:.18rem;
@@ -750,7 +759,7 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .perm-badge.admin{border-color:#7d6b3d;color:#c9a84c;background:rgba(201,168,76,.08)}
 html:not([data-theme="dark"]) .perm-badge.owner{border-color:#c79b9b;color:#9b5858;background:rgba(248,228,228,.82)}
 html:not([data-theme="dark"]) .perm-badge.admin{border-color:#d4c29c;color:#8d6a43;background:rgba(248,239,214,.82)}
-.cover-perm-badge{position:absolute;top:.46rem;right:.46rem;z-index:2;max-width:calc(100% - .92rem)}
+.cover-perm-badge{position:relative;top:auto;right:auto;z-index:2;max-width:100%}
 .cover-perm-badge .perm-badge{max-width:100%;background:rgba(247,239,220,.78);box-shadow:0 3px 10px rgba(0,0,0,.08)}
 .cover-perm-badge .perm-badge.owner{background:rgba(248,228,228,.82)}
 .cover-perm-badge .perm-badge.admin{background:rgba(248,239,214,.82)}
@@ -1614,6 +1623,7 @@ const S = {
   prevDragOverIdx: null, prevJustMovedKey: null,
   ePrevDragOverIdx: null, ePrevJustMovedKey: null,
   eCoverFocusX: 50, eCoverFocusY: 50, eCoverFocusDragging: false, eCoverFocusDragStartX: 0, eCoverFocusDragStartY: 0, eCoverFocusOriginX: 50, eCoverFocusOriginY: 50,
+  galleryCoverEditId: null, galleryCoverDragging: false, galleryCoverDragStartX: 0, galleryCoverDragStartY: 0, galleryCoverOriginX: 50, galleryCoverOriginY: 50, galleryCoverSaveSeq: 0,
   fileDragIdx: null, eFileDragIdx: null, fileDragOverIdx: null, eFileDragOverIdx: null,
   fileDragOverPos: null, eFileDragOverPos: null,
   fileJustMovedKey: null, eFileJustMovedKey: null,
@@ -1939,6 +1949,30 @@ function getItemCoverObjectPosition(item) {
   const x = Number.isFinite(Number(item?.coverFocusX)) ? Math.max(0, Math.min(100, Number(item.coverFocusX))) : 50;
   const y = Number.isFinite(Number(item?.coverFocusY)) ? Math.max(0, Math.min(100, Number(item.coverFocusY))) : 50;
   return `${x}% ${y}%`;
+}
+function canInlineCropGalleryCover(item, coverEntry = null) {
+  const entry = getCollectionEntry();
+  const currentView = document.body.dataset.galleryView || 'grid';
+  const media = coverEntry || getItemCoverEntry(item);
+  return entry.mode === 'image'
+    && currentView === 'grid'
+    && !!item
+    && canRolePermission('editItemInfo')
+    && !!media?.src
+    && ['image', 'video'].includes(media.kind);
+}
+function getGalleryCoverToolsHtml(item, coverEntry = null) {
+  const badge = coverPermissionBadgeHtml(item?.permission);
+  if (!canInlineCropGalleryCover(item, coverEntry)) return badge;
+  const isActive = S.galleryCoverEditId === item.id;
+  return `<div class="card-cover-tools">
+    ${badge}
+    <button class="card-cover-crop-btn" type="button" onclick="toggleGalleryCoverEdit(event,'${esc(item.id)}')" title="${isActive ? '完成封面裁切' : '調整封面'}" aria-label="${isActive ? '完成封面裁切' : '調整封面'}">${icon(isActive ? 'save' : 'move')}</button>
+  </div>`;
+}
+function handleGalleryCardClick(event, id) {
+  if (S.galleryCoverEditId === id) return;
+  openLb(id);
 }
 function getRoleLabel(role) {
   return S.allRoleConfig?.[role]?.label || S.roleConfig?.[role]?.label || (role === 'owner' ? '站主' : String(role || ''));
@@ -2829,6 +2863,116 @@ function renderCardCover(entry, title = '', item = null) {
   const displaySrc = entry.thumbSrc || entry.src;
   return `<img class="card-cover" src="${esc(displaySrc)}" alt="${esc(title)}" loading="lazy"${positionStyle}${imgThumbFallbackAttrs(displaySrc, entry.src)}>`;
 }
+function getGalleryCoverEditItem(itemId = S.galleryCoverEditId) {
+  return (S.cat.items || []).find(item => item.id === itemId) || null;
+}
+function getGalleryCardById(itemId = '') {
+  return Array.from(document.querySelectorAll('.card[data-id]')).find(el => el.dataset.id === itemId) || null;
+}
+function updateGalleryCoverPreview(itemId = S.galleryCoverEditId) {
+  const item = getGalleryCoverEditItem(itemId);
+  if (!item) return;
+  getGalleryCardById(itemId)?.querySelectorAll('.card-cover, .card-cover-video').forEach(el => {
+    el.style.objectPosition = getItemCoverObjectPosition(item);
+  });
+}
+function getGalleryCoverMediaMetrics(itemId = S.galleryCoverEditId) {
+  const card = getGalleryCardById(String(itemId || ''));
+  const stage = card?.querySelector('.card-cover-wrap');
+  const media = card?.querySelector('.card-cover, .card-cover-video');
+  if (!stage || !media) return null;
+  const rect = stage.getBoundingClientRect();
+  const stageWidth = rect.width || stage.clientWidth || 0;
+  const stageHeight = rect.height || stage.clientHeight || 0;
+  if (!stageWidth || !stageHeight) return null;
+  const naturalWidth = media.tagName === 'VIDEO' ? (media.videoWidth || 0) : (media.naturalWidth || 0);
+  const naturalHeight = media.tagName === 'VIDEO' ? (media.videoHeight || 0) : (media.naturalHeight || 0);
+  if (!naturalWidth || !naturalHeight) return null;
+  const scale = Math.max(stageWidth / naturalWidth, stageHeight / naturalHeight);
+  return {
+    overflowX: Math.max(0, naturalWidth * scale - stageWidth),
+    overflowY: Math.max(0, naturalHeight * scale - stageHeight)
+  };
+}
+async function persistGalleryCoverFocus(itemId) {
+  const item = getGalleryCoverEditItem(itemId);
+  if (!item) return;
+  const seq = ++S.galleryCoverSaveSeq;
+  const body = {
+    title: item.title || '',
+    creator: item.creator || item.author || '',
+    subtitle: item.subtitle || item.translatedTitle || '',
+    categories: [...getItemCategories(item)],
+    category: getItemCategories(item)[0] || '',
+    tags: [...(item.tags || [])],
+    description: item.description || '',
+    sourceUrl: item.sourceUrl || item.originalUrl || '',
+    permission: item.permission || 'public',
+    coverFocusX: item.coverFocusX,
+    coverFocusY: item.coverFocusY
+  };
+  try {
+    await api('PUT', `/api/items/${itemId}`, body);
+  } catch (e) {
+    if (seq === S.galleryCoverSaveSeq) toast(e.message || '封面調整儲存失敗', 'err');
+  }
+}
+function toggleGalleryCoverEdit(event, itemId) {
+  event?.stopPropagation?.();
+  if (S.galleryCoverEditId === itemId) {
+    S.galleryCoverEditId = null;
+    S.galleryCoverDragging = false;
+    renderGallery();
+    return;
+  }
+  const item = getGalleryCoverEditItem(itemId);
+  if (!canInlineCropGalleryCover(item)) return;
+  S.galleryCoverEditId = itemId;
+  S.galleryCoverDragging = false;
+  renderGallery();
+}
+function startGalleryCoverCropDrag(event, itemId) {
+  if (S.galleryCoverEditId !== itemId) return;
+  if (event.target?.closest('.card-cover-crop-btn')) return;
+  if (event.button !== undefined && event.button !== 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const item = getGalleryCoverEditItem(itemId);
+  if (!item) return;
+  S.galleryCoverDragging = true;
+  S.galleryCoverDragStartX = event.clientX;
+  S.galleryCoverDragStartY = event.clientY;
+  S.galleryCoverOriginX = Number(item.coverFocusX) || 50;
+  S.galleryCoverOriginY = Number(item.coverFocusY) || 50;
+  const wrap = event.currentTarget;
+  wrap?.classList.add('dragging');
+  if (wrap?.setPointerCapture && event.pointerId !== undefined) {
+    try { wrap.setPointerCapture(event.pointerId); } catch {}
+  }
+}
+function moveGalleryCoverCropDrag(event) {
+  if (!S.galleryCoverDragging || !S.galleryCoverEditId) return;
+  event.preventDefault();
+  const item = getGalleryCoverEditItem();
+  const metrics = getGalleryCoverMediaMetrics();
+  if (!item || !metrics) return;
+  const dx = event.clientX - S.galleryCoverDragStartX;
+  const dy = event.clientY - S.galleryCoverDragStartY;
+  item.coverFocusX = Math.round(Math.max(0, Math.min(100, metrics.overflowX > 0 ? S.galleryCoverOriginX - (dx / metrics.overflowX) * 100 : 50)) * 10) / 10;
+  item.coverFocusY = Math.round(Math.max(0, Math.min(100, metrics.overflowY > 0 ? S.galleryCoverOriginY - (dy / metrics.overflowY) * 100 : 50)) * 10) / 10;
+  updateGalleryCoverPreview();
+}
+function stopGalleryCoverCropDrag(event) {
+  if (!S.galleryCoverDragging || !S.galleryCoverEditId) return;
+  const itemId = S.galleryCoverEditId;
+  S.galleryCoverDragging = false;
+  const wrap = getGalleryCardById(itemId)?.querySelector('.card-cover-wrap');
+  wrap?.classList.remove('dragging');
+  if (wrap?.releasePointerCapture && event?.pointerId !== undefined) {
+    try { wrap.releasePointerCapture(event.pointerId); } catch {}
+  }
+  persistGalleryCoverFocus(itemId);
+}
 function renderPreviewThumbFromFile(file) {
   const name = file?.name || 'media';
   const kind = getMediaKindFromFile(file);
@@ -3523,17 +3667,18 @@ function galleryGridCardHtml(item, idx) {
   const def = getCollectionDef();
   const creator = item.creator || item.author || '';
   const subtitle = item.subtitle || item.translatedTitle || '';
-  const coverBadge = coverPermissionBadgeHtml(item.permission);
+  const coverTools = getGalleryCoverToolsHtml(item, coverEntry);
+  const isCropOn = S.galleryCoverEditId === item.id;
   if (entry.mode === 'image') {
-    return `<div class="card" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
-          <div class="card-cover-wrap">${renderCardCover(coverEntry, item.title, item)}${coverBadge}</div>
+    return `<div class="card${isCropOn ? ' cover-crop-on' : ''}" data-id="${esc(item.id)}" onclick="handleGalleryCardClick(event,'${item.id}')" style="animation-delay:${delay}s">
+          <div class="card-cover-wrap" onpointerdown="startGalleryCoverCropDrag(event,'${item.id}')">${renderCardCover(coverEntry, item.title, item)}${coverTools}</div>
           <div class="card-body">
             <div class="card-title${item.title ? '' : ' empty'}">${esc(item.title || '\u00A0')}</div>
           </div>
         </div>`;
   }
-  return `<div class="card" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
-        <div class="card-cover-wrap">${renderCardCover(coverEntry, item.title, item)}${coverBadge}</div>
+  return `<div class="card" data-id="${esc(item.id)}" onclick="handleGalleryCardClick(event,'${item.id}')" style="animation-delay:${delay}s">
+        <div class="card-cover-wrap">${renderCardCover(coverEntry, item.title, item)}${coverTools}</div>
         <div class="card-body">
           <div class="card-head">
             <div class="card-title">${esc(item.title)}</div>
@@ -3579,6 +3724,10 @@ function renderGallery() {
   const grid  = document.getElementById('grid');
   const empty = document.getElementById('empty');
   const galleryView = document.body.dataset.galleryView || 'grid';
+  if (S.galleryCoverEditId && !canInlineCropGalleryCover(getGalleryCoverEditItem(S.galleryCoverEditId))) {
+    S.galleryCoverEditId = null;
+    S.galleryCoverDragging = false;
+  }
   const n = items.length;
   document.getElementById('hd-c').textContent = n > 0 ? `共 ${n} 件` : '';
 
@@ -8208,6 +8357,9 @@ document.addEventListener('focusout', event => {
   if (!control) return;
   unlockDraggableAncestorsForControl(control);
 }, true);
+document.addEventListener('pointermove', moveGalleryCoverCropDrag);
+document.addEventListener('pointerup', stopGalleryCoverCropDrag);
+document.addEventListener('pointercancel', stopGalleryCoverCropDrag);
 document.addEventListener('pointermove', moveEditCoverFocusDrag);
 document.addEventListener('pointerup', stopEditCoverFocusDrag);
 document.addEventListener('pointercancel', stopEditCoverFocusDrag);
