@@ -800,6 +800,21 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .confirm-box p{font-size:.84rem;color:var(--text);line-height:1.7}
 .confirm-actions{display:flex;gap:.55rem;margin-top:1.15rem}
 .confirm-actions .btn{flex:1}
+.txt-create-btn{width:100%;margin-top:.5rem;margin-bottom:1.45rem}
+.txt-create-modal-box{width:min(520px,calc(100vw - 2rem))}
+.txt-create-modal-box h3{margin-bottom:.45rem}
+.txt-create-modal-field{margin-top:.9rem}
+.txt-modal-input{width:100%;min-height:44px;padding:.68rem .8rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);color:var(--text);font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.txt-modal-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 14%, transparent)}
+.txt-modal-input::placeholder{color:var(--muted)}
+.txt-modal-help{margin:0;color:var(--muted);font-size:.82rem;line-height:1.7}
+.txt-modal-actions{display:flex;justify-content:flex-end;gap:.55rem;margin-top:1.15rem}
+.txt-modal-actions .btn{flex:0 0 auto;min-width:110px}
+@media (max-width: 640px){
+  .txt-create-btn{margin-bottom:1.2rem}
+  .txt-modal-actions{flex-direction:column-reverse}
+  .txt-modal-actions .btn{width:100%}
+}
 .preview-modal{display:none;position:fixed;inset:0;z-index:720;background:var(--modal-bg);align-items:center;justify-content:center;padding:1rem}
 .preview-modal.on{display:flex}
 .preview-shell{width:min(540px,calc(100vw - 1.5rem));max-height:calc(100vh - 3rem);background:var(--panel);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--elev);overflow-y:auto;overflow-x:hidden;padding:1.75rem;position:relative}
@@ -1292,7 +1307,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           <p id="u-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
         </div>
         <input type="file" id="fi-f" multiple style="display:none" onchange="onFile(this.files)">
-        <button type="button" class="btn btn-out" id="btn-create-upload-txt" style="margin-top:.35rem;width:100%" onclick="createUploadTxtFile()">建立 TXT 文件</button>
+        <button type="button" class="btn btn-out txt-create-btn" id="btn-create-upload-txt" onclick="createUploadTxtFile()">建立 TXT 文件</button>
         <div id="fi-picked"></div>
         <div id="fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
       </div>
@@ -1483,7 +1498,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <p id="e-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
       </div>
       <input type="file" id="e-fi-f" multiple style="display:none" onchange="onEditFile(this.files)">
-      <button type="button" class="btn btn-out" id="btn-create-edit-txt" style="margin-top:.35rem;width:100%" onclick="createEditTxtFile()">建立 TXT 文件</button>
+      <button type="button" class="btn btn-out txt-create-btn" id="btn-create-edit-txt" onclick="createEditTxtFile()">建立 TXT 文件</button>
       <div id="e-fi-picked"></div>
       <div id="e-fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
     </div>
@@ -1532,6 +1547,19 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
     <div class="confirm-actions">
       <button class="btn btn-out" type="button" onclick="closeBatchDeleteConfirm()">取消</button>
       <button class="btn btn-gold" type="button" onclick="confirmBatchDeleteAction()">確定移除</button>
+    </div>
+  </div>
+</div>
+<div class="confirm-modal" id="txt-create-modal" onclick="onTxtCreateModalBackdrop(event)">
+  <div class="confirm-box txt-create-modal-box" role="dialog" aria-modal="true" aria-labelledby="txt-create-title">
+    <h3 id="txt-create-title">建立 TXT 文件</h3>
+    <p class="txt-modal-help">請輸入 TXT 檔名。</p>
+    <div class="txt-create-modal-field">
+      <input class="txt-modal-input" id="txt-create-input" type="text" spellcheck="false" autocomplete="off" placeholder="新文字文件.txt" onkeydown="onTxtCreateInputKeydown(event)">
+    </div>
+    <div class="txt-modal-actions">
+      <button class="btn btn-out" type="button" onclick="cancelTxtCreateModal()">取消</button>
+      <button class="btn btn-gold" type="button" onclick="confirmTxtCreateModal()">確定</button>
     </div>
   </div>
 </div>
@@ -1617,6 +1645,7 @@ const S = {
   downloadModalData: null,
   hostUsage: null,
   previewModalState: null,
+  txtCreateState: null,
   previewTreeOpen: {},
   dragIdx: null, dragOverIdx: null, dragOverPos: null, justMovedId: null, _tx: 0, _ty: 0, manPageOpen: false,
   tagEditIdx: null, catEditIdx: null, prevDragIdx: null, ePrevDragIdx: null, tagSuggestIdx: -1, authorSuggestIdx: -1,
@@ -3252,11 +3281,52 @@ function hasFilenameConflict(existingNames = [], candidate = '') {
   if (!next) return false;
   return (existingNames || []).some(name => String(name || '').trim().toLowerCase() === next);
 }
+function closeTxtCreateModal(result = '') {
+  const modal = document.getElementById('txt-create-modal');
+  const input = document.getElementById('txt-create-input');
+  const state = S.txtCreateState;
+  if (modal) modal.classList.remove('on');
+  if (input) input.value = '';
+  S.txtCreateState = null;
+  if (state?.resolve) state.resolve(result);
+}
+function onTxtCreateModalBackdrop(event) {
+  if (event.target?.id === 'txt-create-modal') cancelTxtCreateModal();
+}
+function cancelTxtCreateModal() {
+  closeTxtCreateModal('');
+}
+function onTxtCreateInputKeydown(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    confirmTxtCreateModal();
+    return;
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    cancelTxtCreateModal();
+  }
+}
+function confirmTxtCreateModal() {
+  const input = document.getElementById('txt-create-input');
+  closeTxtCreateModal(normalizeTxtFilename(input?.value || ''));
+}
 function promptTxtFilename(existingNames = []) {
+  const modal = document.getElementById('txt-create-modal');
+  const input = document.getElementById('txt-create-input');
+  if (!modal || !input) return Promise.resolve('');
+  if (S.txtCreateState?.resolve) S.txtCreateState.resolve('');
   const suggested = buildNextTxtFilename(existingNames);
-  const raw = window.prompt('請輸入 TXT 檔名', suggested);
-  if (raw === null) return '';
-  return normalizeTxtFilename(raw);
+  input.value = suggested;
+  modal.classList.add('on');
+  S.txtCreateState = {};
+  return new Promise(resolve => {
+    S.txtCreateState = { resolve };
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+  });
 }
 function createBlankTxtFile(filename = '新文字文件.txt') {
   const finalName = normalizeTxtFilename(filename);
@@ -4725,6 +4795,10 @@ function resetLightboxScroll() {
 }
 
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('txt-create-modal')?.classList.contains('on')) {
+    cancelTxtCreateModal();
+    return;
+  }
   if (e.key === 'Escape' && document.getElementById('collection-switch')?.classList.contains('open')) {
     closeCollectionMenu();
     return;
@@ -6105,11 +6179,11 @@ function onFile(files) {
   document.getElementById('fi-f').value = '';
   renderUploadFilePicked();
 }
-function createUploadTxtFile() {
+async function createUploadTxtFile() {
   if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
   if (!canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
   const existingNames = S.up.files.map(file => getRelativeFilePath(file) || file.name);
-  const filename = promptTxtFilename(existingNames);
+  const filename = await promptTxtFilename(existingNames);
   if (!filename) return;
   if (hasFilenameConflict(existingNames, filename)) { toast('已存在同名附件，請改用其他檔名', 'err'); return; }
   S.up.files = [...S.up.files, createBlankTxtFile(filename)];
@@ -6130,10 +6204,10 @@ function onEditFile(files) {
   document.getElementById('e-fi-f').value = '';
   renderEditFilePicked();
 }
-function createEditTxtFile() {
+async function createEditTxtFile() {
   if (!canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
   const existingNames = S.eDownloadEntries.map(entry => getEntryRelativeFilePath(entry) || entry.name || entry.file?.name);
-  const filename = promptTxtFilename(existingNames);
+  const filename = await promptTxtFilename(existingNames);
   if (!filename) return;
   if (hasFilenameConflict(existingNames, filename)) { toast('已存在同名附件，請改用其他檔名', 'err'); return; }
   S.eDownloadEntries = [...S.eDownloadEntries, {
