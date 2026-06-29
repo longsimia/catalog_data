@@ -1641,7 +1641,7 @@ function decodeTextBuffer(buf) {
     return { text: utf8.replace(/^\uFEFF/, ''), encoding: 'utf8', bom: null };
   }
 
-  for (const encoding of ['big5', 'gb18030']) {
+  for (const encoding of ['big5', 'gb18030', 'shift_jis', 'euc-jp']) {
     try {
       return {
         text: new TextDecoder(encoding, { fatal: true }).decode(buf).replace(/^\uFEFF/, ''),
@@ -1650,7 +1650,7 @@ function decodeTextBuffer(buf) {
       };
     } catch {}
   }
-  for (const encoding of ['utf8', 'utf16le', 'big5']) {
+  for (const encoding of ['utf8', 'utf16le', 'big5', 'gb18030', 'cp932', 'shift_jis', 'euc-jp']) {
     try {
       const decoded = iconv.decode(buf, encoding).replace(/^\uFEFF/, '');
       if (decoded && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(decoded)) {
@@ -1695,7 +1695,7 @@ function encodeTextBuffer(text, meta = {}) {
     const body = Buffer.from(normalized, 'utf16le');
     return meta.bom === 'utf16le' ? Buffer.concat([Buffer.from([0xFF, 0xFE]), body]) : body;
   }
-  if (meta.encoding === 'big5' || meta.encoding === 'gb18030') {
+  if (['big5', 'gb18030', 'cp932', 'shift_jis', 'euc-jp'].includes(meta.encoding)) {
     return iconv.encode(normalized, meta.encoding);
   }
   const body = Buffer.from(normalized, 'utf8');
