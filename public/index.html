@@ -29,6 +29,7 @@
   --toast-shadow:0 8px 22px rgba(87,72,56,.10);
   --modal-bg:rgba(0,0,0,.65);--overlay-bg:rgba(0,0,0,.65);--loading-bg:rgba(255,255,255,.84);
   --r:7px;--ease:cubic-bezier(.32,.72,0,1);
+  --vvh:100vh;
 }
 html{color-scheme:light}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -792,7 +793,7 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .mh{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem}
 .mh h3{font-family:'Noto Serif TC',serif;font-weight:400;color:var(--gold)}
 .confirm-modal{display:none;position:fixed;inset:0;z-index:750;background:var(--modal-bg);
-  align-items:center;justify-content:center;padding:1rem}
+  align-items:center;justify-content:center;padding:1rem;overflow-y:auto}
 .confirm-modal.on{display:flex}
 .confirm-box{background:linear-gradient(180deg,var(--panel),var(--bg2));border:1px solid var(--border);
   border-radius:var(--r);box-shadow:var(--elev);width:min(440px,calc(100vw - 2rem));padding:1.35rem 1.25rem}
@@ -801,7 +802,7 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .confirm-actions{display:flex;gap:.55rem;margin-top:1.15rem}
 .confirm-actions .btn{flex:1}
 .txt-create-btn{width:100%;margin-top:.5rem;margin-bottom:1.45rem}
-.txt-create-modal-box{width:min(520px,calc(100vw - 2rem))}
+.txt-create-modal-box{width:min(520px,calc(100vw - 2rem));max-height:calc(var(--vvh,100vh) - 2rem);overflow-y:auto}
 .txt-create-modal-box h3{margin-bottom:.45rem}
 .txt-create-modal-field{margin-top:.9rem}
 .txt-modal-input{width:100%;min-height:44px;padding:.68rem .8rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);color:var(--text);font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
@@ -812,6 +813,8 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .txt-modal-actions .btn{flex:0 0 auto;min-width:110px}
 @media (max-width: 640px){
   .txt-create-btn{margin-bottom:1.2rem}
+  .confirm-modal{align-items:flex-start;padding:max(.85rem,env(safe-area-inset-top)) .85rem max(1rem,env(safe-area-inset-bottom))}
+  .txt-create-modal-box{margin-top:max(.5rem,env(safe-area-inset-top));margin-bottom:max(.5rem,env(safe-area-inset-bottom))}
   .txt-modal-actions{flex-direction:column-reverse}
   .txt-modal-actions .btn{width:100%}
 }
@@ -3276,6 +3279,24 @@ function buildNextTxtFilename(existingNames = []) {
     index += 1;
   }
 }
+function getViewportHeight() {
+  const vv = window.visualViewport;
+  return vv && Number.isFinite(vv.height) ? vv.height : window.innerHeight;
+}
+function syncViewportHeightVar() {
+  document.documentElement.style.setProperty('--vvh', `${getViewportHeight()}px`);
+}
+function keepTxtCreateModalVisible() {
+  const modal = document.getElementById('txt-create-modal');
+  const input = document.getElementById('txt-create-input');
+  if (!modal?.classList.contains('on') || !input) return;
+  syncViewportHeightVar();
+  requestAnimationFrame(() => {
+    try {
+      input.scrollIntoView({ block: 'center', inline: 'nearest' });
+    } catch {}
+  });
+}
 function hasFilenameConflict(existingNames = [], candidate = '') {
   const next = String(candidate || '').trim().toLowerCase();
   if (!next) return false;
@@ -3287,6 +3308,7 @@ function closeTxtCreateModal(result = '') {
   const state = S.txtCreateState;
   if (modal) modal.classList.remove('on');
   if (input) input.value = '';
+  syncViewportHeightVar();
   S.txtCreateState = null;
   if (state?.resolve) state.resolve(result);
 }
@@ -3319,15 +3341,18 @@ function promptTxtFilename(existingNames = []) {
   const suggested = buildNextTxtFilename(existingNames);
   input.value = suggested;
   modal.classList.add('on');
+  keepTxtCreateModalVisible();
   S.txtCreateState = {};
   return new Promise(resolve => {
     S.txtCreateState = { resolve };
     setTimeout(() => {
       input.focus();
       input.select();
+      keepTxtCreateModalVisible();
     }, 0);
   });
 }
+document.getElementById('txt-create-input')?.addEventListener('focus', keepTxtCreateModalVisible);
 function createBlankTxtFile(filename = '新文字文件.txt') {
   const finalName = normalizeTxtFilename(filename);
   const file = new File([''], finalName, { type: 'text/plain;charset=utf-8', lastModified: Date.now() });
@@ -3704,6 +3729,7 @@ async function init() {
   const _cfgPublic = await api('GET', '/api/cfg-public').catch(() => ({}));
   window.UPLOAD_ORIGIN = String(_cfgPublic.uploadOrigin || '').trim().replace(/\/+$/, '');
   applyTheme(getTheme());
+  syncViewportHeightVar();
   initDescriptionTextareaScrollGuard('u-d');
   initDescriptionTextareaScrollGuard('e-d');
   initTextareaImeGuards();
@@ -3726,9 +3752,12 @@ window.addEventListener('offline', () => setConnState('offline'));
     scheduleCatalogScrollPersistence();
   }, { passive: true });
   window.addEventListener('resize', () => {
+    syncViewportHeightVar();
     syncMobileCtrlHeight();
     updateMobileCtrlVisibility();
   });
+  window.visualViewport?.addEventListener('resize', keepTxtCreateModalVisible);
+  window.visualViewport?.addEventListener('scroll', keepTxtCreateModalVisible);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       checkConn(true);
