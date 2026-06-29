@@ -2499,6 +2499,31 @@ function getTextareaScrollContainer(el) {
   return el?.closest('.mb2,.tab,.manage-page-body,.preview-shell,.lb-info,.lb-inner') || null;
 }
 
+function initTextareaImeGuards() {
+  document.querySelectorAll('textarea.fc').forEach(el => {
+    if (!el || el.dataset.imeGuardReady === '1') return;
+    el.dataset.imeGuardReady = '1';
+    el.addEventListener('compositionstart', () => {
+      el.dataset.isComposing = '1';
+    });
+    el.addEventListener('compositionend', () => {
+      el.dataset.isComposing = '0';
+      el.dataset.imeCooldownUntil = String(Date.now() + 180);
+      setTimeout(() => {
+        if (!el.isConnected) return;
+        autoGrowTextareaAfterPaint(el);
+      }, 0);
+      setTimeout(() => {
+        if (!el.isConnected) return;
+        const until = Number(el.dataset.imeCooldownUntil || 0);
+        if (until && until <= Date.now()) {
+          delete el.dataset.imeCooldownUntil;
+        }
+      }, 220);
+    });
+  });
+}
+
 function getTextareaCaretLineRect(el) {
   if (!el) return null;
   const caretPos = typeof el.selectionEnd === 'number' ? el.selectionEnd : (el.value || '').length;
@@ -2573,10 +2598,13 @@ function keepTextareaCaretLineVisibleInContainer(el, container) {
 
 function autoGrowTextarea(el) {
   if (!el) return;
+  if (el.dataset.isComposing === '1') return;
   const container = getTextareaScrollContainer(el);
+  const imeCooldownUntil = Number(el.dataset.imeCooldownUntil || 0);
+  const suppressScroll = imeCooldownUntil > Date.now();
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight}px`;
-  if (container && document.activeElement === el) {
+  if (!suppressScroll && container && document.activeElement === el) {
     requestAnimationFrame(() => keepTextareaCaretLineVisibleInContainer(el, container));
   }
 }
@@ -3213,6 +3241,7 @@ async function init() {
   const _cfgPublic = await api('GET', '/api/cfg-public').catch(() => ({}));
   window.UPLOAD_ORIGIN = String(_cfgPublic.uploadOrigin || '').trim().replace(/\/+$/, '');
   applyTheme(getTheme());
+  initTextareaImeGuards();
   decorateStaticIcons();
   applyGalleryView(getGalleryView());
   refreshDescriptionTextareas();
