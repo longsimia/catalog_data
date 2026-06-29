@@ -2169,7 +2169,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     function hasUnsavedChanges(){return (!!editor&&editor.value!==lastSavedText)||(!!filenameInput&&filenameInput.value!==lastSavedFilename);}
     function syncDirtyState(){if(!status||status.dataset.state==='error')return;if(hasUnsavedChanges())setStatusMessage('尚有未儲存的變更。');else if(status.textContent==='尚有未儲存的變更。')setStatusMessage('');}
     function updateRedoVisibility(){if(!redoBtn)return;redoBtn.style.display=redoStack.length?'inline-flex':'none';}
-    function updateUndoButtons(){if(undoBtn){const canUndo=undoStack.length>0;undoBtn.disabled=!canUndo;undoBtn.style.display=canUndo?'inline-flex':'none';}updateRedoVisibility();}
+    function updateUndoButtons(){if(undoBtn){const canUndo=undoStack.length>0;const keepUndoVisible=canUndo||redoStack.length>0;undoBtn.disabled=!canUndo;undoBtn.style.display=keepUndoVisible?'inline-flex':'none';}updateRedoVisibility();}
     function rememberUndoState(previousState){if(!previousState||statesEqual(previousState,snapshotState()))return;const top=undoStack.length?undoStack[undoStack.length-1]:null;if(top&&statesEqual(top,previousState))return;undoStack.push(previousState);if(undoStack.length>200)undoStack.shift();redoStack=[];updateUndoButtons();}
     function clearInputGroupTimer(){if(inputGroupTimer){window.clearTimeout(inputGroupTimer);inputGroupTimer=0;}}
     function commitPendingInputGroup(){clearInputGroupTimer();if(!inputGroupState)return;rememberUndoState(inputGroupState);inputGroupState=null;inputGroupTarget='';}
@@ -4644,4 +4644,3 @@ app.listen(PORT, '0.0.0.0', () => {
     })();
   }, 0);
 });
-
