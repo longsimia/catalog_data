@@ -232,18 +232,18 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justif
 .card-ph{width:100%;aspect-ratio:4/3;display:block;background:var(--bg2)}
 .card-cover-wrap{position:relative}
 .card-cover-tools{position:absolute;top:.46rem;right:.46rem;z-index:3;display:flex;align-items:center;justify-content:flex-end;gap:.36rem;max-width:calc(100% - .92rem)}
-.card-cover-actionbar{position:absolute;top:.7rem;left:50%;z-index:5;display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:12px;background:var(--panel);box-shadow:0 10px 24px rgba(0,0,0,.16);transform:translateX(-50%);overflow:hidden}
-.card-cover-actionbar button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:.38rem .82rem;border:none;background:var(--panel);color:var(--text);font-size:.76rem;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .18s var(--ease),color .18s var(--ease)}
+.card-cover-actionbar{position:absolute;top:.7rem;left:50%;z-index:5;display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--panel) 30%, transparent);box-shadow:0 10px 24px rgba(0,0,0,.16);transform:translateX(-50%);overflow:hidden;backdrop-filter:blur(10px)}
+.card-cover-actionbar button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:.38rem .82rem;border:none;background:color-mix(in srgb,var(--panel) 30%, transparent);color:var(--text);font-size:.76rem;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .18s var(--ease),color .18s var(--ease)}
 .card-cover-actionbar button + button{border-left:1px solid var(--border)}
 .card-cover-actionbar button:hover{background:var(--bg2);color:var(--gold)}
-.card-cover-actionbar .primary{background:var(--bg2);color:var(--gold);font-weight:500}
+.card-cover-actionbar .primary{background:color-mix(in srgb,var(--bg2) 30%, transparent);color:var(--gold);font-weight:500}
 .card-cover-actionbar .primary:hover{background:var(--gglow)}
 .card-cover-actionbar .icon-only{padding:.38rem .68rem;min-width:36px}
-.card-cover-crop-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--gold);border-radius:10px;background:var(--bg2);color:var(--gold);cursor:pointer;opacity:0;pointer-events:none;transform:translateY(-3px);transition:opacity .18s var(--ease),transform .18s var(--ease),background .18s var(--ease),border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease);box-shadow:0 8px 18px rgba(0,0,0,.12)}
-.card-cover-crop-btn:hover{background:var(--gglow);border-color:var(--gold);color:var(--gold)}
+.card-cover-crop-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--gold);border-radius:10px;background:color-mix(in srgb,var(--bg2) 30%, transparent);color:var(--gold);cursor:pointer;opacity:0;pointer-events:none;transform:translateY(-3px);transition:opacity .18s var(--ease),transform .18s var(--ease),background .18s var(--ease),border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease);box-shadow:0 8px 18px rgba(0,0,0,.12);backdrop-filter:blur(10px)}
+.card-cover-crop-btn:hover{background:color-mix(in srgb,var(--gglow) 30%, transparent);border-color:var(--gold);color:var(--gold)}
 .card-cover-crop-btn .ico{width:1rem;height:1rem}
 .card:hover .card-cover-crop-btn,.card.cover-crop-on .card-cover-crop-btn{opacity:1;pointer-events:auto;transform:none}
-.card.cover-crop-on .card-cover-crop-btn{background:var(--gglow);border-color:var(--gold);color:var(--gold)}
+.card.cover-crop-on .card-cover-crop-btn{background:color-mix(in srgb,var(--gglow) 30%, transparent);border-color:var(--gold);color:var(--gold)}
 .card.cover-crop-on{z-index:4}
 .card.cover-crop-on .card-cover-wrap{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .card.cover-crop-on .card-cover-wrap.dragging{cursor:grabbing}
@@ -2995,15 +2995,40 @@ function getGalleryCoverToolsHtml(item, coverEntry = null) {
   if (!canInlineCropGalleryCover(item, coverEntry)) return badge;
   const isActive = S.galleryCoverEditId === item.id;
   const actionbar = isActive ? `<div class="card-cover-actionbar" onclick="event.stopPropagation()">
-    <button class="primary" type="button" onclick="saveGalleryCoverEdit(event,'${esc(item.id)}')">儲存位置</button>
     <button type="button" onclick="cancelGalleryCoverEdit(event,'${esc(item.id)}')">取消</button>
     <button type="button" onclick="resetGalleryCoverEdit(event,'${esc(item.id)}')">置中</button>
-    <button class="icon-only" type="button">${icon('edit')}</button>
+    <button class="icon-only primary" type="button" onclick="saveGalleryCoverEdit(event,'${esc(item.id)}')" title="儲存位置" aria-label="儲存位置">${icon('save')}</button>
   </div>` : '';
   return `${actionbar}<div class="card-cover-tools">
     ${badge}
     ${isActive ? '' : `<button class="card-cover-crop-btn" type="button" onclick="toggleGalleryCoverEdit(event,'${esc(item.id)}')" title="調整封面" aria-label="調整封面">${icon('edit')}</button>`}
   </div>`;
+}
+function getGalleryCardPageIndex(itemId) {
+  const items = filtered();
+  const totalPages = Math.max(1, Math.ceil(items.length / S.F.pageSize));
+  const page = Math.min(Math.max(1, S.F.page), totalPages);
+  const start = (page - 1) * S.F.pageSize;
+  const shown = items.slice(start, start + S.F.pageSize);
+  return shown.findIndex(item => item.id === itemId);
+}
+function refreshGalleryCard(itemId) {
+  const card = getGalleryCardById(itemId);
+  if (!card) return;
+  const idx = getGalleryCardPageIndex(itemId);
+  if (idx < 0) return;
+  const item = getGalleryCoverEditItem(itemId);
+  if (!item) return;
+  const next = document.createElement('div');
+  next.innerHTML = galleryGridCardHtml(item, idx).trim();
+  const nextCard = next.firstElementChild;
+  if (!nextCard) return;
+  nextCard.style.animation = 'none';
+  card.replaceWith(nextCard);
+}
+function refreshGalleryCoverEditCards(...itemIds) {
+  const unique = [...new Set(itemIds.filter(Boolean))];
+  unique.forEach(refreshGalleryCard);
 }
 function beginGalleryCoverEdit(itemId) {
   const item = getGalleryCoverEditItem(itemId);
@@ -3022,11 +3047,12 @@ function toggleGalleryCoverEdit(event, itemId) {
   event?.stopPropagation?.();
   if (S.galleryCoverEditId === itemId) {
     endGalleryCoverEdit();
-    renderGallery();
+    refreshGalleryCoverEditCards(itemId);
     return;
   }
+  const prevId = S.galleryCoverEditId;
   if (!beginGalleryCoverEdit(itemId)) return;
-  renderGallery();
+  refreshGalleryCoverEditCards(prevId, itemId);
 }
 function resetGalleryCoverEdit(event, itemId = S.galleryCoverEditId) {
   event?.stopPropagation?.();
@@ -3045,7 +3071,7 @@ function cancelGalleryCoverEdit(event, itemId = S.galleryCoverEditId) {
     updateGalleryCoverPreview(itemId);
   }
   endGalleryCoverEdit();
-  renderGallery();
+  refreshGalleryCoverEditCards(itemId);
 }
 async function saveGalleryCoverEdit(event, itemId = S.galleryCoverEditId) {
   event?.stopPropagation?.();
@@ -3058,7 +3084,7 @@ async function saveGalleryCoverEdit(event, itemId = S.galleryCoverEditId) {
     S.galleryCoverInitialY = Number(item.coverFocusY) || 50;
   }
   endGalleryCoverEdit();
-  renderGallery();
+  refreshGalleryCoverEditCards(itemId);
 }
 function startGalleryCoverCropDrag(event, itemId) {
   if (S.galleryCoverEditId !== itemId) return;
