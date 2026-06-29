@@ -1248,7 +1248,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       </div>
       <div class="fg">
         <label id="u-desc-label">文字說明</label>
-        <textarea class="fc" id="u-d" oninput="autoGrowTextarea(this)"></textarea>
+        <textarea class="fc" id="u-d" oninput="autoGrowUploadTextarea(this)"></textarea>
       </div>
 
       <div class="sh" id="u-preview-title">預覽媒體</div>
@@ -1441,7 +1441,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
       </div>
       <div class="tag-pool" id="e-tag-pool"></div>
     </div>
-    <div class="fg"><label id="e-desc-label">文字說明</label><textarea class="fc" id="e-d" oninput="autoGrowTextarea(this)"></textarea></div>
+    <div class="fg"><label id="e-desc-label">文字說明</label><textarea class="fc" id="e-d" oninput="autoGrowEditTextarea(this)"></textarea></div>
     <div class="sh" id="e-preview-title">預覽媒體</div>
     <div class="dz" id="e-dz-p" onclick="document.getElementById('e-fi-p').click()"
       ondragover="dzO(event,'e-dz-p')" ondragleave="dzL('e-dz-p')" ondrop="dzD(event,'eprev')">
@@ -2495,8 +2495,10 @@ function toggleTheme() {
   setTheme(next);
 }
 
-function getTextareaScrollContainer(el) {
-  return el?.closest('.mb2,.tab,.manage-page-body,.preview-shell,.lb-info,.lb-inner') || null;
+function autoGrowUploadTextarea(el) {
+  if (!el || el.dataset.isComposing === '1') return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
 }
 
 function initTextareaImeGuards() {
@@ -2511,7 +2513,8 @@ function initTextareaImeGuards() {
       el.dataset.imeCooldownUntil = String(Date.now() + 180);
       setTimeout(() => {
         if (!el.isConnected) return;
-        autoGrowTextareaAfterPaint(el);
+        if (el.id === 'u-d') autoGrowUploadTextarea(el);
+        else autoGrowEditTextareaAfterPaint(el);
       }, 0);
       setTimeout(() => {
         if (!el.isConnected) return;
@@ -2524,102 +2527,27 @@ function initTextareaImeGuards() {
   });
 }
 
-function getTextareaCaretLineRect(el) {
-  if (!el) return null;
-  const caretPos = typeof el.selectionEnd === 'number' ? el.selectionEnd : (el.value || '').length;
-  const style = window.getComputedStyle(el);
-  const mirror = document.createElement('div');
-  const marker = document.createElement('span');
-  const value = el.value || '';
-  const before = value.slice(0, caretPos);
-  const after = value.slice(caretPos);
-  const rect = el.getBoundingClientRect();
-  const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.4 || 20;
-
-  mirror.style.position = 'absolute';
-  mirror.style.visibility = 'hidden';
-  mirror.style.pointerEvents = 'none';
-  mirror.style.left = '-99999px';
-  mirror.style.top = '0';
-  mirror.style.whiteSpace = 'pre-wrap';
-  mirror.style.wordBreak = 'break-word';
-  mirror.style.overflowWrap = 'break-word';
-  mirror.style.boxSizing = 'border-box';
-  mirror.style.width = `${el.clientWidth}px`;
-  mirror.style.padding = style.padding;
-  mirror.style.border = '0';
-  mirror.style.font = style.font;
-  mirror.style.fontFamily = style.fontFamily;
-  mirror.style.fontSize = style.fontSize;
-  mirror.style.fontWeight = style.fontWeight;
-  mirror.style.fontStyle = style.fontStyle;
-  mirror.style.letterSpacing = style.letterSpacing;
-  mirror.style.lineHeight = style.lineHeight;
-  mirror.style.textTransform = style.textTransform;
-  mirror.style.textIndent = style.textIndent;
-  mirror.style.textAlign = style.textAlign;
-  mirror.style.tabSize = style.tabSize;
-  mirror.style.overflow = 'hidden';
-
-  mirror.textContent = before;
-  if (!before || before.endsWith('\n')) {
-    mirror.textContent += '\u200b';
-  }
-  marker.textContent = after[0] || '\u200b';
-  mirror.appendChild(marker);
-  document.body.appendChild(mirror);
-
-  const markerRect = marker.getBoundingClientRect();
-  const mirrorRect = mirror.getBoundingClientRect();
-  document.body.removeChild(mirror);
-
-  const top = rect.top + (markerRect.top - mirrorRect.top);
-  return {
-    top,
-    bottom: top + lineHeight,
-    height: lineHeight
-  };
-}
-
-function keepTextareaCaretLineVisibleInContainer(el, container) {
-  if (!el || !container || document.activeElement !== el) return;
-  const lineRect = getTextareaCaretLineRect(el);
-  if (!lineRect) return;
-  const containerRect = container.getBoundingClientRect();
-  const tolerance = Math.max(24, lineRect.height * 1.25);
-  const fullyAbove = lineRect.bottom < (containerRect.top - tolerance);
-  const fullyBelow = lineRect.top > (containerRect.bottom + tolerance);
-  if (!fullyAbove && !fullyBelow) return;
-  const targetCenter = container.clientHeight * 0.5;
-  const lineCenterInContainer = (lineRect.top - containerRect.top + container.scrollTop) + (lineRect.height / 2);
-  const nextScrollTop = Math.max(0, lineCenterInContainer - targetCenter);
-  container.scrollTop = nextScrollTop;
-}
-
-function autoGrowTextarea(el) {
+function autoGrowEditTextarea(el) {
   if (!el) return;
   if (el.dataset.isComposing === '1') return;
-  const container = getTextareaScrollContainer(el);
   const imeCooldownUntil = Number(el.dataset.imeCooldownUntil || 0);
   const suppressScroll = imeCooldownUntil > Date.now();
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight}px`;
-  if (!suppressScroll && container && document.activeElement === el) {
-    requestAnimationFrame(() => keepTextareaCaretLineVisibleInContainer(el, container));
-  }
+  if (suppressScroll) return;
 }
 
-function autoGrowTextareaAfterPaint(el) {
+function autoGrowEditTextareaAfterPaint(el) {
   if (!el) return;
   requestAnimationFrame(() => {
-    autoGrowTextarea(el);
-    requestAnimationFrame(() => autoGrowTextarea(el));
+    autoGrowEditTextarea(el);
+    requestAnimationFrame(() => autoGrowEditTextarea(el));
   });
 }
 
 function refreshDescriptionTextareas() {
-  autoGrowTextarea(document.getElementById('u-d'));
-  autoGrowTextarea(document.getElementById('e-d'));
+  autoGrowUploadTextarea(document.getElementById('u-d'));
+  autoGrowEditTextarea(document.getElementById('e-d'));
 }
 
 let mobileCtrlLastY = 0;
@@ -6404,7 +6332,7 @@ async function doUp() {
 
 function resetUploadFormState() {
   ['u-t','u-a','u-alt','u-d','u-url'].forEach(id => document.getElementById(id).value = '');
-  autoGrowTextarea(document.getElementById('u-d'));
+  autoGrowUploadTextarea(document.getElementById('u-d'));
   renderPermissionSelectOptions('u-perm', 'public');
   document.getElementById('u-ci').value         = '';
   document.getElementById('pg').innerHTML         = '';
@@ -7998,7 +7926,7 @@ function openEdit(id) {
   }
   document.getElementById('edit-mo').classList.add('on');
   resetEditModalScroll();
-  autoGrowTextareaAfterPaint(editDesc);
+  autoGrowEditTextareaAfterPaint(editDesc);
 }
 
 function closeEdit() {
