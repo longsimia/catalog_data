@@ -453,6 +453,7 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 #adm-body{display:flex;flex-direction:column;flex:1;overflow:hidden}
 .tab{display:none;flex:1;overflow-y:auto;padding:1.3rem}
 .tab.on{display:block}
+#tab-up{overflow-anchor:none}
 
 /* Forms */
 .fg{margin-bottom:.88rem}
@@ -463,6 +464,7 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 .fc:focus{border-color:var(--gold)}
 .fc::placeholder{color:var(--muted)}
 textarea.fc{min-height:144px;resize:none;overflow:hidden}
+#u-d{overflow-anchor:none}
 .sh{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);
   margin-bottom:.65rem;margin-top:1.4rem;padding-bottom:.22rem;border-bottom:1px solid var(--border)}
 .sh:first-child{margin-top:0}
@@ -2495,10 +2497,60 @@ function toggleTheme() {
   setTheme(next);
 }
 
+function getUploadTextareaScrollContainer() {
+  return document.getElementById('tab-up');
+}
+
+function rememberUploadTextareaScroll(el) {
+  if (!el || el.id !== 'u-d') return;
+  const sc = getUploadTextareaScrollContainer();
+  if (!sc) return;
+  sc.dataset.uploadScrollLockTop = String(sc.scrollTop || 0);
+  sc.dataset.uploadScrollLockAt = String(Date.now());
+}
+
+function restoreUploadTextareaScroll(el, force = false) {
+  if (!el || el.id !== 'u-d') return;
+  const sc = getUploadTextareaScrollContainer();
+  if (!sc) return;
+  const lockedTop = Number(sc.dataset.uploadScrollLockTop || NaN);
+  if (!Number.isFinite(lockedTop)) return;
+  const delta = (sc.scrollTop || 0) - lockedTop;
+  if (!force && Math.abs(delta) > 160) return;
+  sc.scrollTop = lockedTop;
+}
+
+function scheduleUploadTextareaScrollRestore(el, force = false) {
+  if (!el || el.id !== 'u-d') return;
+  const run = () => restoreUploadTextareaScroll(el, force);
+  setTimeout(run, 0);
+  requestAnimationFrame(run);
+  requestAnimationFrame(() => requestAnimationFrame(run));
+}
+
 function autoGrowUploadTextarea(el) {
   if (!el || el.dataset.isComposing === '1') return;
+  rememberUploadTextareaScroll(el);
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight}px`;
+  scheduleUploadTextareaScrollRestore(el, true);
+}
+
+function initUploadTextareaScrollGuard() {
+  const el = document.getElementById('u-d');
+  if (!el || el.dataset.scrollGuardReady === '1') return;
+  el.dataset.scrollGuardReady = '1';
+  const remember = () => rememberUploadTextareaScroll(el);
+  ['focus', 'click', 'keydown', 'beforeinput', 'compositionstart', 'compositionupdate'].forEach(type => {
+    el.addEventListener(type, remember, true);
+  });
+  ['input', 'compositionupdate'].forEach(type => {
+    el.addEventListener(type, () => scheduleUploadTextareaScrollRestore(el), true);
+  });
+  el.addEventListener('compositionend', () => {
+    rememberUploadTextareaScroll(el);
+    scheduleUploadTextareaScrollRestore(el, true);
+  }, true);
 }
 
 function initTextareaImeGuards() {
@@ -3169,6 +3221,7 @@ async function init() {
   const _cfgPublic = await api('GET', '/api/cfg-public').catch(() => ({}));
   window.UPLOAD_ORIGIN = String(_cfgPublic.uploadOrigin || '').trim().replace(/\/+$/, '');
   applyTheme(getTheme());
+  initUploadTextareaScrollGuard();
   initTextareaImeGuards();
   decorateStaticIcons();
   applyGalleryView(getGalleryView());
