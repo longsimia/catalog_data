@@ -2065,7 +2065,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .modal-card{position:relative;z-index:1;width:min(92vw,420px);background:var(--bg);border:1px solid var(--line);padding:20px 22px;border-radius:18px}
     .modal-card h3{margin:0 0 10px;font-size:20px;line-height:1.35;color:var(--text)}
     .modal-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.7}
-    .floating-modal{display:block;pointer-events:none;align-items:stretch;justify-content:stretch}
+    .floating-modal{display:none;pointer-events:none;align-items:stretch;justify-content:stretch}
     .floating-modal.on{display:block}
     .floating-modal .modal-bg{display:none}
     .floating-window{position:fixed;top:96px;right:40px;left:auto;transform:none;z-index:80;width:min(92vw,420px);border:1px solid var(--line);border-radius:14px;background:var(--bg);box-shadow:0 18px 48px rgba(0,0,0,.18);pointer-events:auto;overflow:hidden}
@@ -2127,7 +2127,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
           ${isTxt && canEditTxt ? `<input id="filenameInput" class="filename-input" type="text" value="${filenameValue}" spellcheck="false" aria-label="TXT 檔名">` : `<h1 class="title">${pageTitle}</h1>`}
         </div>
         <div class="actions">
-          ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="undoBtn" title="復原（Ctrl+Z）">復原</button>` : ''}
+          ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="undoBtn" title="復原（Ctrl+Z）" style="display:none">復原</button>` : ''}
           ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="redoBtn" title="重做（Ctrl+Shift+Z）" style="display:none">重做</button>` : ''}
           ${isTxt && canEditTxt ? `<span id="historySlot"></span>` : ''}
           ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="formatBtn" title="格式化排版">格式化</button>` : ''}
@@ -2167,7 +2167,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     function hasUnsavedChanges(){return (!!editor&&editor.value!==lastSavedText)||(!!filenameInput&&filenameInput.value!==lastSavedFilename);}
     function syncDirtyState(){if(!status||status.dataset.state==='error')return;if(hasUnsavedChanges())setStatusMessage('尚有未儲存的變更。');else if(status.textContent==='尚有未儲存的變更。')setStatusMessage('');}
     function updateRedoVisibility(){if(!redoBtn)return;redoBtn.style.display=redoStack.length?'inline-flex':'none';}
-    function updateUndoButtons(){if(undoBtn)undoBtn.disabled=!undoStack.length;updateRedoVisibility();}
+    function updateUndoButtons(){if(undoBtn){const canUndo=undoStack.length>0;undoBtn.disabled=!canUndo;undoBtn.style.display=canUndo?'inline-flex':'none';}updateRedoVisibility();}
     function rememberUndoState(previousState){if(!previousState||statesEqual(previousState,snapshotState()))return;const top=undoStack.length?undoStack[undoStack.length-1]:null;if(top&&statesEqual(top,previousState))return;undoStack.push(previousState);if(undoStack.length>200)undoStack.shift();redoStack=[];updateUndoButtons();}
     function applyState(state,{focusEditor=true}={}){suspendTracking=true;if(editor)editor.value=state?.text||'';if(filenameInput)filenameInput.value=state?.filename||'';resizeEditor();suspendTracking=false;syncDirtyState();updateUndoButtons();if(focusEditor)editor?.focus();}
     function applyTrackedState(nextState,successMessage,unchangedMessage='目前內容沒有變化。'){const before=snapshotState();if(statesEqual(before,nextState)){setStatusMessage(unchangedMessage);closeFormatModal();return false;}rememberUndoState(before);applyState(nextState);setStatusMessage(successMessage,'success');closeFormatModal();return true;}
