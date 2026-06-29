@@ -685,9 +685,9 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .cover-focus-title{font-size:.78rem;color:var(--gold);letter-spacing:.06em}
 .cover-focus-hint{font-size:.74rem;color:var(--muted);line-height:1.55}
 .cover-focus-reset{min-height:30px;padding:.28rem .62rem;font-size:.74rem;white-space:nowrap}
-.cover-focus-stage{position:relative;width:min(100%,320px);aspect-ratio:4/3;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel);cursor:grab;touch-action:none}
+.cover-focus-stage{position:relative;width:min(100%,320px);aspect-ratio:4/3;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;overscroll-behavior:contain}
 .cover-focus-stage.dragging{cursor:grabbing}
-.cover-focus-image{position:absolute;inset:0;width:100%;height:100%;display:block}
+.cover-focus-image{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
 .cover-focus-mask{position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.14));pointer-events:none}
 .cover-focus-chip{position:absolute;left:.55rem;bottom:.55rem;display:inline-flex;align-items:center;gap:.28rem;padding:.2rem .5rem;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(0,0,0,.42);color:#fff;font-size:.69rem;backdrop-filter:blur(10px);pointer-events:none}
 .prev-grip{position:absolute;top:.32rem;left:.32rem;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
@@ -2889,15 +2889,21 @@ function getEditCoverFocusMediaMetrics() {
 }
 function startEditCoverFocusDrag(event) {
   if (event.button !== undefined && event.button !== 0) return;
+  event.preventDefault();
   S.eCoverFocusDragging = true;
   S.eCoverFocusDragStartX = event.clientX;
   S.eCoverFocusDragStartY = event.clientY;
   S.eCoverFocusOriginX = Number(S.eCoverFocusX) || 50;
   S.eCoverFocusOriginY = Number(S.eCoverFocusY) || 50;
-  document.getElementById('e-cover-focus-stage')?.classList.add('dragging');
+  const stage = document.getElementById('e-cover-focus-stage');
+  stage?.classList.add('dragging');
+  if (stage?.setPointerCapture && event.pointerId !== undefined) {
+    try { stage.setPointerCapture(event.pointerId); } catch {}
+  }
 }
 function moveEditCoverFocusDrag(event) {
   if (!S.eCoverFocusDragging) return;
+  event.preventDefault();
   const metrics = getEditCoverFocusMediaMetrics();
   if (!metrics) return;
   const dx = event.clientX - S.eCoverFocusDragStartX;
@@ -2912,9 +2918,13 @@ function moveEditCoverFocusDrag(event) {
   S.eCoverFocusY = Math.round(Math.max(0, Math.min(100, nextY)) * 10) / 10;
   updateEditCoverFocusPreview();
 }
-function stopEditCoverFocusDrag() {
+function stopEditCoverFocusDrag(event) {
   S.eCoverFocusDragging = false;
-  document.getElementById('e-cover-focus-stage')?.classList.remove('dragging');
+  const stage = document.getElementById('e-cover-focus-stage');
+  stage?.classList.remove('dragging');
+  if (stage?.releasePointerCapture && event?.pointerId !== undefined) {
+    try { stage.releasePointerCapture(event.pointerId); } catch {}
+  }
 }
 function renderEditCoverFocusEditor() {
   const wrap = document.getElementById('e-cover-focus-wrap');
