@@ -2508,6 +2508,165 @@ function renderTextPreviewPage(item, file, text, options = {}) {
 </html>`;
 }
 
+function renderTextPreviewPage(item, file, text, options = {}) {
+  const isTxt = file.ext === '.txt';
+  const previewLabel = getPreviewLabel(file);
+  const fileNameRaw = String(file?.name || path.basename(file?.key || 'document'));
+  const txtMainTitleRaw = path.parse(fileNameRaw).name || previewLabel;
+  const txtMetaTitleRaw = item?.translatedTitle || item?.title || txtMainTitleRaw;
+  const pageTitle = escapeXml(isTxt ? txtMainTitleRaw : previewLabel);
+  const rawBody = escapeXml(String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n'));
+  const displayBody = rawBody || escapeXml(normalizePreviewText(text));
+  const canEditTxt = !!options.canEditTxt;
+  const metaHtml = formatReadOnlyMeta({
+    label: txtMetaTitleRaw,
+    updatedAtLabel: options.updatedAtLabel || '',
+    updatedByLabel: options.updatedByLabel || ''
+  });
+  const noContextMenuScript = options.disableContextMenu ? `\n  ${getNoContextMenuScript()}` : '';
+  const filenameValue = escapeXml(fileNameRaw);
+  return `<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${pageTitle}</title>
+  <style>
+    :root{--bg:#fff;--text:#222;--muted:#777;--line:#e8e8e8;--link:#2f6db5;--panel:#fbfbfb}
+    html[data-theme="dark"]{--bg:#111118;--text:#ece7df;--muted:#9a958d;--line:#2a2a34;--link:#8fb6ff;--panel:#171720}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
+    body{font-family:Georgia,"Times New Roman","Noto Serif TC","Songti TC","PMingLiU",serif;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;transition:background .2s ease,color .2s ease}
+    .page{width:min(100%,760px);margin:0 auto;padding:58px 24px 72px}
+    .meta{margin-bottom:18px}
+    .meta-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+    .title-wrap{flex:1;min-width:0}
+    .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
+    .filename-input{width:100%;margin:0;padding:0;border:none;background:transparent;color:var(--text);font:inherit;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em;outline:none}
+    .meta-times{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;font-size:15px;color:var(--muted)}
+    .meta-times time,.meta-times #metaLabelWrap,.meta-times #metaLabelText,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
+    .meta-dot{width:3px;height:3px;border-radius:999px;background:currentColor;opacity:.55}
+    .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .icon-btn{width:30px;height:30px;border:none;background:transparent;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+    .icon-btn:hover{color:var(--text)}
+    .icon{width:18px;height:18px;display:block}
+    .save-btn{border:none;background:transparent;color:var(--muted);padding:0 2px;font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;height:30px;line-height:1}
+    .save-btn:hover{color:var(--text)}
+    .save-btn:disabled{opacity:.6;cursor:wait}
+    .article{font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word}
+    .article-body,.editor{margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.92;font-size:16px;font-family:inherit;letter-spacing:.01em}
+    .editor{display:block;width:100%;min-height:0;border:none;outline:none;resize:none;overflow:hidden;background:transparent;color:inherit;padding:0}
+    .status{min-height:22px;margin-top:20px;color:var(--muted);font-size:14px}
+    .status[data-state="error"]{color:#a33d2d}
+    .status[data-state="success"]{color:#2d7a54}
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:60}
+    .modal.on{display:flex}
+    .modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.65)}
+    .modal-card{position:relative;z-index:1;width:min(92vw,420px);background:var(--bg);border:1px solid var(--line);padding:20px 22px;border-radius:18px}
+    .modal-card h3{margin:0 0 10px;font-size:20px;line-height:1.35;color:var(--text)}
+    .modal-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.7}
+    .format-modal-card{width:min(94vw,860px)}
+    .format-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
+    .format-action-btn{min-height:72px;padding:16px 18px;border:1px solid var(--line);border-radius:18px;background:transparent;color:var(--text);font:inherit;font-size:15px;line-height:1.6;text-align:left;cursor:pointer;transition:border-color .18s ease,background .18s ease,color .18s ease}
+    .format-action-btn:hover{border-color:var(--text);background:rgba(127,127,127,.06)}
+    .format-action-btn-wide{grid-column:1 / -1}
+    .modal-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px}
+    .modal-actions button{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:8px 14px;font:inherit;cursor:pointer}
+    .find-grid{display:grid;gap:12px;margin-top:18px}
+    .find-grid label{display:grid;gap:6px;font-size:14px;color:var(--muted)}
+    .find-grid input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);font:inherit;outline:none}
+    .find-grid input:focus{border-color:var(--link)}
+    .divider{height:1px;background:var(--line);margin:0 0 36px}
+    .footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);font-size:14px;color:var(--muted);text-align:center}
+    .article blockquote{margin:1.8em 0;padding-left:18px;border-left:3px solid #d7d7d7;color:#444}
+    html[data-theme="dark"] .article blockquote{border-left-color:#8f8679;color:#d2cbc2}
+    .article a{color:var(--link);text-decoration:none}
+    .article a:hover{text-decoration:underline}
+    @media (max-width: 720px){.page{padding:40px 20px 48px}.meta-head{gap:12px;flex-direction:column}.filename-input,.title,.article,.article-body,.editor{font-size:16px;line-height:1.88}.format-grid{grid-template-columns:1fr}.format-action-btn-wide{grid-column:auto}}
+  </style>
+  <script>
+    (() => {
+      const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
+      document.documentElement.dataset.theme = mode;
+      document.addEventListener('DOMContentLoaded', () => {
+        document.body.dataset.theme = mode;
+      });
+    })();
+  </script>
+</head>
+<body>
+  <main class="page">
+    <header class="meta">
+      <div class="meta-head">
+        <div class="title-wrap">
+          ${isTxt && canEditTxt ? `<input id="filenameInput" class="filename-input" type="text" value="${filenameValue}" spellcheck="false" aria-label="TXT 檔名">` : `<h1 class="title">${pageTitle}</h1>`}
+        </div>
+        <div class="actions">
+          ${isTxt && canEditTxt ? `<button type="button" class="save-btn" id="formatBtn" title="開啟格式化排版工具">格式化</button>` : ''}
+          ${isTxt && canEditTxt ? `<button type="button" class="save-btn" id="saveBtn" title="會直接覆寫雲端上的原始檔案">儲存</button>` : ''}
+          <button class="icon-btn" id="theme-btn" type="button" aria-label="切換明暗主題" title="切換明暗主題"></button>
+        </div>
+      </div>
+      ${metaHtml}
+    </header>
+    <div class="divider" aria-hidden="true"></div>
+    <article class="article">
+      ${isTxt ? `<textarea id="editor" class="editor" spellcheck="false"${canEditTxt ? '' : ' readonly'}>${rawBody}</textarea><div class="status" id="saveStatus" aria-live="polite"${canEditTxt ? '' : ' style="display:none"'}></div>` : `<pre class="article-body">${displayBody}</pre>`}
+    </article>
+    <div class="footer">${canEditTxt ? 'Editable preview.' : 'Read-only preview.'}</div>
+  </main>
+  ${isTxt && canEditTxt ? `<div class="modal" id="formatModal" aria-hidden="true"><div class="modal-bg" id="formatModalBg"></div><div class="modal-card format-modal-card" role="dialog" aria-modal="true" aria-labelledby="formatModalTitle"><h3 id="formatModalTitle">格式化排版</h3><p>選一個動作直接套用到目前全文內容。</p><div class="format-grid"><button type="button" class="format-action-btn" data-action="keep_blank_line">在段落與段落間保留一個空列</button><button type="button" class="format-action-btn" data-action="trim_blank_lines">去除段落與段落間多餘的空列</button><button type="button" class="format-action-btn" data-action="cjk_spacing">在中英文之間插入空白</button><button type="button" class="format-action-btn" data-action="indent_add">在段首插入縮排</button><button type="button" class="format-action-btn" data-action="indent_remove">去除段首縮排</button><button type="button" class="format-action-btn" data-action="cn_to_twp">簡體中文 轉 繁體中文（台灣）</button><button type="button" class="format-action-btn" data-action="t_to_cn">繁體中文 轉 簡體中文</button><button type="button" class="format-action-btn" data-action="punct_fullwidth">半角符號轉全角符號</button><button type="button" class="format-action-btn format-action-btn-wide" data-action="find_replace">尋找與取代（Ctrl+H）</button></div><div class="modal-actions"><button type="button" id="formatCloseBtn">關閉</button></div></div></div>` : ''}
+  ${isTxt && canEditTxt ? `<div class="modal" id="findReplaceModal" aria-hidden="true"><div class="modal-bg" id="findReplaceModalBg"></div><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="findReplaceTitle"><h3 id="findReplaceTitle">尋找與取代</h3><p>可逐一尋找、單次取代，或一次全部取代。</p><div class="find-grid"><label>尋找<input id="findInput" type="text" autocomplete="off" spellcheck="false"></label><label>取代成<input id="replaceInput" type="text" autocomplete="off" spellcheck="false"></label></div><div class="modal-actions"><button type="button" id="findNextBtn">尋找下一個</button><button type="button" id="replaceOneBtn">取代目前</button><button type="button" id="replaceAllBtn">全部取代</button><button type="button" id="findReplaceCloseBtn">關閉</button></div></div></div>` : ''}
+  ${isTxt && canEditTxt ? `<div class="modal" id="leaveModal" aria-hidden="true"><div class="modal-bg" id="leaveModalBg"></div><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="leaveModalTitle"><h3 id="leaveModalTitle">尚未儲存變更</h3><p>這份 TXT 還有未儲存的編輯內容。要先留在這頁繼續處理，還是直接離開？</p><div class="modal-actions"><button type="button" id="leaveStayBtn">留在此頁</button><button type="button" id="leaveConfirmBtn">直接離開</button></div></div></div>` : ''}
+  <script>
+    const themeIcon = kind => kind === 'moon'
+      ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>'
+      : '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6M18.7 18.7l-1.6-1.6M6.9 6.9 5.3 5.3"/></svg>';
+    function applyTheme(theme){const mode=theme==='light'?'light':'dark';document.documentElement.dataset.theme=mode;document.body.dataset.theme=mode;localStorage.setItem('theme-mode',mode);const btn=document.getElementById('theme-btn');if(btn)btn.innerHTML=mode==='light'?themeIcon('moon'):themeIcon('sun');}
+    function toggleTheme(){const next=(document.body.dataset.theme||'dark')==='light'?'dark':'light';applyTheme(next);}
+    document.getElementById('theme-btn')?.addEventListener('click',toggleTheme);
+    applyTheme(localStorage.getItem('theme-mode')==='dark'?'dark':'light');
+  </script>
+  ${isTxt && canEditTxt ? `<script src="/vendor/opencc-js/full.js"></script>` : ''}
+  ${isTxt ? `<script>const editor=document.getElementById('editor');function resizeEditor(){if(!editor)return;editor.style.height='auto';editor.style.height=editor.scrollHeight+'px';}resizeEditor();window.addEventListener('load',resizeEditor);window.addEventListener('resize',resizeEditor);editor?.addEventListener('input',resizeEditor);</script>` : ''}
+  ${isTxt && canEditTxt ? `<script>
+    const INDENT='\\u3000\\u3000',formatBtn=document.getElementById('formatBtn'),formatModal=document.getElementById('formatModal'),formatModalBg=document.getElementById('formatModalBg'),formatCloseBtn=document.getElementById('formatCloseBtn'),formatActionBtns=Array.from(document.querySelectorAll('.format-action-btn')),findReplaceModal=document.getElementById('findReplaceModal'),findReplaceModalBg=document.getElementById('findReplaceModalBg'),findReplaceCloseBtn=document.getElementById('findReplaceCloseBtn'),findInput=document.getElementById('findInput'),replaceInput=document.getElementById('replaceInput'),findNextBtn=document.getElementById('findNextBtn'),replaceOneBtn=document.getElementById('replaceOneBtn'),replaceAllBtn=document.getElementById('replaceAllBtn'),filenameInput=document.getElementById('filenameInput'),saveBtn=document.getElementById('saveBtn'),status=document.getElementById('saveStatus'),saveUrlRaw=${JSON.stringify(options.saveUrl || '')},saveUrl=saveUrlRaw?new URL(saveUrlRaw,window.location.origin).toString():'',leaveModal=document.getElementById('leaveModal'),leaveModalBg=document.getElementById('leaveModalBg'),leaveStayBtn=document.getElementById('leaveStayBtn'),leaveConfirmBtn=document.getElementById('leaveConfirmBtn'),openccReady=typeof OpenCC!=='undefined'&&typeof OpenCC.Converter==='function',cnToTwp=openccReady?OpenCC.Converter({from:'cn',to:'twp'}):null,tToCn=openccReady?OpenCC.Converter({from:'t',to:'cn'}):null;let lastSavedText=editor?editor.value:'',lastSavedFilename=filenameInput?filenameInput.value:'',allowLeave=false,leaveViaHistory=false;
+    function setStatusMessage(message,state=''){if(!status)return;status.dataset.state=state;status.textContent=message||'';}
+    function normalizeLineEndings(text){return String(text||'').replace(/\\r\\n/g,'\\n').replace(/\\r/g,'\\n');}
+    function hasUnsavedChanges(){return (!!editor&&editor.value!==lastSavedText)||(!!filenameInput&&filenameInput.value!==lastSavedFilename);}
+    function syncDirtyState(){if(!status||status.dataset.state==='error')return;if(hasUnsavedChanges())setStatusMessage('尚有未儲存的變更。');else if(status.textContent==='尚有未儲存的變更。')setStatusMessage('');}
+    function formatParagraphIndent(text){const lines=normalizeLineEndings(text).split('\\n');let prevBlank=true;return lines.map(line=>{const isBlank=!line.trim();if(isBlank){prevBlank=true;return line;}if(prevBlank&&!line.startsWith(INDENT)){prevBlank=false;return INDENT+line;}prevBlank=false;return line;}).join('\\n');}
+    function stripParagraphIndent(text){return normalizeLineEndings(text).replace(/(^|\\n)\\u3000\\u3000/g,'$1');}
+    function keepSingleBlankLineBetweenParagraphs(text){return normalizeLineEndings(text).replace(/\\n[\\t \\u3000]*\\n+/g,'\\n\\n');}
+    function trimExtraBlankLines(text){return normalizeLineEndings(text).replace(/\\n[\\t \\u3000]*\\n+/g,'\\n');}
+    function addCjkSpacing(text){let next=normalizeLineEndings(text);next=next.replace(/([\\p{Script=Han}])([A-Za-z0-9@#&%+\\-=*_\\/\\\\|]+)/gu,'$1 $2');next=next.replace(/([A-Za-z0-9@#&%+\\-=*_\\/\\\\|]+)([\\p{Script=Han}])/gu,'$1 $2');return next.replace(/ {2,}/g,' ');}
+    function halfwidthPunctuationToFullwidth(text){return Array.from(normalizeLineEndings(text)).map(ch=>{const code=ch.charCodeAt(0);if(code>=0x21&&code<=0x7E&&!/[A-Za-z0-9]/.test(ch))return String.fromCharCode(code+0xFEE0);return ch;}).join('');}
+    function openModal(modal){if(!modal)return;modal.classList.add('on');modal.setAttribute('aria-hidden','false');}
+    function closeModal(modal){if(!modal)return;modal.classList.remove('on');modal.setAttribute('aria-hidden','true');}
+    function closeFormatModal(){closeModal(formatModal);}
+    function openFormatModal(){openModal(formatModal);formatCloseBtn?.focus();}
+    function closeFindReplaceModal(){closeModal(findReplaceModal);}
+    function openFindReplaceModal(){closeFormatModal();openModal(findReplaceModal);setTimeout(()=>findInput?.focus(),0);findInput?.select();}
+    function applyEditorTransform(nextValue,successMessage,unchangedMessage='內容沒有需要調整的地方。'){if(!editor)return;if(nextValue===editor.value){setStatusMessage(unchangedMessage);closeFormatModal();return;}editor.value=nextValue;resizeEditor();syncDirtyState();editor.focus();setStatusMessage(successMessage);closeFormatModal();}
+    function runFormatAction(action){if(!editor)return;const value=editor.value||'';switch(action){case 'keep_blank_line':applyEditorTransform(keepSingleBlankLineBetweenParagraphs(value),'已整理成段落之間保留一個空列。','目前段落之間已經是單一空列。');return;case 'trim_blank_lines':applyEditorTransform(trimExtraBlankLines(value),'已去除段落之間多餘的空列。','目前沒有多餘空列。');return;case 'cjk_spacing':applyEditorTransform(addCjkSpacing(value),'已在中英文之間補上空白。','目前中英文間距看起來已經整理好了。');return;case 'indent_add':applyEditorTransform(formatParagraphIndent(value),'已替所有段落首行補上兩個全形空格。','所有段落首行都已經有縮排。');return;case 'indent_remove':applyEditorTransform(stripParagraphIndent(value),'已移除段首縮排。','目前沒有可移除的段首縮排。');return;case 'cn_to_twp':if(!cnToTwp){setStatusMessage('簡繁轉換字庫尚未就緒。','error');closeFormatModal();return;}applyEditorTransform(cnToTwp(value),'已轉成繁體中文（台灣）。','內容沒有需要轉換的地方。');return;case 't_to_cn':if(!tToCn){setStatusMessage('簡繁轉換字庫尚未就緒。','error');closeFormatModal();return;}applyEditorTransform(tToCn(value),'已轉成簡體中文。','內容沒有需要轉換的地方。');return;case 'punct_fullwidth':applyEditorTransform(halfwidthPunctuationToFullwidth(value),'已將半角符號轉成全角符號。','目前沒有需要轉換的半角符號。');return;case 'find_replace':openFindReplaceModal();return;default:closeFormatModal();}}
+    function findNextMatch(startIndex=null){if(!editor)return false;const needle=String(findInput?.value||'');if(!needle){setStatusMessage('請先輸入要尋找的文字。','error');return false;}const haystack=editor.value||'';const from=startIndex===null?(editor.selectionEnd??0):startIndex;let idx=haystack.indexOf(needle,from);if(idx<0&&from>0)idx=haystack.indexOf(needle,0);if(idx<0){setStatusMessage('找不到符合的文字。');return false;}editor.focus();editor.selectionStart=idx;editor.selectionEnd=idx+needle.length;setStatusMessage('已找到下一筆。');return true;}
+    function replaceCurrentMatch(){if(!editor)return false;const needle=String(findInput?.value||''),replacement=String(replaceInput?.value||'');if(!needle){setStatusMessage('請先輸入要尋找的文字。','error');return false;}const selected=editor.value.slice(editor.selectionStart??0,editor.selectionEnd??0);if(selected!==needle&&!findNextMatch(editor.selectionEnd??0))return false;const start=editor.selectionStart??0,end=editor.selectionEnd??start;editor.value=editor.value.slice(0,start)+replacement+editor.value.slice(end);const nextPos=start+replacement.length;editor.selectionStart=nextPos;editor.selectionEnd=nextPos;resizeEditor();syncDirtyState();setStatusMessage('已取代目前這一筆。');return true;}
+    function replaceAllMatches(){if(!editor)return;const needle=String(findInput?.value||''),replacement=String(replaceInput?.value||'');if(!needle){setStatusMessage('請先輸入要尋找的文字。','error');return;}if(!editor.value.includes(needle)){setStatusMessage('找不到符合的文字。');return;}editor.value=editor.value.split(needle).join(replacement);resizeEditor();syncDirtyState();setStatusMessage('已完成全部取代。');}
+    function continueIndentedParagraph(event){if(!editor||event.key!=='Enter'||event.shiftKey||event.altKey||event.ctrlKey||event.metaKey)return;if(event.isComposing||editor.readOnly)return;const start=editor.selectionStart??0,end=editor.selectionEnd??start;if(start!==end)return;const value=editor.value||'';const lineStart=value.lastIndexOf('\\n',Math.max(0,start-1))+1;const currentLine=value.slice(lineStart,start);if(!currentLine.startsWith(INDENT))return;event.preventDefault();const insertText='\\n'+INDENT;editor.value=value.slice(0,start)+insertText+value.slice(end);const nextPos=start+insertText.length;editor.selectionStart=nextPos;editor.selectionEnd=nextPos;resizeEditor();syncDirtyState();}
+    function closeLeaveModal(){closeModal(leaveModal);leaveViaHistory=false;}
+    function showLeaveModal(viaHistory=false){leaveViaHistory=viaHistory;openModal(leaveModal);leaveStayBtn?.focus();}
+    function confirmLeave(){allowLeave=true;closeLeaveModal();if(leaveViaHistory)history.back();else window.close();}
+    async function saveText(){if(!saveUrl)return;saveBtn.disabled=true;setStatusMessage('儲存中…');try{const res=await fetch(saveUrl,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('adm-token')||'')},body:JSON.stringify({text:editor.value,filename:filenameInput?.value||''})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'儲存失敗');lastSavedText=editor.value;if(filenameInput&&typeof data.filename==='string'&&data.filename){filenameInput.value=data.filename;lastSavedFilename=data.filename;document.title=data.filename.replace(/\\.txt$/i,'');}else if(filenameInput){lastSavedFilename=filenameInput.value;}setStatusMessage('已儲存。','success');const updatedAtText=document.getElementById('updatedAtText');if(updatedAtText&&data.updatedAtLabel)updatedAtText.textContent=data.updatedAtLabel;const metaDotPrimary=document.getElementById('metaDotPrimary'),updatedByText=document.getElementById('updatedByText'),updatedByWrap=document.getElementById('updatedByWrap'),updatedDot=document.getElementById('updatedDot');if(updatedByText&&data.updatedByLabel)updatedByText.textContent=data.updatedByLabel;if(metaDotPrimary)metaDotPrimary.style.display=data.updatedAtLabel?'':'none';if(updatedByWrap)updatedByWrap.style.display=data.updatedByLabel?'':'none';if(updatedDot)updatedDot.style.display=(data.updatedAtLabel&&data.updatedByLabel)?'':'none';}catch(err){setStatusMessage(err.message||'儲存失敗','error');}finally{saveBtn.disabled=false;}}
+    function handleBeforeUnload(event){if(allowLeave||!hasUnsavedChanges())return;event.preventDefault();event.returnValue='';}
+    editor?.addEventListener('input',syncDirtyState);editor?.addEventListener('keydown',continueIndentedParagraph);filenameInput?.addEventListener('input',syncDirtyState);formatBtn?.addEventListener('click',openFormatModal);formatModalBg?.addEventListener('click',closeFormatModal);formatCloseBtn?.addEventListener('click',closeFormatModal);formatActionBtns.forEach(btn=>btn.addEventListener('click',()=>runFormatAction(btn.dataset.action||'')));findReplaceModalBg?.addEventListener('click',closeFindReplaceModal);findReplaceCloseBtn?.addEventListener('click',closeFindReplaceModal);findNextBtn?.addEventListener('click',()=>findNextMatch());replaceOneBtn?.addEventListener('click',()=>{if(replaceCurrentMatch())findNextMatch(editor.selectionEnd??0);});replaceAllBtn?.addEventListener('click',replaceAllMatches);saveBtn?.addEventListener('click',saveText);leaveModalBg?.addEventListener('click',closeLeaveModal);leaveStayBtn?.addEventListener('click',closeLeaveModal);leaveConfirmBtn?.addEventListener('click',confirmLeave);
+    document.addEventListener('keydown',event=>{if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&!event.metaKey&&event.key.toLowerCase()==='h'){event.preventDefault();openFindReplaceModal();return;}if(event.key==='Escape'&&findReplaceModal?.classList.contains('on')){event.preventDefault();closeFindReplaceModal();return;}if(event.key==='Escape'&&formatModal?.classList.contains('on')){event.preventDefault();closeFormatModal();return;}if(event.key==='Escape'&&leaveModal?.classList.contains('on')){event.preventDefault();closeLeaveModal();}});
+    window.addEventListener('beforeunload',handleBeforeUnload);history.pushState({txtPreviewGuard:true},'');window.addEventListener('popstate',()=>{if(allowLeave||!hasUnsavedChanges())return;history.pushState({txtPreviewGuard:true},'');showLeaveModal(true);});
+  </script>` : ''}
+  ${noContextMenuScript}
+</body>
+</html>`;
+}
+
 function getPreviewLabel(file) {
   const baseName = file?.name || path.basename(file?.key || 'document');
   if (file?.ext === '.pdf') return baseName;
@@ -4016,6 +4175,40 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
   }
 });
 
+function renameTxtPreviewFile(item, file, requestedName = '') {
+  const raw = String(requestedName || '').trim();
+  if (!raw) return { key: file.key, name: file.name, abs: file.abs };
+  const currentExt = path.extname(file.name || file.key || '.txt') || '.txt';
+  const parsed = path.parse(raw);
+  const nextBase = sanitizeDownloadName(parsed.name || raw, path.parse(file.name || 'document').name || 'document');
+  const finalName = `${nextBase}${currentExt}`;
+  if (finalName === file.name) return { key: file.key, name: file.name, abs: file.abs };
+  const currentDir = path.posix.dirname(file.key || '');
+  const nextKey = (currentDir && currentDir !== '.') ? path.posix.join(currentDir, finalName) : finalName;
+  const nextAbs = path.join(UPLOADS, nextKey);
+  if (fs.existsSync(nextAbs)) throw new Error('已存在同名 TXT 檔案，請改用其他檔名');
+  fs.renameSync(file.abs, nextAbs);
+
+  const downloadFiles = normalizeDownloadFiles(item);
+  item.downloadFiles = downloadFiles.map(entry => {
+    if (entry.key !== file.key) return entry;
+    const currentRel = typeof entry.relativePath === 'string' && entry.relativePath.trim()
+      ? entry.relativePath.trim().replace(/\\/g, '/')
+      : '';
+    const nextRelativePath = currentRel
+      ? path.posix.join(path.posix.dirname(currentRel), finalName).replace(/^\.\/+/, '')
+      : finalName;
+    return { ...entry, key: nextKey, name: finalName, relativePath: nextRelativePath };
+  });
+  if (item.downloadKey === file.key) item.downloadKey = nextKey;
+  if (item.downloadName === file.name || item.downloadFiles.length === 1) item.downloadName = finalName;
+  if (item.textEditMeta && typeof item.textEditMeta === 'object' && item.textEditMeta[file.key]) {
+    item.textEditMeta[nextKey] = item.textEditMeta[file.key];
+    delete item.textEditMeta[file.key];
+  }
+  return { key: nextKey, name: finalName, abs: nextAbs };
+}
+
 app.put('/api/preview/:id/:index', auth, (req, res) => {
   try {
     const collection = getC(req);
@@ -4031,12 +4224,13 @@ app.put('/api/preview/:id/:index', auth, (req, res) => {
       return res.status(415).json({ error: '只有 TXT 文件支援線上編輯與儲存' });
     }
     if (!fs.existsSync(file.abs)) return res.status(404).json({ error: '找不到原始 TXT 檔案' });
-    const sourceMeta = readTextFile(file.abs);
+    const renamedFile = renameTxtPreviewFile(item, file, req.body?.filename);
+    const sourceMeta = readTextFile(renamedFile.abs);
     const nextText = typeof req.body?.text === 'string' ? req.body.text : '';
-    fs.writeFileSync(file.abs, encodeTextBuffer(nextText, sourceMeta));
+    fs.writeFileSync(renamedFile.abs, encodeTextBuffer(nextText, sourceMeta));
     item.textEditMeta = item.textEditMeta && typeof item.textEditMeta === 'object' ? item.textEditMeta : {};
     const savedAt = new Date();
-    item.textEditMeta[file.key] = {
+    item.textEditMeta[renamedFile.key] = {
       savedAt: savedAt.toISOString(),
       savedById: req.authUser?.id || '',
       savedBy: req.authUser?.username || ''
@@ -4044,6 +4238,7 @@ app.put('/api/preview/:id/:index', auth, (req, res) => {
     saveCat(cat, collection);
     return res.json({
       ok: true,
+      filename: renamedFile.name,
       updatedAt: savedAt.toISOString(),
       updatedAtLabel: formatDateTimeToSecond(savedAt),
       updatedByLabel: req.authUser?.username || ''
