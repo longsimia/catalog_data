@@ -2561,9 +2561,7 @@ function keepTextareaCaretLineVisibleInContainer(el, container) {
   const lineRect = getTextareaCaretLineRect(el);
   if (!lineRect) return;
   const containerRect = container.getBoundingClientRect();
-  const safeTop = containerRect.top + 24;
-  const safeBottom = containerRect.bottom - 24;
-  const isVisible = lineRect.top >= safeTop && lineRect.bottom <= safeBottom;
+  const isVisible = lineRect.bottom > containerRect.top && lineRect.top < containerRect.bottom;
   if (isVisible) return;
   const targetCenter = container.clientHeight * 0.5;
   const lineCenterInContainer = (lineRect.top - containerRect.top + container.scrollTop) + (lineRect.height / 2);
