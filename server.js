@@ -23,6 +23,8 @@ const BOOTSTRAP_ADMIN_USERNAME = String(process.env.BOOTSTRAP_ADMIN_USERNAME || 
 const BOOTSTRAP_ADMIN_PASSWORD = String(process.env.BOOTSTRAP_ADMIN_PASSWORD || '');
 const UPLOADS  = path.join(DATA, 'uploads');
 const TEXT_HISTORY_DIR = path.join(DATA, 'text-history');
+const TEXT_HISTORY_RETENTION_MS = 72 * 60 * 60 * 1000;
+const TEXT_HISTORY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const APP_TIME_ZONE = 'Asia/Taipei';
 const THUMB_MAX_EDGE = 400;
 const THUMB_QUALITY = 80;
@@ -1808,6 +1810,41 @@ function moveTextHistoryVersions(collection, itemId, fromFileKey, toFileKey) {
   const versions = readTextHistoryVersions(collection, itemId, fromFileKey);
   writeTextHistoryVersions(collection, itemId, toFileKey, versions);
   if (fs.existsSync(fromPath)) fs.unlinkSync(fromPath);
+}
+
+function listTextHistoryFiles(dirPath = TEXT_HISTORY_DIR) {
+  if (!fs.existsSync(dirPath)) return [];
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const abs = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listTextHistoryFiles(abs));
+      continue;
+    }
+    if (entry.isFile() && abs.toLowerCase().endsWith('.json')) files.push(abs);
+  }
+  return files;
+}
+
+function pruneExpiredTextHistoryFiles(now = Date.now()) {
+  const removed = [];
+  for (const historyPath of listTextHistoryFiles()) {
+    const raw = readJSON(historyPath, {});
+    const versions = Array.isArray(raw?.versions) ? raw.versions : [];
+    if (!versions.length) {
+      try { fs.unlinkSync(historyPath); removed.push(historyPath); } catch {}
+      continue;
+    }
+    const lastVersion = versions[versions.length - 1] || {};
+    const lastSavedAtMs = Number(new Date(lastVersion.savedAt || 0));
+    if (!Number.isFinite(lastSavedAtMs) || now - lastSavedAtMs < TEXT_HISTORY_RETENTION_MS) continue;
+    try {
+      fs.unlinkSync(historyPath);
+      removed.push(historyPath);
+    } catch {}
+  }
+  return removed;
 }
 
 function formatReadOnlyMeta(options = {}) {
@@ -4684,6 +4721,22 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✅  素材庫後端已啟動`);
   console.log(`    本機：http://localhost:${PORT}`);
   console.log(`    外部：http://<你的VM-IP>:${PORT}\n`);
+  setTimeout(() => {
+    try {
+      const removed = pruneExpiredTextHistoryFiles();
+      if (removed.length) console.log(`[text-history] 已自動清理 ${removed.length} 份逾期編輯記錄`);
+    } catch (err) {
+      console.warn('[text-history] cleanup failed:', err?.message || err);
+    }
+  }, 0);
+  setInterval(() => {
+    try {
+      const removed = pruneExpiredTextHistoryFiles();
+      if (removed.length) console.log(`[text-history] 已自動清理 ${removed.length} 份逾期編輯記錄`);
+    } catch (err) {
+      console.warn('[text-history] cleanup failed:', err?.message || err);
+    }
+  }, TEXT_HISTORY_SWEEP_INTERVAL_MS);
   setTimeout(() => {
     (async () => {
       try {
