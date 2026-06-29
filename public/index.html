@@ -2538,11 +2538,15 @@ function initManageDisclosureDnD() {
   document.querySelectorAll('#tab-man > details.disc[data-disc-id]').forEach(el => {
     if (el.dataset.dragReady === '1') return;
     el.dataset.dragReady = '1';
-    el.draggable = true;
-    el.addEventListener('dragstart', event => manageDiscDragStart(event, el.dataset.discId));
+    el.draggable = false;
+    const summary = el.querySelector(':scope > summary');
+    if (summary) {
+      summary.draggable = true;
+      summary.addEventListener('dragstart', event => manageDiscDragStart(event, el.dataset.discId));
+      summary.addEventListener('dragend', manageDiscDragEnd);
+    }
     el.addEventListener('dragover', event => manageDiscDragOver(event, el.dataset.discId));
     el.addEventListener('drop', event => manageDiscDrop(event, el.dataset.discId));
-    el.addEventListener('dragend', manageDiscDragEnd);
   });
 }
 
