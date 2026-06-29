@@ -3615,6 +3615,12 @@ function scrollContainerToTop(container, behavior = 'smooth') {
 function scrollUploadPanelToTop(behavior = 'smooth') {
   scrollContainerToTop(document.getElementById('tab-up'), behavior);
 }
+function scheduleUploadPanelToTop() {
+  requestAnimationFrame(() => {
+    scrollUploadPanelToTop('auto');
+    requestAnimationFrame(() => scrollUploadPanelToTop('auto'));
+  });
+}
 function goPage(page) {
   S.F.page = Math.max(1, Number(page) || 1);
   saveCatalogViewState({ page: S.F.page, scrollY: 0 });
@@ -6369,7 +6375,7 @@ async function doUp() {
         toast(`「${title || '未命名項目'}」已上傳成功 ✓`, 'ok');
         confirmClrForm();
         setTab('up');
-        scrollUploadPanelToTop();
+        scheduleUploadPanelToTop();
       } else {
         toast('上傳失敗：' + readResponseErrorText(xhr.responseText, xhr.status), 'err');
       }
