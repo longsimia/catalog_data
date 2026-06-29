@@ -698,16 +698,6 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .prev-card.drop-card{border-color:var(--gold);box-shadow:0 0 0 1px var(--gglow),0 10px 22px rgba(0,0,0,.14);transform:translateY(-2px)}
 .prev-card.moved{animation:miMoved 1.1s ease}
 .prev-card img,.prev-card video{width:100%;height:100%;object-fit:cover;display:block}
-.cover-focus-editor{display:grid;gap:.55rem;margin-top:.8rem;padding:.85rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)}
-.cover-focus-head{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
-.cover-focus-title{font-size:.78rem;color:var(--gold);letter-spacing:.06em}
-.cover-focus-hint{font-size:.74rem;color:var(--muted);line-height:1.55}
-.cover-focus-reset{min-height:30px;padding:.28rem .62rem;font-size:.74rem;white-space:nowrap}
-.cover-focus-stage{position:relative;width:min(100%,320px);aspect-ratio:4/3;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;overscroll-behavior:contain}
-.cover-focus-stage.dragging{cursor:grabbing}
-.cover-focus-image{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
-.cover-focus-mask{position:absolute;inset:0;background:linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.14));pointer-events:none}
-.cover-focus-chip{position:absolute;left:.55rem;bottom:.55rem;display:inline-flex;align-items:center;gap:.28rem;padding:.2rem .5rem;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(0,0,0,.42);color:#fff;font-size:.69rem;backdrop-filter:blur(10px);pointer-events:none}
 .prev-grip{position:absolute;top:.32rem;left:.32rem;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
   border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(0,0,0,.38);color:#fff;backdrop-filter:blur(8px)}
 .prev-order{position:absolute;right:.32rem;bottom:.32rem;display:inline-flex;align-items:center;justify-content:center;min-width:1.7rem;height:1.7rem;
@@ -1482,7 +1472,6 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
     <button type="button" class="btn btn-out" style="margin-top:.35rem;width:100%" onclick="openEditPickPrev()">從附件挑選預覽圖</button>
     <div id="edit-pick-prev-panel"></div>
     <div class="pg" id="e-pg"></div>
-    <div id="e-cover-focus-wrap"></div>
     <div class="fg" style="margin-top:1.45rem" id="e-file-wrap">
       <div class="sh" id="e-file-title">資料檔案</div>
       <div class="dz" id="e-dz-f" onclick="document.getElementById('e-fi-f').click()"
@@ -1631,7 +1620,6 @@ const S = {
   catDragOverIdx: null, catDragOverPos: null, catJustMoved: null,
   prevDragOverIdx: null, prevJustMovedKey: null,
   ePrevDragOverIdx: null, ePrevJustMovedKey: null,
-  eCoverFocusX: 50, eCoverFocusY: 50, eCoverFocusDragging: false, eCoverFocusDragStartX: 0, eCoverFocusDragStartY: 0, eCoverFocusOriginX: 50, eCoverFocusOriginY: 50,
   galleryCoverEditId: null, galleryCoverDragging: false, galleryCoverDragStartX: 0, galleryCoverDragStartY: 0, galleryCoverOriginX: 50, galleryCoverOriginY: 50, galleryCoverInitialX: 50, galleryCoverInitialY: 50, galleryCoverSaveSeq: 0,
   fileDragIdx: null, eFileDragIdx: null, fileDragOverIdx: null, eFileDragOverIdx: null,
   fileDragOverPos: null, eFileDragOverPos: null,
@@ -3160,117 +3148,6 @@ function renderPreviewThumbFromEntry(item) {
   const displaySrc = item?.thumbSrc || item?.src || '';
   return `<img class="pt" src="${esc(displaySrc)}" title="${esc(label || '')}"${imgThumbFallbackAttrs(displaySrc, item?.src || '')}>`;
 }
-function getEditCoverFocusPreviewEntry() {
-  const entry = S.ePrevs?.[0] || null;
-  if (!entry?.src) return null;
-  return {
-    src: entry.thumbSrc || entry.src,
-    fullSrc: entry.src,
-    kind: entry?.kind === 'new' ? getMediaKindFromFile(entry?.file) : getMediaKindFromName(entry?.src || entry?.value || '')
-  };
-}
-function updateEditCoverFocusPreview() {
-  const media = document.getElementById('e-cover-focus-media');
-  if (!media) return;
-  media.style.objectPosition = `${S.eCoverFocusX}% ${S.eCoverFocusY}%`;
-}
-function resetEditCoverFocus() {
-  S.eCoverFocusX = 50;
-  S.eCoverFocusY = 50;
-  renderEditCoverFocusEditor();
-}
-function getEditCoverFocusMediaMetrics() {
-  const stage = document.getElementById('e-cover-focus-stage');
-  const media = document.getElementById('e-cover-focus-media');
-  if (!stage || !media) return null;
-  const stageRect = stage.getBoundingClientRect();
-  const stageWidth = stageRect.width || stage.clientWidth || 0;
-  const stageHeight = stageRect.height || stage.clientHeight || 0;
-  if (!stageWidth || !stageHeight) return null;
-  const naturalWidth = media.tagName === 'VIDEO'
-    ? (media.videoWidth || 0)
-    : (media.naturalWidth || 0);
-  const naturalHeight = media.tagName === 'VIDEO'
-    ? (media.videoHeight || 0)
-    : (media.naturalHeight || 0);
-  if (!naturalWidth || !naturalHeight) return null;
-  const scale = Math.max(stageWidth / naturalWidth, stageHeight / naturalHeight);
-  const renderWidth = naturalWidth * scale;
-  const renderHeight = naturalHeight * scale;
-  return {
-    overflowX: Math.max(0, renderWidth - stageWidth),
-    overflowY: Math.max(0, renderHeight - stageHeight)
-  };
-}
-function startEditCoverFocusDrag(event) {
-  if (event.button !== undefined && event.button !== 0) return;
-  event.preventDefault();
-  S.eCoverFocusDragging = true;
-  S.eCoverFocusDragStartX = event.clientX;
-  S.eCoverFocusDragStartY = event.clientY;
-  S.eCoverFocusOriginX = Number(S.eCoverFocusX) || 50;
-  S.eCoverFocusOriginY = Number(S.eCoverFocusY) || 50;
-  const stage = document.getElementById('e-cover-focus-stage');
-  stage?.classList.add('dragging');
-  if (stage?.setPointerCapture && event.pointerId !== undefined) {
-    try { stage.setPointerCapture(event.pointerId); } catch {}
-  }
-}
-function moveEditCoverFocusDrag(event) {
-  if (!S.eCoverFocusDragging) return;
-  event.preventDefault();
-  const metrics = getEditCoverFocusMediaMetrics();
-  if (!metrics) return;
-  const dx = event.clientX - S.eCoverFocusDragStartX;
-  const dy = event.clientY - S.eCoverFocusDragStartY;
-  const nextX = metrics.overflowX > 0
-    ? S.eCoverFocusOriginX - (dx / metrics.overflowX) * 100
-    : 50;
-  const nextY = metrics.overflowY > 0
-    ? S.eCoverFocusOriginY - (dy / metrics.overflowY) * 100
-    : 50;
-  S.eCoverFocusX = Math.round(Math.max(0, Math.min(100, nextX)) * 10) / 10;
-  S.eCoverFocusY = Math.round(Math.max(0, Math.min(100, nextY)) * 10) / 10;
-  updateEditCoverFocusPreview();
-}
-function stopEditCoverFocusDrag(event) {
-  S.eCoverFocusDragging = false;
-  const stage = document.getElementById('e-cover-focus-stage');
-  stage?.classList.remove('dragging');
-  if (stage?.releasePointerCapture && event?.pointerId !== undefined) {
-    try { stage.releasePointerCapture(event.pointerId); } catch {}
-  }
-}
-function renderEditCoverFocusEditor() {
-  const wrap = document.getElementById('e-cover-focus-wrap');
-  if (!wrap) return;
-  const entry = getCollectionEntry();
-  const preview = getEditCoverFocusPreviewEntry();
-  if (entry.mode !== 'image' || !preview || !['image', 'video'].includes(preview.kind)) {
-    wrap.innerHTML = '';
-    return;
-  }
-  const x = Math.max(0, Math.min(100, Number(S.eCoverFocusX) || 50));
-  const y = Math.max(0, Math.min(100, Number(S.eCoverFocusY) || 50));
-  const mediaHtml = preview.kind === 'video'
-    ? `<video class="cover-focus-image" id="e-cover-focus-media" src="${esc(preview.fullSrc || preview.src)}" muted playsinline preload="metadata" style="object-fit:cover;object-position:${x}% ${y}%"></video>`
-    : `<img class="cover-focus-image" id="e-cover-focus-media" src="${esc(preview.src)}" alt="" style="object-fit:cover;object-position:${x}% ${y}%">`;
-  wrap.innerHTML = `
-    <div class="cover-focus-editor">
-      <div class="cover-focus-head">
-        <div>
-          <div class="cover-focus-title">首頁封面顯示範圍</div>
-          <div class="cover-focus-hint">直接拖曳封面圖片，看到的就是首頁卡片實際顯示範圍。</div>
-        </div>
-        <button class="btn btn-out cover-focus-reset" type="button" onclick="resetEditCoverFocus()">置中</button>
-      </div>
-      <div class="cover-focus-stage${S.eCoverFocusDragging ? ' dragging' : ''}" id="e-cover-focus-stage" onpointerdown="startEditCoverFocusDrag(event)">
-        ${mediaHtml}
-        <div class="cover-focus-mask"></div>
-        <div class="cover-focus-chip">${icon('move')}<span>拖曳調整封面</span></div>
-      </div>
-    </div>`;
-}
 function renderLightboxMedia(entry) {
   if (!entry?.src) return `<div class="lb-slide-media-empty">${icon('image')}<span>目前沒有可顯示的媒體</span></div>`;
   const mediaLocked = !getToken();
@@ -3864,7 +3741,7 @@ function galleryGridCardHtml(item, idx) {
 function galleryListRowHtml(item, idx) {
   const coverEntry = getItemCoverEntry(item);
   const delay = Math.min(idx, 10) * 0.04;
-  const thumbHtml = thToListThumb(coverEntry);
+  const thumbHtml = thToListThumb(coverEntry, item);
   return `<div class="mi gallery-list-row" onclick="openLb('${item.id}')" style="animation-delay:${delay}s">
         ${thumbHtml}
         <div class="mi-info">
@@ -3877,18 +3754,38 @@ function galleryListRowHtml(item, idx) {
       </div>`;
 }
 
-function thToListThumb(th) {
+function thToListThumb(th, item = null) {
+  const positionStyle = item ? ` style="object-position:${esc(getItemCoverObjectPosition(item))}"` : '';
   return th?.src && th.kind === 'image'
     ? (() => {
         const displaySrc = th.thumbSrc || th.src;
         const fallbackAttrs = imgThumbFallbackAttrs(displaySrc, th.src);
-        return `<img class="mth" src="${esc(displaySrc)}" loading="lazy"${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
+        return `<img class="mth" src="${esc(displaySrc)}" loading="lazy"${positionStyle}${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
       })()
     : th?.src && th.kind === 'video'
-    ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"></video>`
+    ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"${positionStyle}></video>`
     : th?.src && th.kind === 'audio'
     ? `<div class="mth" style="display:flex;align-items:center;justify-content:center;color:var(--gold)">${icon('audio')}</div>`
     : `<div class="mth"${th ? '' : ' style="display:flex;align-items:center;justify-content:center;color:var(--muted)"'}>${th ? '' : icon('image')}</div>`;
+}
+
+function renderManageThumb(th, item = null, className = 'mth') {
+  const positionStyle = item ? ` style="object-position:${esc(getItemCoverObjectPosition(item))}"` : '';
+  return th?.src && th.kind === 'image'
+    ? (() => {
+        const displaySrc = th.thumbSrc || th.src;
+        const fallbackAttrs = imgThumbFallbackAttrs(displaySrc, th.src);
+        return `<img class="${className}" src="${esc(displaySrc)}" loading="lazy"${positionStyle}${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
+      })()
+    : th?.src && th.kind === 'video'
+    ? `<video class="${className}" src="${esc(th.src)}" muted playsinline preload="metadata"${positionStyle}></video>`
+    : className === 'mp-gc-img'
+    ? `<div class="mp-gc-no-img">${icon(th?.kind === 'audio' ? 'audio' : 'image')}</div>`
+    : th?.src && th.kind === 'audio'
+    ? `<div class="${className}" style="display:flex;align-items:center;justify-content:center;color:var(--gold)">${icon('audio')}</div>`
+    : className === 'mth'
+    ? '<div class="mth"></div>'
+    : `<div class="${className}" style="display:flex;align-items:center;justify-content:center;color:var(--muted)">${icon('image')}</div>`;
 }
 
 function renderGallery() {
@@ -6407,7 +6304,6 @@ function renderEditPrevGrid() {
       <button class="prev-del" type="button" onclick="removeEditPrevAt(${i});event.stopPropagation()" title="刪除此圖">${icon('trash')}</button>
       <span class="prev-order">${i + 1}</span>
     </div>`).join('');
-  renderEditCoverFocusEditor();
 }
 function editPrevDragStart(e, i) { S.ePrevDragIdx = i; S.ePrevJustMovedKey = null; clearPrevDragIndicator('edit'); e.currentTarget.classList.add('drag'); e.dataTransfer.effectAllowed = 'move'; }
 function editPrevDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (S.ePrevDragIdx === null) return; setPrevDragIndicator('edit', Number(e.currentTarget.dataset.i)); }
@@ -7301,17 +7197,7 @@ function manRowHtml(item, i, total, top) {
         onchange="commitCardOrderInput(this, '${item.id}')"
         onblur="commitCardOrderInput(this, '${item.id}')">
       <span class="dh" title="拖曳排序" style="${canEditOrder ? '' : 'opacity:.35;cursor:not-allowed'}">${icon('grip')}</span>
-    ${th?.src && th.kind === 'image'
-      ? (() => {
-          const displaySrc = th.thumbSrc || th.src;
-          const fallbackAttrs = imgThumbFallbackAttrs(displaySrc, th.src);
-          return `<img class="mth" src="${esc(displaySrc)}" loading="lazy"${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
-        })()
-      : th?.src && th.kind === 'video'
-      ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"></video>`
-      : th?.src && th.kind === 'audio'
-      ? `<div class="mth" style="display:flex;align-items:center;justify-content:center;color:var(--gold)">${icon('audio')}</div>`
-      : '<div class="mth"></div>'}
+    ${renderManageThumb(th, item, 'mth')}
       <div class="mi-info">
         <div class="mi-title-row">
           <div class="mi-t">${esc(item.title)}</div>
@@ -7354,14 +7240,7 @@ function manPageListRowHtml(item, i, total, top) {
       onblur="commitCardOrderInput(this, '${item.id}')">
     <input type="checkbox" class="mi-chk" ${sel ? 'checked' : ''} onclick="event.stopPropagation();mpClick(event,'${item.id}',${i},'toggle')" tabindex="-1" aria-label="選取">
     <span class="dh" title="${canDrag ? '拖曳排序' : hasManActiveFilters() ? '篩選或搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
-    ${th?.src && th.kind === 'image' ? (() => {
-        const displaySrc = th.thumbSrc || th.src;
-        const fallbackAttrs = imgThumbFallbackAttrs(displaySrc, th.src);
-        return `<img class="mth" src="${esc(displaySrc)}" loading="lazy"${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
-      })() :
-      th?.src && th.kind === 'video' ? `<video class="mth" src="${esc(th.src)}" muted playsinline preload="metadata"></video>` :
-      th?.src && th.kind === 'audio' ? `<div class="mth" style="display:flex;align-items:center;justify-content:center;color:var(--gold)">${icon('audio')}</div>` :
-      '<div class="mth"></div>'}
+    ${renderManageThumb(th, item, 'mth')}
     <div class="mi-info">
       <div class="mi-title-row">
         <div class="mi-t">${esc(item.title)}</div>
@@ -7392,13 +7271,7 @@ function manPageGridCardHtml(item, i) {
     <input type="checkbox" class="mp-gc-chk" ${sel ? 'checked' : ''} onclick="event.stopPropagation();mpClick(event,'${item.id}',${i},'toggle')" tabindex="-1" aria-label="選取">
     <span class="mp-gc-grip dh" title="${canDrag ? '拖曳排序' : hasManActiveFilters() ? '篩選或搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
     ${coverBadge}
-    ${th?.src && th.kind === 'image' ? (() => {
-        const displaySrc = th.thumbSrc || th.src;
-        const fallbackAttrs = imgThumbFallbackAttrs(displaySrc, th.src);
-        return `<img class="mp-gc-img" src="${esc(displaySrc)}" loading="lazy"${fallbackAttrs || ` onerror="this.style.display='none'"`}>`;
-      })() :
-      th?.src && th.kind === 'video' ? `<video class="mp-gc-img" src="${esc(th.src)}" muted playsinline preload="metadata"></video>` :
-      `<div class="mp-gc-no-img">${icon(th?.kind === 'audio' ? 'audio' : 'image')}</div>`}
+    ${renderManageThumb(th, item, 'mp-gc-img')}
     <div class="mp-gc-info">
       <div class="mp-gc-t" title="${esc(item.title)}">${esc(item.title)}</div>
       <div class="mp-gc-m">${esc(getItemCategoryLabel(item))}</div>
@@ -8451,9 +8324,6 @@ function openEdit(id) {
   S.eCatsPicked = [...getItemCategories(item)];
   S.eDownloadEntries = buildEditDownloadEntries(item);
   S.ePrevs = getEditPreviewState(item);
-  S.eCoverFocusX = Number.isFinite(Number(item.coverFocusX)) ? Math.max(0, Math.min(100, Number(item.coverFocusX))) : 50;
-  S.eCoverFocusY = Number.isFinite(Number(item.coverFocusY)) ? Math.max(0, Math.min(100, Number(item.coverFocusY))) : 50;
-  S.eCoverFocusDragging = false;
   document.getElementById('e-t').value   = item.title        || '';
   document.getElementById('e-a').value   = item.creator      || item.author || '';
   document.getElementById('e-alt').value = item.subtitle     || item.translatedTitle || '';
@@ -8494,9 +8364,6 @@ function closeEdit() {
   S.eDownloadEntries = [];
   S.ePrevs = [];
   S.eCatsPicked = [];
-  S.eCoverFocusX = 50;
-  S.eCoverFocusY = 50;
-  S.eCoverFocusDragging = false;
   closePickPreviewPanels();
   S.editAdminWasOpen = false;
   S.editManagePageWasOpen = false;
@@ -8532,9 +8399,6 @@ document.addEventListener('focusout', event => {
 document.addEventListener('pointermove', moveGalleryCoverCropDrag);
 document.addEventListener('pointerup', stopGalleryCoverCropDrag);
 document.addEventListener('pointercancel', stopGalleryCoverCropDrag);
-document.addEventListener('pointermove', moveEditCoverFocusDrag);
-document.addEventListener('pointerup', stopEditCoverFocusDrag);
-document.addEventListener('pointercancel', stopEditCoverFocusDrag);
 
 async function saveEdit() {
   if (!canRolePermission('editItemInfo')) { toast('你沒有權限編輯項目資訊', 'err'); return; }
@@ -8550,9 +8414,7 @@ async function saveEdit() {
     tags:        sortTagsByLibrary([...S.eTags]),
     description: document.getElementById('e-d').value.trim(),
     sourceUrl:   document.getElementById('e-url').value.trim(),
-    permission:  document.getElementById('e-perm').value || 'public',
-    coverFocusX: Math.max(0, Math.min(100, Number(S.eCoverFocusX) || 50)),
-    coverFocusY: Math.max(0, Math.min(100, Number(S.eCoverFocusY) || 50))
+    permission:  document.getElementById('e-perm').value || 'public'
   };
 
   try {
