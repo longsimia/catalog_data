@@ -765,7 +765,8 @@ html:not([data-theme="dark"]) .perm-badge.admin{border-color:#d4c29c;color:#8d6a
 html[data-theme="dark"] .cover-perm-badge .perm-badge{background:rgba(24,18,12,.78);box-shadow:0 6px 18px rgba(0,0,0,.24)}
 html[data-theme="dark"] .cover-perm-badge .perm-badge.owner{background:rgba(55,28,28,.82)}
 html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,42,20,.82)}
-.mp-gc .cover-perm-badge{right:2.15rem;max-width:calc(100% - 2.62rem)}
+.mp-gc-cover-tools{position:absolute;top:.35rem;right:2.15rem;z-index:2;display:flex;align-items:flex-start;justify-content:flex-end;max-width:calc(100% - 4.4rem);pointer-events:none}
+.mp-gc-cover-tools .cover-perm-badge{max-width:100%}
 .mi-acts{display:flex;gap:.32rem;flex-shrink:0}
 #man-list-page{position:relative}
 #man-list-page .mi{position:absolute;left:0;right:0;top:0;height:64px;box-sizing:border-box;margin-bottom:0}
@@ -7274,7 +7275,7 @@ function manPageGridCardHtml(item, i) {
     ondrop="dDp(event,${i})" ondragend="dEd(event)">
     <input type="checkbox" class="mp-gc-chk" ${sel ? 'checked' : ''} onclick="event.stopPropagation();mpClick(event,'${item.id}',${i},'toggle')" tabindex="-1" aria-label="選取">
     <span class="mp-gc-grip dh" title="${canDrag ? '拖曳排序' : hasManActiveFilters() ? '篩選或搜尋時無法拖曳' : '你沒有排序權限'}" style="${canDrag ? '' : 'opacity:.3;cursor:not-allowed'}">${icon('grip')}</span>
-    ${coverBadge}
+    ${coverBadge ? `<div class="mp-gc-cover-tools">${coverBadge}</div>` : ''}
     ${renderManageThumb(th, item, 'mp-gc-img')}
     <div class="mp-gc-info">
       <div class="mp-gc-t" title="${esc(item.title)}">${esc(item.title)}</div>
