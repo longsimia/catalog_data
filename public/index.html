@@ -1292,6 +1292,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           <p id="u-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
         </div>
         <input type="file" id="fi-f" multiple style="display:none" onchange="onFile(this.files)">
+        <button type="button" class="btn btn-out" id="btn-create-upload-txt" style="margin-top:.35rem;width:100%" onclick="createUploadTxtFile()">建立 TXT 文件</button>
         <div id="fi-picked"></div>
         <div id="fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
       </div>
@@ -1482,6 +1483,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <p id="e-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
       </div>
       <input type="file" id="e-fi-f" multiple style="display:none" onchange="onEditFile(this.files)">
+      <button type="button" class="btn btn-out" id="btn-create-edit-txt" style="margin-top:.35rem;width:100%" onclick="createEditTxtFile()">建立 TXT 文件</button>
       <div id="e-fi-picked"></div>
       <div id="e-fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
     </div>
@@ -2174,6 +2176,8 @@ function decorateStaticIcons() {
   setLabeled('#lb-edit', 'edit', '編輯');
   setLabeled('#lb-src', 'link', '原文連結');
   setLabeled('#lb-preview', 'file', '線上閱覽');
+  setLabeled('#btn-create-upload-txt', 'file', '建立 TXT 文件');
+  setLabeled('#btn-create-edit-txt', 'file', '建立 TXT 文件');
   setHtml('#lb-preview-share', icon('share'));
   setHtml('.si', icon('search'));
   setHtml('#gallery-view-btn', icon('layoutList'));
@@ -3223,6 +3227,47 @@ function getEntryRelativeFilePath(entry) {
   if (!entry) return '';
   if (entry.kind === 'existing') return (entry.relativePath || entry.name || '').replace(/\\/g, '/');
   return getRelativeFilePath(entry.file || entry);
+}
+function normalizeTxtFilename(name = '') {
+  const trimmed = String(name || '').trim().replace(/[\\/:*?"<>|]+/g, ' ');
+  const collapsed = trimmed.replace(/\s+/g, ' ').trim();
+  const base = collapsed.replace(/\.txt$/i, '').trim() || '新文字文件';
+  return `${base}.txt`;
+}
+function buildNextTxtFilename(existingNames = []) {
+  const used = new Set(
+    (existingNames || [])
+      .map(name => String(name || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  let index = 1;
+  while (true) {
+    const candidate = index === 1 ? '新文字文件.txt' : `新文字文件 ${index}.txt`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+    index += 1;
+  }
+}
+function hasFilenameConflict(existingNames = [], candidate = '') {
+  const next = String(candidate || '').trim().toLowerCase();
+  if (!next) return false;
+  return (existingNames || []).some(name => String(name || '').trim().toLowerCase() === next);
+}
+function promptTxtFilename(existingNames = []) {
+  const suggested = buildNextTxtFilename(existingNames);
+  const raw = window.prompt('請輸入 TXT 檔名', suggested);
+  if (raw === null) return '';
+  return normalizeTxtFilename(raw);
+}
+function createBlankTxtFile(filename = '新文字文件.txt') {
+  const finalName = normalizeTxtFilename(filename);
+  const file = new File([''], finalName, { type: 'text/plain;charset=utf-8', lastModified: Date.now() });
+  try {
+    Object.defineProperty(file, 'relativePath', {
+      value: finalName,
+      configurable: true
+    });
+  } catch {}
+  return file;
 }
 function parseJsonText(text, fallback = {}) {
   try {
@@ -5556,7 +5601,9 @@ function applyRolePermissionUI() {
   document.getElementById('btn-clear-form')?.toggleAttribute('disabled', !canUpload);
   ['u-t','u-a','u-alt','u-url','u-ti','u-ci','u-d','u-perm','fi-p'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canUpload));
   document.getElementById('fi-f')?.toggleAttribute('disabled', !canUpload || !canEditAttachments);
+  document.getElementById('btn-create-upload-txt')?.toggleAttribute('disabled', !canUpload || !canEditAttachments);
   document.getElementById('e-fi-f')?.toggleAttribute('disabled', !canEditAttachments);
+  document.getElementById('btn-create-edit-txt')?.toggleAttribute('disabled', !canEditAttachments);
   ['c-t','c-s','c-f'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
   ['cfg-google-client-id','cfg-upload-origin'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
   document.getElementById('btn-save-site')?.toggleAttribute('disabled', !canEditSite);
@@ -6058,6 +6105,18 @@ function onFile(files) {
   document.getElementById('fi-f').value = '';
   renderUploadFilePicked();
 }
+function createUploadTxtFile() {
+  if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
+  if (!canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
+  const existingNames = S.up.files.map(file => getRelativeFilePath(file) || file.name);
+  const filename = promptTxtFilename(existingNames);
+  if (!filename) return;
+  if (hasFilenameConflict(existingNames, filename)) { toast('已存在同名附件，請改用其他檔名', 'err'); return; }
+  S.up.files = [...S.up.files, createBlankTxtFile(filename)];
+  document.getElementById('fi-f').value = '';
+  renderUploadFilePicked();
+  toast(`已新增空白 TXT：${filename}`, 'ok');
+}
 function onEditFile(files) {
   if (!canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
   if (!files?.length) return;
@@ -6070,6 +6129,22 @@ function onEditFile(files) {
   S.eDownloadEntries = [...S.eDownloadEntries, ...entries];
   document.getElementById('e-fi-f').value = '';
   renderEditFilePicked();
+}
+function createEditTxtFile() {
+  if (!canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
+  const existingNames = S.eDownloadEntries.map(entry => getEntryRelativeFilePath(entry) || entry.name || entry.file?.name);
+  const filename = promptTxtFilename(existingNames);
+  if (!filename) return;
+  if (hasFilenameConflict(existingNames, filename)) { toast('已存在同名附件，請改用其他檔名', 'err'); return; }
+  S.eDownloadEntries = [...S.eDownloadEntries, {
+    kind: 'new',
+    tempId: `new-file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    file: createBlankTxtFile(filename),
+    relativePath: filename
+  }];
+  document.getElementById('e-fi-f').value = '';
+  renderEditFilePicked();
+  toast(`已新增空白 TXT：${filename}`, 'ok');
 }
 function clearFileDragIndicator(kind='upload') {
   if (kind === 'edit') {
