@@ -232,10 +232,18 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justif
 .card-ph{width:100%;aspect-ratio:4/3;display:block;background:var(--bg2)}
 .card-cover-wrap{position:relative}
 .card-cover-tools{position:absolute;top:.46rem;right:.46rem;z-index:3;display:flex;align-items:center;justify-content:flex-end;gap:.36rem;max-width:calc(100% - .92rem)}
-.card-cover-crop-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:rgba(20,16,12,.68);color:#fff;cursor:pointer;backdrop-filter:blur(10px);opacity:0;pointer-events:none;transform:translateY(-3px);transition:opacity .18s var(--ease),transform .18s var(--ease),background .18s var(--ease),border-color .18s var(--ease)}
-.card-cover-crop-btn:hover{background:rgba(45,32,8,.84);border-color:var(--gold);color:var(--gold)}
+.card-cover-actionbar{position:absolute;top:.7rem;left:50%;z-index:5;display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:12px;background:var(--panel);box-shadow:0 10px 24px rgba(0,0,0,.16);transform:translateX(-50%);overflow:hidden}
+.card-cover-actionbar button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:.38rem .82rem;border:none;background:var(--panel);color:var(--text);font-size:.76rem;font-family:inherit;cursor:pointer;white-space:nowrap;transition:background .18s var(--ease),color .18s var(--ease)}
+.card-cover-actionbar button + button{border-left:1px solid var(--border)}
+.card-cover-actionbar button:hover{background:var(--bg2);color:var(--gold)}
+.card-cover-actionbar .primary{background:var(--bg2);color:var(--gold);font-weight:500}
+.card-cover-actionbar .primary:hover{background:var(--gglow)}
+.card-cover-actionbar .icon-only{padding:.38rem .68rem;min-width:36px}
+.card-cover-crop-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--gold);border-radius:10px;background:var(--bg2);color:var(--gold);cursor:pointer;opacity:0;pointer-events:none;transform:translateY(-3px);transition:opacity .18s var(--ease),transform .18s var(--ease),background .18s var(--ease),border-color .18s var(--ease),color .18s var(--ease),box-shadow .18s var(--ease);box-shadow:0 8px 18px rgba(0,0,0,.12)}
+.card-cover-crop-btn:hover{background:var(--gglow);border-color:var(--gold);color:var(--gold)}
+.card-cover-crop-btn .ico{width:1rem;height:1rem}
 .card:hover .card-cover-crop-btn,.card.cover-crop-on .card-cover-crop-btn{opacity:1;pointer-events:auto;transform:none}
-.card.cover-crop-on .card-cover-crop-btn{background:rgba(45,32,8,.9);border-color:var(--gold);color:var(--gold)}
+.card.cover-crop-on .card-cover-crop-btn{background:var(--gglow);border-color:var(--gold);color:var(--gold)}
 .card.cover-crop-on{z-index:4}
 .card.cover-crop-on .card-cover-wrap{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .card.cover-crop-on .card-cover-wrap.dragging{cursor:grabbing}
@@ -473,7 +481,7 @@ body[data-collection-mode="image"] .lb-info{flex:0 0 min(300px,100vw);width:min(
 .fc:focus{border-color:var(--gold)}
 .fc::placeholder{color:var(--muted)}
 textarea.fc{min-height:144px;resize:none;overflow:hidden}
-#u-d{overflow-anchor:none}
+#u-d,#e-d{overflow-anchor:none}
 .sh{font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);
   margin-bottom:.65rem;margin-top:1.4rem;padding-bottom:.22rem;border-bottom:1px solid var(--border)}
 .sh:first-child{margin-top:0}
@@ -787,7 +795,7 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
   align-items:center;justify-content:center}
 .mo.on{display:flex}
 .mb2{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);
-  width:min(540px,calc(100vw - 1.5rem));max-height:calc(100vh - 3rem);overflow-y:auto;padding:1.75rem}
+  width:min(540px,calc(100vw - 1.5rem));max-height:calc(100vh - 3rem);overflow-y:auto;padding:1.75rem;overflow-anchor:none}
 .mh{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem}
 .mh h3{font-family:'Noto Serif TC',serif;font-weight:400;color:var(--gold)}
 .confirm-modal{display:none;position:fixed;inset:0;z-index:750;background:var(--modal-bg);
@@ -1623,7 +1631,7 @@ const S = {
   prevDragOverIdx: null, prevJustMovedKey: null,
   ePrevDragOverIdx: null, ePrevJustMovedKey: null,
   eCoverFocusX: 50, eCoverFocusY: 50, eCoverFocusDragging: false, eCoverFocusDragStartX: 0, eCoverFocusDragStartY: 0, eCoverFocusOriginX: 50, eCoverFocusOriginY: 50,
-  galleryCoverEditId: null, galleryCoverDragging: false, galleryCoverDragStartX: 0, galleryCoverDragStartY: 0, galleryCoverOriginX: 50, galleryCoverOriginY: 50, galleryCoverSaveSeq: 0,
+  galleryCoverEditId: null, galleryCoverDragging: false, galleryCoverDragStartX: 0, galleryCoverDragStartY: 0, galleryCoverOriginX: 50, galleryCoverOriginY: 50, galleryCoverInitialX: 50, galleryCoverInitialY: 50, galleryCoverSaveSeq: 0,
   fileDragIdx: null, eFileDragIdx: null, fileDragOverIdx: null, eFileDragOverIdx: null,
   fileDragOverPos: null, eFileDragOverPos: null,
   fileJustMovedKey: null, eFileJustMovedKey: null,
@@ -2567,32 +2575,33 @@ function toggleTheme() {
   setTheme(next);
 }
 
-function getUploadTextareaScrollContainer() {
-  return document.getElementById('tab-up');
+function getDescriptionTextareaScrollContainer(el) {
+  if (!el) return null;
+  if (el.id === 'u-d') return document.getElementById('tab-up');
+  if (el.id === 'e-d') return document.querySelector('#edit-mo .mb2');
+  return null;
 }
 
-function rememberUploadTextareaScroll(el) {
-  if (!el || el.id !== 'u-d') return;
-  const sc = getUploadTextareaScrollContainer();
+function rememberDescriptionTextareaScroll(el) {
+  const sc = getDescriptionTextareaScrollContainer(el);
   if (!sc) return;
-  sc.dataset.uploadScrollLockTop = String(sc.scrollTop || 0);
-  sc.dataset.uploadScrollLockAt = String(Date.now());
+  sc.dataset.descScrollLockTop = String(sc.scrollTop || 0);
+  sc.dataset.descScrollLockAt = String(Date.now());
 }
 
-function restoreUploadTextareaScroll(el, force = false) {
-  if (!el || el.id !== 'u-d') return;
-  const sc = getUploadTextareaScrollContainer();
+function restoreDescriptionTextareaScroll(el, force = false) {
+  const sc = getDescriptionTextareaScrollContainer(el);
   if (!sc) return;
-  const lockedTop = Number(sc.dataset.uploadScrollLockTop || NaN);
+  const lockedTop = Number(sc.dataset.descScrollLockTop || NaN);
   if (!Number.isFinite(lockedTop)) return;
   const delta = (sc.scrollTop || 0) - lockedTop;
   if (!force && Math.abs(delta) > 160) return;
   sc.scrollTop = lockedTop;
 }
 
-function scheduleUploadTextareaScrollRestore(el, force = false) {
-  if (!el || el.id !== 'u-d') return;
-  const run = () => restoreUploadTextareaScroll(el, force);
+function scheduleDescriptionTextareaScrollRestore(el, force = false) {
+  if (!el) return;
+  const run = () => restoreDescriptionTextareaScroll(el, force);
   setTimeout(run, 0);
   requestAnimationFrame(run);
   requestAnimationFrame(() => requestAnimationFrame(run));
@@ -2600,26 +2609,26 @@ function scheduleUploadTextareaScrollRestore(el, force = false) {
 
 function autoGrowUploadTextarea(el) {
   if (!el || el.dataset.isComposing === '1') return;
-  rememberUploadTextareaScroll(el);
+  rememberDescriptionTextareaScroll(el);
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight}px`;
-  scheduleUploadTextareaScrollRestore(el, true);
+  scheduleDescriptionTextareaScrollRestore(el, true);
 }
 
-function initUploadTextareaScrollGuard() {
-  const el = document.getElementById('u-d');
+function initDescriptionTextareaScrollGuard(textareaId) {
+  const el = document.getElementById(textareaId);
   if (!el || el.dataset.scrollGuardReady === '1') return;
   el.dataset.scrollGuardReady = '1';
-  const remember = () => rememberUploadTextareaScroll(el);
+  const remember = () => rememberDescriptionTextareaScroll(el);
   ['focus', 'click', 'keydown', 'beforeinput', 'compositionstart', 'compositionupdate'].forEach(type => {
     el.addEventListener(type, remember, true);
   });
   ['input', 'compositionupdate'].forEach(type => {
-    el.addEventListener(type, () => scheduleUploadTextareaScrollRestore(el), true);
+    el.addEventListener(type, () => scheduleDescriptionTextareaScrollRestore(el), true);
   });
   el.addEventListener('compositionend', () => {
-    rememberUploadTextareaScroll(el);
-    scheduleUploadTextareaScrollRestore(el, true);
+    rememberDescriptionTextareaScroll(el);
+    scheduleDescriptionTextareaScrollRestore(el, true);
   }, true);
 }
 
@@ -2654,8 +2663,10 @@ function autoGrowEditTextarea(el) {
   if (el.dataset.isComposing === '1') return;
   const imeCooldownUntil = Number(el.dataset.imeCooldownUntil || 0);
   const suppressScroll = imeCooldownUntil > Date.now();
+  rememberDescriptionTextareaScroll(el);
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight}px`;
+  scheduleDescriptionTextareaScrollRestore(el, !suppressScroll);
   if (suppressScroll) return;
 }
 
@@ -2900,7 +2911,7 @@ function getGalleryCoverMediaMetrics(itemId = S.galleryCoverEditId) {
 }
 async function persistGalleryCoverFocus(itemId) {
   const item = getGalleryCoverEditItem(itemId);
-  if (!item) return;
+  if (!item) return false;
   const seq = ++S.galleryCoverSaveSeq;
   const body = {
     title: item.title || '',
@@ -2917,8 +2928,10 @@ async function persistGalleryCoverFocus(itemId) {
   };
   try {
     await api('PUT', `/api/items/${itemId}`, body);
+    return true;
   } catch (e) {
     if (seq === S.galleryCoverSaveSeq) toast(e.message || '封面調整儲存失敗', 'err');
+    return false;
   }
 }
 function toggleGalleryCoverEdit(event, itemId) {
@@ -2976,6 +2989,105 @@ function stopGalleryCoverCropDrag(event) {
     try { wrap.releasePointerCapture(event.pointerId); } catch {}
   }
   persistGalleryCoverFocus(itemId);
+}
+function getGalleryCoverToolsHtml(item, coverEntry = null) {
+  const badge = coverPermissionBadgeHtml(item?.permission);
+  if (!canInlineCropGalleryCover(item, coverEntry)) return badge;
+  const isActive = S.galleryCoverEditId === item.id;
+  const actionbar = isActive ? `<div class="card-cover-actionbar" onclick="event.stopPropagation()">
+    <button class="primary" type="button" onclick="saveGalleryCoverEdit(event,'${esc(item.id)}')">儲存位置</button>
+    <button type="button" onclick="cancelGalleryCoverEdit(event,'${esc(item.id)}')">取消</button>
+    <button type="button" onclick="resetGalleryCoverEdit(event,'${esc(item.id)}')">置中</button>
+    <button class="icon-only" type="button">${icon('edit')}</button>
+  </div>` : '';
+  return `${actionbar}<div class="card-cover-tools">
+    ${badge}
+    ${isActive ? '' : `<button class="card-cover-crop-btn" type="button" onclick="toggleGalleryCoverEdit(event,'${esc(item.id)}')" title="調整封面" aria-label="調整封面">${icon('edit')}</button>`}
+  </div>`;
+}
+function beginGalleryCoverEdit(itemId) {
+  const item = getGalleryCoverEditItem(itemId);
+  if (!canInlineCropGalleryCover(item)) return false;
+  S.galleryCoverEditId = itemId;
+  S.galleryCoverDragging = false;
+  S.galleryCoverInitialX = Number(item.coverFocusX) || 50;
+  S.galleryCoverInitialY = Number(item.coverFocusY) || 50;
+  return true;
+}
+function endGalleryCoverEdit() {
+  S.galleryCoverEditId = null;
+  S.galleryCoverDragging = false;
+}
+function toggleGalleryCoverEdit(event, itemId) {
+  event?.stopPropagation?.();
+  if (S.galleryCoverEditId === itemId) {
+    endGalleryCoverEdit();
+    renderGallery();
+    return;
+  }
+  if (!beginGalleryCoverEdit(itemId)) return;
+  renderGallery();
+}
+function resetGalleryCoverEdit(event, itemId = S.galleryCoverEditId) {
+  event?.stopPropagation?.();
+  const item = getGalleryCoverEditItem(itemId);
+  if (!item) return;
+  item.coverFocusX = 50;
+  item.coverFocusY = 50;
+  updateGalleryCoverPreview(itemId);
+}
+function cancelGalleryCoverEdit(event, itemId = S.galleryCoverEditId) {
+  event?.stopPropagation?.();
+  const item = getGalleryCoverEditItem(itemId);
+  if (item) {
+    item.coverFocusX = S.galleryCoverInitialX;
+    item.coverFocusY = S.galleryCoverInitialY;
+    updateGalleryCoverPreview(itemId);
+  }
+  endGalleryCoverEdit();
+  renderGallery();
+}
+async function saveGalleryCoverEdit(event, itemId = S.galleryCoverEditId) {
+  event?.stopPropagation?.();
+  if (!itemId) return;
+  const ok = await persistGalleryCoverFocus(itemId);
+  if (!ok) return;
+  const item = getGalleryCoverEditItem(itemId);
+  if (item) {
+    S.galleryCoverInitialX = Number(item.coverFocusX) || 50;
+    S.galleryCoverInitialY = Number(item.coverFocusY) || 50;
+  }
+  endGalleryCoverEdit();
+  renderGallery();
+}
+function startGalleryCoverCropDrag(event, itemId) {
+  if (S.galleryCoverEditId !== itemId) return;
+  if (event.target?.closest('.card-cover-crop-btn, .card-cover-actionbar')) return;
+  if (event.button !== undefined && event.button !== 0) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const item = getGalleryCoverEditItem(itemId);
+  if (!item) return;
+  S.galleryCoverDragging = true;
+  S.galleryCoverDragStartX = event.clientX;
+  S.galleryCoverDragStartY = event.clientY;
+  S.galleryCoverOriginX = Number(item.coverFocusX) || 50;
+  S.galleryCoverOriginY = Number(item.coverFocusY) || 50;
+  const wrap = event.currentTarget;
+  wrap?.classList.add('dragging');
+  if (wrap?.setPointerCapture && event.pointerId !== undefined) {
+    try { wrap.setPointerCapture(event.pointerId); } catch {}
+  }
+}
+function stopGalleryCoverCropDrag(event) {
+  if (!S.galleryCoverDragging || !S.galleryCoverEditId) return;
+  const itemId = S.galleryCoverEditId;
+  S.galleryCoverDragging = false;
+  const wrap = getGalleryCardById(itemId)?.querySelector('.card-cover-wrap');
+  wrap?.classList.remove('dragging');
+  if (wrap?.releasePointerCapture && event?.pointerId !== undefined) {
+    try { wrap.releasePointerCapture(event.pointerId); } catch {}
+  }
 }
 function renderPreviewThumbFromFile(file) {
   const name = file?.name || 'media';
@@ -3513,7 +3625,8 @@ async function init() {
   const _cfgPublic = await api('GET', '/api/cfg-public').catch(() => ({}));
   window.UPLOAD_ORIGIN = String(_cfgPublic.uploadOrigin || '').trim().replace(/\/+$/, '');
   applyTheme(getTheme());
-  initUploadTextareaScrollGuard();
+  initDescriptionTextareaScrollGuard('u-d');
+  initDescriptionTextareaScrollGuard('e-d');
   initTextareaImeGuards();
   decorateStaticIcons();
   applyGalleryView(getGalleryView());
