@@ -2651,6 +2651,32 @@ function initTextareaImeGuards() {
   });
 }
 
+function insertTextareaIndent(el) {
+  if (!el) return;
+  const indent = '　　';
+  const start = el.selectionStart ?? 0;
+  const end = el.selectionEnd ?? start;
+  const value = el.value || '';
+  el.value = `${value.slice(0, start)}${indent}${value.slice(end)}`;
+  const nextPos = start + indent.length;
+  el.selectionStart = nextPos;
+  el.selectionEnd = nextPos;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function initTextareaTabIndent() {
+  document.querySelectorAll('textarea.fc').forEach(el => {
+    if (!el || el.dataset.tabIndentReady === '1') return;
+    el.dataset.tabIndentReady = '1';
+    el.addEventListener('keydown', event => {
+      if (event.key !== 'Tab' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (el.dataset.isComposing === '1') return;
+      event.preventDefault();
+      insertTextareaIndent(el);
+    });
+  });
+}
+
 function autoGrowEditTextarea(el) {
   if (!el) return;
   if (el.dataset.isComposing === '1') return;
@@ -3566,6 +3592,7 @@ async function init() {
   initDescriptionTextareaScrollGuard('u-d');
   initDescriptionTextareaScrollGuard('e-d');
   initTextareaImeGuards();
+  initTextareaTabIndent();
   decorateStaticIcons();
   applyGalleryView(getGalleryView());
   refreshDescriptionTextareas();
