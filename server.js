@@ -1563,22 +1563,47 @@ function renderDocxInline(xml, mediaMap, rels) {
   return parts.join('');
 }
 
+function decodeDocxHtmlText(html) {
+  return decodeXmlEntities(
+    String(html || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+  );
+}
+
 function renderDocxParagraphBlocks(block, mediaMap, rels) {
   const meta = getDocxParagraphMeta(block);
   const inlineHtml = renderDocxInline(block, mediaMap, rels);
   const tag = meta.heading ? `h${meta.heading}` : 'p';
   const classes = ['docx-paragraph'];
+  if (!meta.heading) classes.push('docx-body-paragraph');
   if (meta.heading) classes.push(`docx-heading-${meta.heading}`);
   if (meta.isToc) classes.push('docx-toc-entry');
   if (meta.align) classes.push(`docx-align-${meta.align}`);
+  const plainText = decodeDocxHtmlText(inlineHtml);
+  const isEmpty = !plainText.trim();
+  if (isEmpty) classes.push('docx-empty');
+  const hasImage = /<img\b/i.test(inlineHtml);
   const paragraphStyles = [];
   if (meta.indentLeftTwip > 0) paragraphStyles.push(`padding-left:${(meta.indentLeftTwip / 567).toFixed(3)}cm`);
   if (meta.spacingBeforeTwip > 0) paragraphStyles.push(`margin-top:${(meta.spacingBeforeTwip / 567).toFixed(3)}cm`);
   if (meta.spacingAfterTwip > 0) paragraphStyles.push(`margin-bottom:${(meta.spacingAfterTwip / 567).toFixed(3)}cm`);
   if (meta.lineTwip > 0) paragraphStyles.push(`line-height:${Math.max(1.2, meta.lineTwip / 240).toFixed(2)}`);
   const styleAttr = paragraphStyles.length ? ` style="${paragraphStyles.join(';')}"` : '';
-  const html = `<${tag} class="${classes.join(' ')}"${styleAttr}>${inlineHtml || '&nbsp;'}</${tag}>`;
-  return [{ type: 'paragraph', html, splittable: false }];
+  const html = `<${tag} class="${classes.join(' ')}" data-empty="${isEmpty ? 'true' : 'false'}"${styleAttr}>${inlineHtml || '&nbsp;'}</${tag}>`;
+  return [{
+    type: 'paragraph',
+    html,
+    splittable: false,
+    meta: {
+      ...meta,
+      isEmpty,
+      hasImage,
+      textLength: plainText.trim().length,
+      hasCustomSpacing: meta.spacingBeforeTwip > 0 || meta.spacingAfterTwip > 0 || meta.lineTwip > 0
+    }
+  }];
 }
 
 function renderDocxTable(block, mediaMap, rels) {
@@ -1599,6 +1624,68 @@ function renderDocxTable(block, mediaMap, rels) {
   return `<div class="docx-table-wrap"><table class="docx-table">${body}</table></div>`;
 }
 
+function getDominantRoundedMetric(values, step = 0.05) {
+  const stats = new Map();
+  values.forEach(value => {
+    if (!Number.isFinite(value) || value <= 0) return;
+    const rounded = Math.round(value / step) * step;
+    const key = rounded.toFixed(2);
+    stats.set(key, (stats.get(key) || 0) + 1);
+  });
+  let winner = 0;
+  let count = 0;
+  stats.forEach((value, key) => {
+    if (value > count) {
+      count = value;
+      winner = Number(key);
+    }
+  });
+  return { value: winner, count };
+}
+
+function detectDocxLayoutMode(blocks) {
+  const paragraphs = (blocks || [])
+    .filter(block => block?.type === 'paragraph' && block.meta)
+    .map(block => block.meta);
+  const bodyParagraphs = paragraphs.filter(meta =>
+    !meta.heading &&
+    !meta.isToc &&
+    !meta.hasImage &&
+    meta.textLength > 0
+  );
+  if (bodyParagraphs.length < 4) return 'preserve';
+
+  const lineValues = bodyParagraphs
+    .map(meta => meta.lineTwip > 0 ? Number((meta.lineTwip / 240).toFixed(2)) : 0)
+    .filter(Boolean);
+  const dominantLine = getDominantRoundedMetric(lineValues, 0.05);
+  const matchingLineCount = bodyParagraphs.filter(meta => {
+    if (!(meta.lineTwip > 0) || !(dominantLine.value > 0)) return true;
+    const current = meta.lineTwip / 240;
+    return Math.abs(current - dominantLine.value) <= 0.16;
+  }).length;
+  const customSpacingCount = bodyParagraphs.filter(meta =>
+    meta.spacingBeforeTwip > 240 ||
+    meta.spacingAfterTwip > 240 ||
+    meta.indentLeftTwip > 720 ||
+    (meta.align && meta.align !== 'left')
+  ).length;
+  const compactLineCount = bodyParagraphs.filter(meta => meta.lineTwip > 0 && (meta.lineTwip / 240) < 1.9).length;
+
+  const lineConsistency = matchingLineCount / bodyParagraphs.length;
+  const customSpacingRatio = customSpacingCount / bodyParagraphs.length;
+  const compactLineRatio = compactLineCount / bodyParagraphs.length;
+
+  if (
+    lineConsistency >= 0.8 &&
+    customSpacingRatio <= 0.18 &&
+    compactLineRatio >= 0.55
+  ) {
+    return 'reading';
+  }
+  return 'preserve';
+}
+
 function extractDocxHtmlBlocks(absPath) {
   const documentXml = getZipEntryBuffer(absPath, 'word/document.xml').toString('utf8');
   const rels = getDocxRelationships(absPath);
@@ -1615,7 +1702,10 @@ function extractDocxHtmlBlocks(absPath) {
     }
   });
 
-  return blocks;
+  return {
+    blocks,
+    layoutMode: detectDocxLayoutMode(blocks)
+  };
 }
 
 function decodeTextBuffer(buf) {
@@ -1965,6 +2055,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
   const pageTitle = escapeXml(docxMainTitleRaw);
   const docxMetaTitle = escapeXml(docxMetaTitleRaw);
   const kind = 'Docx 文件閱覽';
+  const docxLayoutMode = options.layoutMode === 'reading' ? 'reading' : 'preserve';
   const blockHtml = blocks.map((block, idx) => {
     if (block.type === 'pagebreak') return `<hr class="docx-page-divider" data-idx="${idx}">`;
     return `<div class="docx-block" data-kind="${escapeXml(block.type)}" data-idx="${idx}">${block.html}</div>`;
@@ -2025,6 +2116,14 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .docx-align-both{text-align:justify}
     .docx-toc-entry{font-size:1rem}
     .docx-empty{opacity:.55}
+    .docx-reading-layout .docx-body-paragraph{
+      margin-top:0 !important;
+      margin-bottom:0 !important;
+      line-height:1.92 !important;
+    }
+    .docx-reading-layout .docx-body-paragraph[data-empty="true"]{
+      min-height:1.92em;
+    }
     .docx-image{display:block;max-width:100%;height:auto;margin:1.5em auto;border-radius:0;cursor:zoom-in}
     .docx-table-wrap{overflow-x:auto;margin:0 0 1.2em}
     .docx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px;line-height:1.7}
@@ -2072,7 +2171,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       <h1 class="title">${pageTitle}</h1>
     </header>
     <div class="divider" aria-hidden="true"></div>
-    <article class="article">${blockHtml || '<p class="docx-paragraph docx-empty">&nbsp;</p>'}</article>
+    <article class="article ${docxLayoutMode === 'reading' ? 'docx-reading-layout' : 'docx-preserve-layout'}">${blockHtml || '<p class="docx-paragraph docx-empty">&nbsp;</p>'}</article>
     <div class="footer">Read-only preview.</div>
   </main>
   <div class="docx-zoom" id="docxZoom" aria-hidden="true"><img id="docxZoomImg" alt=""></div>
@@ -2572,13 +2671,14 @@ function resolvePreview(item, previewIndex = 0, collection = 'scenario') {
     };
   }
   if (file.ext === '.docx') {
-    const blocks = extractDocxHtmlBlocks(file.abs);
+    const docxPreview = extractDocxHtmlBlocks(file.abs);
     return {
       type: 'html',
       filename: `${path.parse(file.name).name}.html`,
       label: getPreviewLabel(file),
       file,
-      blocks,
+      blocks: docxPreview.blocks,
+      layoutMode: docxPreview.layoutMode,
       html: '',
       abs: null
     };
@@ -3870,7 +3970,10 @@ function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
     : null;
   const previewHistoryPath = canEditTxt ? withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}/history`, collection) : '';
   preview.html = preview.file?.ext === '.docx'
-    ? renderDocxPreviewPage(item, preview.file, preview.blocks || [], { disableContextMenu })
+    ? renderDocxPreviewPage(item, preview.file, preview.blocks || [], {
+        disableContextMenu,
+        layoutMode: preview.layoutMode
+      })
     : renderTextPreviewPage(item, preview.file, preview.text, {
         saveUrl: previewSavePath,
         historyUrl: previewHistoryPath,
