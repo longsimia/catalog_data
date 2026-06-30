@@ -2432,21 +2432,25 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     body{font-family:Georgia,"Times New Roman","Noto Serif TC","Songti TC","PMingLiU",serif;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;transition:background .2s ease,color .2s ease}
     .page{width:min(100%,760px);margin:0 auto;padding:58px 24px 72px}
     .meta{margin-bottom:18px}
-    .meta-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+    .meta-head{display:flex;align-items:stretch;justify-content:space-between;gap:24px}
+    .meta-main{flex:1;min-width:0}
+    .meta-side{display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;gap:18px}
     .title-wrap{flex:1;min-width:0}
     .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
     .filename-input{width:100%;margin:0;padding:0;border:none;background:transparent;color:var(--text);font:inherit;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em;outline:none}
     .meta-times{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;font-size:15px;color:var(--muted)}
     .meta-times time,.meta-times #metaLabelWrap,.meta-times #metaLabelText,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
     .meta-dot{width:3px;height:3px;border-radius:999px;background:currentColor;opacity:.55}
-    .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .actions{display:flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
     .icon-btn{width:30px;height:30px;border:none;background:transparent;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
     .icon-btn:hover{color:var(--text)}
     .icon{width:18px;height:18px;display:block}
     .action-btn{border:none;background:transparent;color:var(--muted);padding:0 2px;font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;height:30px;line-height:1}
     .action-btn:hover{color:var(--text)}
     .action-btn:disabled{opacity:.55;cursor:default}
-    .encoding-select{height:30px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--text);padding:0 12px;font:inherit;font-size:13px;outline:none;max-width:min(42vw,190px)}
+    .encoding-field{display:grid;gap:6px;margin:2px 0 10px}
+    .encoding-field label{font-size:13px;line-height:1.5;color:var(--muted)}
+    .encoding-select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);font:inherit;font-size:14px;outline:none}
     .encoding-select:focus{border-color:var(--link)}
     .article{font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word}
     .article-body,.editor{margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.92;font-size:16px;font-family:inherit;letter-spacing:.01em}
@@ -2532,7 +2536,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .article a{color:var(--link);text-decoration:none}
     .article a:hover{text-decoration:underline}
     @media (max-width: 720px){.history-layout{grid-template-columns:minmax(0,1fr)}.history-inline-view{display:none}.history-detail-modal{align-items:stretch;justify-content:stretch}.history-detail-modal .modal-bg{display:none}.history-detail-modal-card{width:100vw;max-height:100dvh;border:none;border-radius:0}.history-detail-shell{max-height:100dvh}.history-detail-topbar{padding:18px 18px 16px}.history-detail-body{padding:16px 16px 24px}.history-detail-footer{padding:14px 16px calc(18px + env(safe-area-inset-bottom))}.history-meta{display:grid;gap:6px;align-items:start}.history-record-body{padding:16px 16px 20px;font-size:16px;line-height:1.88}}
-    @media (max-width: 720px){.page{padding:40px 20px 48px}.meta-head{gap:12px;flex-direction:column}.filename-input,.title,.article,.article-body,.editor{font-size:16px;line-height:1.88}.format-grid{grid-template-columns:max-content}.format-action-btn-wide{grid-column:auto}}
+    @media (max-width: 720px){.page{padding:40px 20px 48px}.meta-head{gap:12px;flex-direction:column}.meta-side{width:100%;align-items:flex-start;gap:12px}.actions{width:100%;justify-content:flex-start}.filename-input,.title,.article,.article-body,.editor{font-size:16px;line-height:1.88}.format-grid{grid-template-columns:max-content}.format-action-btn-wide{grid-column:auto}}
   </style>
   <script>
     (() => {
@@ -2546,20 +2550,23 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   <main class="page">
     <header class="meta">
       <div class="meta-head">
-        <div class="title-wrap">
-          ${isTxt && canEditTxt ? `<input id="filenameInput" class="filename-input" type="text" value="${filenameValue}" spellcheck="false" aria-label="TXT 檔名">` : `<h1 class="title">${pageTitle}</h1>`}
+        <div class="meta-main">
+          <div class="title-wrap">
+            ${isTxt && canEditTxt ? `<input id="filenameInput" class="filename-input" type="text" value="${filenameValue}" spellcheck="false" aria-label="TXT 檔名">` : `<h1 class="title">${pageTitle}</h1>`}
+          </div>
+          ${metaHtml}
         </div>
-        <div class="actions">
-          ${isTxt && canEditTxt ? `<select id="encodingSelect" class="encoding-select" aria-label="TXT 編碼">${encodingOptionsHtml}</select>` : ''}
-          ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="redoBtn" title="重做（Ctrl+Shift+Z）" style="display:none">重做</button>` : ''}
-          ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="undoBtn" title="復原（Ctrl+Z）" style="display:none">復原</button>` : ''}
-          ${isTxt && canEditTxt ? `<span id="historySlot"></span>` : ''}
-          ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="formatBtn" title="格式化排版">格式化</button>` : ''}
-          ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="saveBtn" title="儲存目前變更">儲存</button>` : ''}
-          <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
+        <div class="meta-side">
+          <div class="actions">
+            ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="redoBtn" title="重做（Ctrl+Shift+Z）" style="display:none">重做</button>` : ''}
+            ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="undoBtn" title="復原（Ctrl+Z）" style="display:none">復原</button>` : ''}
+            ${isTxt && canEditTxt ? `<span id="historySlot"></span>` : ''}
+            ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="formatBtn" title="格式化排版">格式化</button>` : ''}
+            ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="saveBtn" title="儲存目前變更">儲存</button>` : ''}
+            <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
+          </div>
         </div>
       </div>
-      ${metaHtml}
     </header>
     <div class="divider" aria-hidden="true"></div>
     <article class="article">
@@ -2567,7 +2574,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     </article>
     <div class="footer">${canEditTxt ? 'Editable preview.' : 'Read-only preview.'}</div>
   </main>
-  ${isTxt && canEditTxt ? `<div class="modal floating-modal" id="formatModal" aria-hidden="true"><div class="modal-bg" id="formatModalBg"></div><section class="floating-window format-modal-card" id="formatWindow" role="dialog" aria-labelledby="formatModalTitle"><div class="window-head" id="formatDragHandle"><h3 id="formatModalTitle">格式化排版</h3><button type="button" class="window-close" id="formatCloseBtn" aria-label="關閉">×</button></div><div class="window-body"><div class="format-grid"><button type="button" class="format-action-btn format-action-btn-wide" data-action="find_replace">尋找與取代</button><button type="button" class="format-action-btn" data-action="indent_add">插入段首縮排</button><button type="button" class="format-action-btn" data-action="indent_remove">去除段首縮排</button><button type="button" class="format-action-btn" data-action="keep_blank_line">在段落與段落間保留一個空行</button><button type="button" class="format-action-btn" data-action="trim_blank_lines">去除段落與段落間所有的空行</button><button type="button" class="format-action-btn" data-action="punct_fullwidth">半形符號轉全形符號</button><button type="button" class="format-action-btn" data-action="cn_to_twp">简体中文 轉 繁體中文</button><button type="button" class="format-action-btn" data-action="t_to_cn">繁體中文 轉 简体中文</button><button type="button" class="format-action-btn" data-action="cjk_spacing">在中英文之間插入空白</button></div></div></section></div>` : ''}
+  ${isTxt && canEditTxt ? `<div class="modal floating-modal" id="formatModal" aria-hidden="true"><div class="modal-bg" id="formatModalBg"></div><section class="floating-window format-modal-card" id="formatWindow" role="dialog" aria-labelledby="formatModalTitle"><div class="window-head" id="formatDragHandle"><h3 id="formatModalTitle">格式化排版</h3><button type="button" class="window-close" id="formatCloseBtn" aria-label="關閉">×</button></div><div class="window-body"><div class="encoding-field"><label for="encodingSelect">切換編碼</label><select id="encodingSelect" class="encoding-select" aria-label="TXT 編碼">${encodingOptionsHtml}</select></div><div class="format-grid"><button type="button" class="format-action-btn format-action-btn-wide" data-action="find_replace">尋找與取代</button><button type="button" class="format-action-btn" data-action="indent_add">插入段首縮排</button><button type="button" class="format-action-btn" data-action="indent_remove">去除段首縮排</button><button type="button" class="format-action-btn" data-action="keep_blank_line">在段落與段落間保留一個空行</button><button type="button" class="format-action-btn" data-action="trim_blank_lines">去除段落與段落間所有的空行</button><button type="button" class="format-action-btn" data-action="punct_fullwidth">半形符號轉全形符號</button><button type="button" class="format-action-btn" data-action="cn_to_twp">简体中文 轉 繁體中文</button><button type="button" class="format-action-btn" data-action="t_to_cn">繁體中文 轉 简体中文</button><button type="button" class="format-action-btn" data-action="cjk_spacing">在中英文之間插入空白</button></div></div></section></div>` : ''}
   ${isTxt && canEditTxt ? `<div class="modal floating-modal" id="findReplaceModal" aria-hidden="true"><div class="modal-bg" id="findReplaceModalBg"></div><section class="floating-window" id="findReplaceWindow" role="dialog" aria-labelledby="findReplaceTitle"><div class="window-head" id="findDragHandle"><h3 id="findReplaceTitle">尋找與取代</h3><button type="button" class="window-close" id="findReplaceCloseBtn" aria-label="關閉">×</button></div><div class="window-body"><div class="find-grid"><label>尋找<input id="findInput" type="text" autocomplete="off" spellcheck="false"></label><label>取代成<input id="replaceInput" type="text" autocomplete="off" spellcheck="false"></label></div><p id="findSummary" class="diff-empty" style="margin:10px 0 0">請先輸入要尋找的文字。</p><div class="modal-actions find-actions"><button type="button" id="findNextBtn">下一筆</button><button type="button" id="replaceOneBtn">取代</button><button type="button" id="replaceAllBtn">全取代</button></div></div></section></div>` : ''}
   ${isTxt && canEditTxt ? `<div class="modal" id="historyModal" aria-hidden="true"><div class="modal-bg" id="historyModalBg"></div><div class="modal-card history-modal-card" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle"><h3 id="historyModalTitle">編輯記錄</h3><p>桌機可直接查看版本記錄；手機點擊版本後會開啟詳情。</p><div class="history-layout"><div class="history-list" id="historyList"></div><div class="history-inline-view"><div class="history-meta"><strong id="historyInlineVersionTitle">尚未選擇版本</strong><span id="historyInlineVersionMeta" class="diff-empty"></span></div><div class="history-compare-grid"><section class="history-record-pane history-compare-pane"><div class="history-pane-title">版本記錄</div><div class="history-record-body" id="historyInlineVersionDiff"></div></section><section class="history-record-pane history-compare-pane"><div class="history-pane-title">目前內文</div><div class="history-record-body" id="historyInlineCurrentDiff"></div></section></div><div class="modal-actions" style="margin-top:0"><button type="button" id="historyInlineRestoreBtn">還原到此版本</button></div></div></div><div class="modal-actions"><button type="button" id="historyClearBtn">清空編輯記錄</button><button type="button" id="historyCloseBtn">關閉</button></div></div></div>` : ''}
   ${isTxt && canEditTxt ? `<div class="modal history-detail-modal" id="historyDetailModal" aria-hidden="true"><div class="modal-bg" id="historyDetailModalBg"></div><div class="modal-card history-detail-modal-card" role="dialog" aria-modal="true" aria-labelledby="historyDetailModalTitle"><div class="history-detail-shell"><div class="history-detail-topbar"><button type="button" class="history-back-btn" id="historyDetailCloseBtn" aria-label="返回">←</button><h3 id="historyDetailModalTitle">歷史詳情</h3></div><div class="history-detail-body"><div class="history-view"><div class="history-meta"><strong id="historyVersionTitle">尚未選擇版本</strong><span id="historyVersionMeta" class="diff-empty"></span></div><section class="history-record-pane"><div class="diff-head">版本記錄</div><div class="history-record-body" id="historyVersionDiff"></div></section></div></div><div class="history-detail-footer"><button type="button" class="history-restore-btn" id="historyRestoreBtn">還原到此版本</button></div></div></div></div>` : ''}
