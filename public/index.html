@@ -5999,10 +5999,18 @@ async function readDroppedEntry(entry, basePath = '') {
 }
 async function getDroppedFiles(dataTransfer, preserveDirectories = false) {
   const items = Array.from(dataTransfer?.items || []);
-  const supportsEntries = preserveDirectories && items.some(item => typeof item?.webkitGetAsEntry === 'function');
-  if (supportsEntries) {
+  const directFiles = Array.from(dataTransfer?.files || []);
+  const entryReaders = preserveDirectories ? items.filter(item => typeof item?.webkitGetAsEntry === 'function') : [];
+  const hasDirectoryEntry = entryReaders.some(item => {
+    try {
+      return !!item.webkitGetAsEntry?.()?.isDirectory;
+    } catch {
+      return false;
+    }
+  });
+  if (hasDirectoryEntry) {
     const files = [];
-    for (const item of items) {
+    for (const item of entryReaders) {
       const entry = item.webkitGetAsEntry?.();
       if (!entry) {
         const fallback = item.getAsFile?.();
@@ -6013,7 +6021,7 @@ async function getDroppedFiles(dataTransfer, preserveDirectories = false) {
     }
     return files;
   }
-  return Array.from(dataTransfer?.files || []);
+  return directFiles;
 }
 async function dzD(e, type) {
   e.preventDefault();
