@@ -1641,26 +1641,65 @@ function decodeTextBuffer(buf) {
   if (utf16ZeroCount > buf.length / 6) {
     return { text: buf.toString('utf16le').replace(/^\uFEFF/, ''), encoding: 'utf16le', bom: null };
   }
-  if (replacementCount <= Math.max(1, Math.floor(buf.length / 120))) {
-    return { text: utf8.replace(/^\uFEFF/, ''), encoding: 'utf8', bom: null };
+  const COMMON_CJK_CHARS = [
+    '的一是在不了有人我他這個們來到時大地為子中你說生國年著就那和要她出也得裡後自以會家可下而過天去能對小多然於心學之都好看起發當沒成只如事把還用第樣道想作種開美總從無情己面最女但現前些所同日手又行意動方期它頭經長兒回位分愛老因很給名法間斯知世什兩次使身者被高已親其進此話常與活正感以及让讓點應'
+  ].join('');
+  const COMMON_CJK_WORDS = [
+    '機制', '設計', '說明', '規則', '資料', '角色', '場景', '內容',
+    '檔案', '編輯', '歷史', '版本', '測試', '輸入', '輸出', '空白',
+    '段落', '符號', '格式', '尋找', '取代'
+  ];
+  const COMMON_CJK_CHAR_RE = new RegExp('[' + COMMON_CJK_CHARS + ']', 'gu');
+  const HAN_RE = /\p{Script=Han}/gu;
+  const HIRAGANA_KATAKANA_RE = /[\u3040-\u30FF]/gu;
+  const PRINTABLE_RE = /[\t\n\r\u0020-\u007E\u00A0-\u024F\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/gu;
+  const SUSPICIOUS_RE = /[�□�▲△◆◇○◎●☆★※〒→←↑↓╳╱╲]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/gu;
+  function scoreDecodedText(text, encoding) {
+    const value = String(text || '');
+    if (!value) return Number.NEGATIVE_INFINITY;
+    const length = value.length || 1;
+    const replacement = (value.match(/\uFFFD/g) || []).length;
+    const suspicious = (value.match(SUSPICIOUS_RE) || []).length;
+    const hanCount = (value.match(HAN_RE) || []).length;
+    const kanaCount = (value.match(HIRAGANA_KATAKANA_RE) || []).length;
+    const commonCharCount = (value.match(COMMON_CJK_CHAR_RE) || []).length;
+    const commonWordCount = COMMON_CJK_WORDS.reduce((count, word) => count + (value.includes(word) ? 1 : 0), 0);
+    const printableCount = (value.match(PRINTABLE_RE) || []).length;
+    let score = 0;
+    score += printableCount / length * 30;
+    score += commonCharCount / Math.max(1, hanCount) * 34;
+    score += commonWordCount * 3;
+    score += Math.min(hanCount / length, 0.85) * 12;
+    score += Math.min(kanaCount / length, 0.4) * 8;
+    score -= replacement * 25;
+    score -= suspicious * 6;
+    if (/utf-?8|utf8/i.test(encoding) && replacementCount <= Math.max(1, Math.floor(buf.length / 160))) score += 8;
+    if ((hanCount > 0 || kanaCount > 0) && commonCharCount === 0 && commonWordCount === 0) score -= 10;
+    return score;
   }
 
-  for (const encoding of ['big5', 'gb18030', 'shift_jis', 'euc-jp']) {
+  const candidates = [];
+  function pushCandidate(text, encoding) {
+    const decoded = String(text || '').replace(/^\uFEFF/, '');
+    if (!decoded || /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(decoded)) return;
+    candidates.push({ text: decoded, encoding, bom: null, score: scoreDecodedText(decoded, encoding) });
+  }
+
+  pushCandidate(utf8, 'utf8');
+  for (const encoding of ['big5', 'cp950', 'gb18030', 'shift_jis', 'cp932', 'euc-jp', 'utf16le']) {
     try {
-      return {
-        text: new TextDecoder(encoding, { fatal: true }).decode(buf).replace(/^\uFEFF/, ''),
-        encoding,
-        bom: null
-      };
+      pushCandidate(iconv.decode(buf, encoding), encoding);
     } catch {}
   }
-  for (const encoding of ['utf8', 'utf16le', 'big5', 'gb18030', 'cp932', 'shift_jis', 'euc-jp']) {
+  for (const encoding of ['big5', 'gb18030', 'shift_jis', 'euc-jp']) {
     try {
-      const decoded = iconv.decode(buf, encoding).replace(/^\uFEFF/, '');
-      if (decoded && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(decoded)) {
-        return { text: decoded, encoding, bom: null };
-      }
+      pushCandidate(new TextDecoder(encoding, { fatal: true }).decode(buf), encoding);
     } catch {}
+  }
+
+  if (candidates.length) {
+    candidates.sort((a, b) => b.score - a.score);
+    return { text: candidates[0].text, encoding: candidates[0].encoding, bom: null };
   }
   return { text: utf8.replace(/\uFFFD/g, ''), encoding: 'utf8', bom: null };
 }
