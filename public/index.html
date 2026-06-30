@@ -1650,6 +1650,10 @@ const S = {
   previewModalState: null,
   txtCreateState: null,
   previewTreeOpen: {},
+  downloadDataCache: new Map(),
+  previewDataCache: new Map(),
+  downloadDataPending: new Map(),
+  previewDataPending: new Map(),
   dragIdx: null, dragOverIdx: null, dragOverPos: null, justMovedId: null, _tx: 0, _ty: 0, manPageOpen: false,
   tagEditIdx: null, catEditIdx: null, prevDragIdx: null, ePrevDragIdx: null, tagSuggestIdx: -1, authorSuggestIdx: -1,
   tagDragOverIdx: null, tagDragOverPos: null, tagJustMoved: null,
@@ -4222,21 +4226,79 @@ function handlePageJumpKeydown(ev) {
   ev.preventDefault();
   submitPageJump(ev.currentTarget.value);
 }
-async function getDownloadDataForItem(item) {
+async function getDownloadDataForItem(item, options = {}) {
   if (!item?.id || !getToken()) return { files: [], allUrl: '', allName: '' };
+  const cacheKey = String(item.id);
+  if (!options.forceRefresh && S.downloadDataCache.has(cacheKey)) {
+    return S.downloadDataCache.get(cacheKey);
+  }
+  if (!options.forceRefresh && S.downloadDataPending.has(cacheKey)) {
+    return S.downloadDataPending.get(cacheKey);
+  }
+  const request = (async () => {
+    try {
+      const data = await api('GET', `/api/items/${item.id}/download-files`);
+      S.downloadDataCache.set(cacheKey, data);
+      return data;
+    } catch {
+      const fallback = { files: [], allUrl: '', allName: '' };
+      S.downloadDataCache.set(cacheKey, fallback);
+      return fallback;
+    }
+  })();
+  S.downloadDataPending.set(cacheKey, request);
   try {
-    return await api('GET', `/api/items/${item.id}/download-files`);
-  } catch {
-    return { files: [], allUrl: '', allName: '' };
+    return await request;
+  } finally {
+    S.downloadDataPending.delete(cacheKey);
   }
 }
-async function getPreviewDataForItem(item) {
-  if (!item?.id || !getToken()) return '';
-  try {
-    return await api('GET', `/api/items/${item.id}/preview`);
-  } catch {
-    return { supported: false, url: '', count: 0, files: [] };
+async function getPreviewDataForItem(item, options = {}) {
+  if (!item?.id || !getToken()) return { supported: false, url: '', count: 0, files: [] };
+  const cacheKey = String(item.id);
+  if (!options.forceRefresh && S.previewDataCache.has(cacheKey)) {
+    return S.previewDataCache.get(cacheKey);
   }
+  if (!options.forceRefresh && S.previewDataPending.has(cacheKey)) {
+    return S.previewDataPending.get(cacheKey);
+  }
+  const request = (async () => {
+    try {
+      const data = await api('GET', `/api/items/${item.id}/preview`);
+      if (data && !data.itemId) data.itemId = item.id;
+      S.previewDataCache.set(cacheKey, data);
+      return data;
+    } catch {
+      const fallback = { supported: false, url: '', count: 0, files: [], itemId: item.id };
+      S.previewDataCache.set(cacheKey, fallback);
+      return fallback;
+    }
+  })();
+  S.previewDataPending.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    S.previewDataPending.delete(cacheKey);
+  }
+}
+function prefetchLightboxNeighborFiles(currentItemId) {
+  const items = filtered();
+  if (!items.length || !currentItemId) return;
+  const idx = items.findIndex(item => item.id === currentItemId);
+  if (idx < 0) return;
+  const seen = new Set();
+  const neighbors = [
+    items[(idx - 1 + items.length) % items.length],
+    items[(idx + 1) % items.length]
+  ].filter(item => {
+    if (!item || item.id === currentItemId || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+  neighbors.forEach(item => {
+    void getDownloadDataForItem(item);
+    void getPreviewDataForItem(item);
+  });
 }
 function getDownloadFilenameFromHeader(header) {
   if (!header) return '';
@@ -4458,6 +4520,7 @@ async function openLb(id, options = {}) {
   ]);
   if (!document.getElementById('lb').classList.contains('on') || S.lbItemId !== id) return;
   syncLightboxDownload(item, downloadData, previewData);
+  prefetchLightboxNeighborFiles(id);
 }
 
 function syncLightboxItem(item, options = {}) {
@@ -8734,8 +8797,8 @@ async function saveEdit() {
     if (document.getElementById('lb')?.classList.contains('on') && S.lbItemId === item.id) {
       syncLightboxItem(item, { resetSlide: false });
       const [downloadData, previewData] = await Promise.all([
-        getDownloadDataForItem(item),
-        getPreviewDataForItem(item)
+        getDownloadDataForItem(item, { forceRefresh: true }),
+        getPreviewDataForItem(item, { forceRefresh: true })
       ]);
       if (document.getElementById('lb')?.classList.contains('on') && S.lbItemId === item.id) {
         syncLightboxDownload(item, downloadData, previewData);
