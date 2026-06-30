@@ -1636,6 +1636,10 @@ function decodeTextBuffer(buf) {
   }
 
   const utf8 = buf.toString('utf8');
+  let utf8Strict = null;
+  try {
+    utf8Strict = new TextDecoder('utf-8', { fatal: true }).decode(buf);
+  } catch {}
   const replacementCount = (utf8.match(/\uFFFD/g) || []).length;
   const utf16ZeroCount = [...buf].filter((byte, idx) => idx % 2 === 1 && byte === 0).length;
   if (utf16ZeroCount > buf.length / 6) {
@@ -1649,11 +1653,18 @@ function decodeTextBuffer(buf) {
     '檔案', '編輯', '歷史', '版本', '測試', '輸入', '輸出', '空白',
     '段落', '符號', '格式', '尋找', '取代'
   ];
+  const COMMON_JP_WORDS = [
+    'シナリオ', 'ハンドアウト', 'キャラクター', 'セッション', 'シーン', '情報',
+    '探索者', '目星', '聞き耳', 'アイデア', 'SAN', '推奨', '概要',
+    '導入', '終了', '秘匿', '公開', '技能', '時間', '人数'
+  ];
+  const COMMON_JP_CHARS = 'のにをたがでてとしれさあるいるもするからなこととしていくられるへるやだですます';
   const COMMON_CJK_CHAR_RE = new RegExp('[' + COMMON_CJK_CHARS + ']', 'gu');
   const HAN_RE = /\p{Script=Han}/gu;
   const HIRAGANA_KATAKANA_RE = /[\u3040-\u30FF]/gu;
   const PRINTABLE_RE = /[\t\n\r\u0020-\u007E\u00A0-\u024F\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/gu;
   const SUSPICIOUS_RE = /[�□�▲△◆◇○◎●☆★※〒→←↑↓╳╱╲]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/gu;
+  const MOJIBAKE_RE = /[螟譛縺繧繝莠蜈逕荳莉驛鬮鞜魍鮖籖]/gu;
   function scoreDecodedText(text, encoding) {
     const value = String(text || '');
     if (!value) return Number.NEGATIVE_INFINITY;
@@ -1663,18 +1674,26 @@ function decodeTextBuffer(buf) {
     const hanCount = (value.match(HAN_RE) || []).length;
     const kanaCount = (value.match(HIRAGANA_KATAKANA_RE) || []).length;
     const commonCharCount = (value.match(COMMON_CJK_CHAR_RE) || []).length;
+    const commonJpCharCount = [...COMMON_JP_CHARS].reduce((count, char) => count + (value.includes(char) ? 1 : 0), 0);
     const commonWordCount = COMMON_CJK_WORDS.reduce((count, word) => count + (value.includes(word) ? 1 : 0), 0);
+    const commonJpWordCount = COMMON_JP_WORDS.reduce((count, word) => count + (value.includes(word) ? 1 : 0), 0);
+    const mojibakeCount = (value.match(MOJIBAKE_RE) || []).length;
     const printableCount = (value.match(PRINTABLE_RE) || []).length;
     let score = 0;
     score += printableCount / length * 30;
     score += commonCharCount / Math.max(1, hanCount) * 34;
     score += commonWordCount * 3;
     score += Math.min(hanCount / length, 0.85) * 12;
-    score += Math.min(kanaCount / length, 0.4) * 8;
+    score += Math.min(kanaCount / length, 0.45) * 18;
+    score += commonJpCharCount * 0.8;
+    score += commonJpWordCount * 4;
     score -= replacement * 25;
     score -= suspicious * 6;
+    score -= mojibakeCount * 1.6;
     if (/utf-?8|utf8/i.test(encoding) && replacementCount <= Math.max(1, Math.floor(buf.length / 160))) score += 8;
-    if ((hanCount > 0 || kanaCount > 0) && commonCharCount === 0 && commonWordCount === 0) score -= 10;
+    if (/utf-?8|utf8/i.test(encoding) && utf8Strict !== null) score += 20;
+    if (kanaCount >= Math.max(6, length * 0.05) && !/shift_jis|cp932|euc-jp|utf-?8/i.test(encoding)) score -= 18;
+    if ((hanCount > 0 || kanaCount > 0) && commonCharCount === 0 && commonWordCount === 0 && commonJpWordCount === 0 && commonJpCharCount === 0) score -= 10;
     return score;
   }
 
@@ -1685,7 +1704,7 @@ function decodeTextBuffer(buf) {
     candidates.push({ text: decoded, encoding, bom: null, score: scoreDecodedText(decoded, encoding) });
   }
 
-  pushCandidate(utf8, 'utf8');
+  pushCandidate(utf8Strict ?? utf8, 'utf8');
   for (const encoding of ['big5', 'cp950', 'gb18030', 'shift_jis', 'cp932', 'euc-jp', 'utf16le']) {
     try {
       pushCandidate(iconv.decode(buf, encoding), encoding);
