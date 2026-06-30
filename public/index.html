@@ -4561,6 +4561,21 @@ function syncLightboxDownload(item, downloadData, previewData) {
   const showEdit = !!(getToken() && canEditInfo);
   bottomActions.style.display = (showEdit || showDownload) ? 'grid' : 'none';
   bottomActions.classList.toggle('single', !(showEdit && showDownload));
+
+  const previewModal = document.getElementById('preview-modal');
+  if (!previewModal?.classList.contains('on')) return;
+  const modalState = S.previewModalState;
+  if (!modalState) return;
+  if (modalState.type === 'download') {
+    S.downloadModalData = { item, data: downloadData };
+    S.previewModalState = { type: 'download', item, data: downloadData };
+    renderDownloadModalContent(item, downloadData);
+    return;
+  }
+  if (previewData && !previewData.itemId) previewData.itemId = item.id;
+  S.downloadModalData = null;
+  S.previewModalState = { type: 'preview', data: previewData };
+  renderPreviewModalContent(previewData);
 }
 
 async function downloadModalFile(index) {
