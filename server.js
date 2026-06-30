@@ -1582,9 +1582,9 @@ function renderDocxParagraphBlocks(block, mediaMap, rels) {
   if (meta.isToc) classes.push('docx-toc-entry');
   if (meta.align) classes.push(`docx-align-${meta.align}`);
   const plainText = decodeDocxHtmlText(inlineHtml);
-  const isEmpty = !plainText.trim();
-  if (isEmpty) classes.push('docx-empty');
   const hasImage = /<img\b/i.test(inlineHtml);
+  const isEmpty = !plainText.trim() && !hasImage;
+  if (isEmpty) classes.push('docx-empty');
   const paragraphStyles = [];
   if (meta.indentLeftTwip > 0) paragraphStyles.push(`padding-left:${(meta.indentLeftTwip / 567).toFixed(3)}cm`);
   if (meta.spacingBeforeTwip > 0) paragraphStyles.push(`margin-top:${(meta.spacingBeforeTwip / 567).toFixed(3)}cm`);
