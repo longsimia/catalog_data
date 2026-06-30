@@ -2550,7 +2550,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
           ${isTxt && canEditTxt ? `<input id="filenameInput" class="filename-input" type="text" value="${filenameValue}" spellcheck="false" aria-label="TXT 檔名">` : `<h1 class="title">${pageTitle}</h1>`}
         </div>
         <div class="actions">
-          ${isTxt ? `<select id="encodingSelect" class="encoding-select" aria-label="TXT 編碼">${encodingOptionsHtml}</select>` : ''}
+          ${isTxt && canEditTxt ? `<select id="encodingSelect" class="encoding-select" aria-label="TXT 編碼">${encodingOptionsHtml}</select>` : ''}
           ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="redoBtn" title="重做（Ctrl+Shift+Z）" style="display:none">重做</button>` : ''}
           ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="undoBtn" title="復原（Ctrl+Z）" style="display:none">復原</button>` : ''}
           ${isTxt && canEditTxt ? `<span id="historySlot"></span>` : ''}
@@ -2585,7 +2585,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   ${isTxt && canEditTxt ? `<script src="/vendor/opencc-js/full.js"></script>` : ''}
   ${isTxt ? `<script>(()=>{const previewEditor=document.getElementById('editor');const previewFilenameInput=document.getElementById('filenameInput');if(previewEditor)previewEditor.value=previewEditor.defaultValue;if(previewFilenameInput)previewFilenameInput.value=previewFilenameInput.defaultValue;window.resizeEditor=function(){if(!previewEditor)return;const pageX=window.scrollX;const pageY=window.scrollY;const selectionStart=previewEditor.selectionStart;const selectionEnd=previewEditor.selectionEnd;previewEditor.style.height='auto';previewEditor.style.height=previewEditor.scrollHeight+'px';if(typeof selectionStart==='number'&&typeof selectionEnd==='number'){previewEditor.selectionStart=selectionStart;previewEditor.selectionEnd=selectionEnd;}window.scrollTo(pageX,pageY);requestAnimationFrame(()=>window.scrollTo(pageX,pageY));};window.resizeEditor();window.addEventListener('load',window.resizeEditor);window.addEventListener('resize',window.resizeEditor);previewEditor?.addEventListener('input',()=>window.resizeEditor());})();</script>` : ''}
   ${isTxt && canEditTxt ? `<script>
-    const INDENT='\\u3000\\u3000',AUTOSAVE_MS=300000,UNDO_GROUP_IDLE_MS=900,editor=document.getElementById('editor'),formatBtn=document.getElementById('formatBtn'),undoBtn=document.getElementById('undoBtn'),redoBtn=document.getElementById('redoBtn'),historySlot=document.getElementById('historySlot'),formatModal=document.getElementById('formatModal'),formatModalBg=document.getElementById('formatModalBg'),formatWindow=document.getElementById('formatWindow'),formatDragHandle=document.getElementById('formatDragHandle'),formatCloseBtn=document.getElementById('formatCloseBtn'),formatActionBtns=Array.from(document.querySelectorAll('.format-action-btn')),findReplaceModal=document.getElementById('findReplaceModal'),findReplaceModalBg=document.getElementById('findReplaceModalBg'),findReplaceWindow=document.getElementById('findReplaceWindow'),findDragHandle=document.getElementById('findDragHandle'),findReplaceCloseBtn=document.getElementById('findReplaceCloseBtn'),findInput=document.getElementById('findInput'),replaceInput=document.getElementById('replaceInput'),findSummary=document.getElementById('findSummary'),findNextBtn=document.getElementById('findNextBtn'),replaceOneBtn=document.getElementById('replaceOneBtn'),replaceAllBtn=document.getElementById('replaceAllBtn'),historyModal=document.getElementById('historyModal'),historyModalBg=document.getElementById('historyModalBg'),historyCloseBtn=document.getElementById('historyCloseBtn'),historyClearBtn=document.getElementById('historyClearBtn'),historyDetailModal=document.getElementById('historyDetailModal'),historyDetailModalBg=document.getElementById('historyDetailModalBg'),historyDetailCloseBtn=document.getElementById('historyDetailCloseBtn'),historyRestoreBtn=document.getElementById('historyRestoreBtn'),historyInlineRestoreBtn=document.getElementById('historyInlineRestoreBtn'),historyList=document.getElementById('historyList'),historyVersionTitle=document.getElementById('historyVersionTitle'),historyVersionMeta=document.getElementById('historyVersionMeta'),historyVersionDiff=document.getElementById('historyVersionDiff'),historyInlineVersionTitle=document.getElementById('historyInlineVersionTitle'),historyInlineVersionMeta=document.getElementById('historyInlineVersionMeta'),historyInlineVersionDiff=document.getElementById('historyInlineVersionDiff'),historyInlineCurrentDiff=document.getElementById('historyInlineCurrentDiff'),historyClearConfirmModal=document.getElementById('historyClearConfirmModal'),historyClearConfirmModalBg=document.getElementById('historyClearConfirmModalBg'),historyClearCancelBtn=document.getElementById('historyClearCancelBtn'),historyClearConfirmBtn=document.getElementById('historyClearConfirmBtn'),filenameInput=document.getElementById('filenameInput'),saveBtn=document.getElementById('saveBtn'),status=document.getElementById('saveStatus'),encodingSelect=document.getElementById('encodingSelect'),currentEncoding=${JSON.stringify(selectedEncoding)},saveUrlRaw=${JSON.stringify(options.saveUrl || '')},saveUrl=saveUrlRaw?new URL(saveUrlRaw,window.location.origin).toString():'',historyUrlRaw=${JSON.stringify(options.historyUrl || '')},historyUrl=historyUrlRaw?new URL(historyUrlRaw,window.location.origin).toString():'',leaveModal=document.getElementById('leaveModal'),leaveModalBg=document.getElementById('leaveModalBg'),leaveStayBtn=document.getElementById('leaveStayBtn'),leaveConfirmBtn=document.getElementById('leaveConfirmBtn'),openccReady=typeof OpenCC!=='undefined'&&typeof OpenCC.Converter==='function',cnToTwp=openccReady?OpenCC.Converter({from:'cn',to:'twp'}):null,tToCn=openccReady?OpenCC.Converter({from:'t',to:'cn'}):null;let lastSavedText=editor?editor.value:'',lastSavedFilename=filenameInput?filenameInput.value:'',allowLeave=false,leaveViaHistory=false,saveInFlight=false,suspendTracking=false,selectedHistoryId='',historyVersions=[],undoStack=[],redoStack=[],pendingInputState=null,inputGroupState=null,inputGroupTarget='',inputGroupTimer=0,isComposing=false,historyClearConfirmResolve=null;
+    const INDENT='\\u3000\\u3000',AUTOSAVE_MS=300000,UNDO_GROUP_IDLE_MS=900,editor=document.getElementById('editor'),formatBtn=document.getElementById('formatBtn'),undoBtn=document.getElementById('undoBtn'),redoBtn=document.getElementById('redoBtn'),historySlot=document.getElementById('historySlot'),formatModal=document.getElementById('formatModal'),formatModalBg=document.getElementById('formatModalBg'),formatWindow=document.getElementById('formatWindow'),formatDragHandle=document.getElementById('formatDragHandle'),formatCloseBtn=document.getElementById('formatCloseBtn'),formatActionBtns=Array.from(document.querySelectorAll('.format-action-btn')),findReplaceModal=document.getElementById('findReplaceModal'),findReplaceModalBg=document.getElementById('findReplaceModalBg'),findReplaceWindow=document.getElementById('findReplaceWindow'),findDragHandle=document.getElementById('findDragHandle'),findReplaceCloseBtn=document.getElementById('findReplaceCloseBtn'),findInput=document.getElementById('findInput'),replaceInput=document.getElementById('replaceInput'),findSummary=document.getElementById('findSummary'),findNextBtn=document.getElementById('findNextBtn'),replaceOneBtn=document.getElementById('replaceOneBtn'),replaceAllBtn=document.getElementById('replaceAllBtn'),historyModal=document.getElementById('historyModal'),historyModalBg=document.getElementById('historyModalBg'),historyCloseBtn=document.getElementById('historyCloseBtn'),historyClearBtn=document.getElementById('historyClearBtn'),historyDetailModal=document.getElementById('historyDetailModal'),historyDetailModalBg=document.getElementById('historyDetailModalBg'),historyDetailCloseBtn=document.getElementById('historyDetailCloseBtn'),historyRestoreBtn=document.getElementById('historyRestoreBtn'),historyInlineRestoreBtn=document.getElementById('historyInlineRestoreBtn'),historyList=document.getElementById('historyList'),historyVersionTitle=document.getElementById('historyVersionTitle'),historyVersionMeta=document.getElementById('historyVersionMeta'),historyVersionDiff=document.getElementById('historyVersionDiff'),historyInlineVersionTitle=document.getElementById('historyInlineVersionTitle'),historyInlineVersionMeta=document.getElementById('historyInlineVersionMeta'),historyInlineVersionDiff=document.getElementById('historyInlineVersionDiff'),historyInlineCurrentDiff=document.getElementById('historyInlineCurrentDiff'),historyClearConfirmModal=document.getElementById('historyClearConfirmModal'),historyClearConfirmModalBg=document.getElementById('historyClearConfirmModalBg'),historyClearCancelBtn=document.getElementById('historyClearCancelBtn'),historyClearConfirmBtn=document.getElementById('historyClearConfirmBtn'),filenameInput=document.getElementById('filenameInput'),saveBtn=document.getElementById('saveBtn'),status=document.getElementById('saveStatus'),encodingSelect=document.getElementById('encodingSelect'),saveUrlRaw=${JSON.stringify(options.saveUrl || '')},saveUrl=saveUrlRaw?new URL(saveUrlRaw,window.location.origin).toString():'',historyUrlRaw=${JSON.stringify(options.historyUrl || '')},historyUrl=historyUrlRaw?new URL(historyUrlRaw,window.location.origin).toString():'',txtReloadUrlRaw=${JSON.stringify(options.txtReloadUrl || '')},txtReloadUrl=txtReloadUrlRaw?new URL(txtReloadUrlRaw,window.location.origin).toString():'',leaveModal=document.getElementById('leaveModal'),leaveModalBg=document.getElementById('leaveModalBg'),leaveStayBtn=document.getElementById('leaveStayBtn'),leaveConfirmBtn=document.getElementById('leaveConfirmBtn'),openccReady=typeof OpenCC!=='undefined'&&typeof OpenCC.Converter==='function',cnToTwp=openccReady?OpenCC.Converter({from:'cn',to:'twp'}):null,tToCn=openccReady?OpenCC.Converter({from:'t',to:'cn'}):null;let currentEncoding=${JSON.stringify(selectedEncoding)},lastSavedText=editor?editor.value:'',lastSavedFilename=filenameInput?filenameInput.value:'',allowLeave=false,leaveViaHistory=false,saveInFlight=false,suspendTracking=false,selectedHistoryId='',historyVersions=[],undoStack=[],redoStack=[],pendingInputState=null,inputGroupState=null,inputGroupTarget='',inputGroupTimer=0,isComposing=false,historyClearConfirmResolve=null;
     function setStatusMessage(message,state=''){if(!status)return;status.dataset.state=state;status.textContent=message||'';}
     function normalizeLineEndings(text){return String(text||'').replace(/\\r\\n/g,'\\n').replace(/\\r/g,'\\n');}
     function snapshotState(){return{text:editor?editor.value:'',filename:filenameInput?filenameInput.value:''};}
@@ -4119,6 +4119,9 @@ function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
     ? getTextEditMeta(item, preview.file.key, preview.file.abs)
     : null;
   const previewHistoryPath = canEditTxt ? withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}/history`, collection) : '';
+  const txtReloadPath = canEditTxt && preview.file?.ext === '.txt'
+    ? withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}/text`, collection)
+    : '';
   preview.html = preview.file?.ext === '.docx'
     ? renderDocxPreviewPage(item, preview.file, preview.blocks || [], {
         disableContextMenu,
@@ -4132,11 +4135,27 @@ function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
         updatedByLabel: textEditMeta?.savedBy || '',
         selectedEncoding: preview.selectedEncoding || 'auto',
         detectedEncoding: preview.textEncoding || '',
+        txtReloadUrl: txtReloadPath,
         canEditTxt,
         disableContextMenu
       });
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   return res.send(preview.html);
+}
+
+function sendTxtPreviewPayload(res, item, preview, options = {}) {
+  const textEditMeta = preview.file?.ext === '.txt'
+    ? getTextEditMeta(item, preview.file.key, preview.file.abs)
+    : null;
+  return res.json({
+    ok: true,
+    text: preview.text || '',
+    filename: preview.file?.name || '',
+    encoding: preview.textEncoding || 'utf8',
+    selectedEncoding: preview.selectedEncoding || 'auto',
+    updatedAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.savedAt) : '',
+    updatedByLabel: textEditMeta?.savedBy || ''
+  });
 }
 
 app.get('/preview-open/:id/:index', (req, res) => {
@@ -4193,6 +4212,25 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
       collection,
       canEditTxt: preview.file?.ext === '.txt' && canEditTxtPreview(req.authUser, collection)
     });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/preview/:id/:index/text', auth, (req, res) => {
+  try {
+    const collection = getC(req);
+    const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
+    if (collectionDenied) return res.status(403).json(collectionDenied);
+    if (!canEditTxtPreview(req.authUser, collection)) return res.status(403).json({ error: '你沒有編輯 TXT 的權限。' });
+    const cat = readCat(collection);
+    const item = (cat.items || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: '找不到項目。' });
+    if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+    const previewIndex = Number(req.params.index) || 0;
+    const preview = resolvePreview(item, previewIndex, collection, req.query?.encoding);
+    if (!preview || preview.file?.ext !== '.txt') return res.status(415).json({ error: '這個檔案不是可切換編碼的 TXT。' });
+    return sendTxtPreviewPayload(res, item, preview, { collection });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
@@ -5122,5 +5160,5 @@ app.listen(PORT, '0.0.0.0', () => {
 });
     function getSelectedEncoding(){return String(encodingSelect?.value||'auto');}
     function buildUrlWithEncoding(rawUrl,encodingValue){if(!rawUrl)return'';const url=new URL(rawUrl,window.location.origin);if(encodingValue&&encodingValue!=='auto')url.searchParams.set('encoding',encodingValue);else url.searchParams.delete('encoding');return url.toString();}
-    function reloadWithEncoding(encodingValue){const url=new URL(window.location.href);if(encodingValue&&encodingValue!=='auto')url.searchParams.set('encoding',encodingValue);else url.searchParams.delete('encoding');window.location.href=url.toString();}
-    function handleEncodingChange(){const nextEncoding=getSelectedEncoding();if(nextEncoding===currentEncoding)return;if(hasUnsavedChanges()&&!window.confirm('目前還有尚未儲存的內容，切換編碼會重新載入頁面。要繼續嗎？')){if(encodingSelect)encodingSelect.value=currentEncoding;return;}reloadWithEncoding(nextEncoding);}
+    async function refreshTxtWithEncoding(encodingValue){if(!txtReloadUrl||!editor)return false;const res=await fetch(buildUrlWithEncoding(txtReloadUrl,encodingValue),{headers:{'Authorization':'Bearer '+(localStorage.getItem('adm-token')||'')}});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'重新載入 TXT 失敗');commitPendingInputGroup();undoStack=[];redoStack=[];pendingInputState=null;inputGroupState=null;inputGroupTarget='';clearInputGroupTimer();suspendTracking=true;editor.value=typeof data.text==='string'?data.text:'';editor.defaultValue=editor.value;if(filenameInput&&typeof data.filename==='string'&&data.filename){const nextName=data.filename.replace(/\\.txt$/i,'');filenameInput.value=nextName;filenameInput.defaultValue=nextName;document.title=nextName;}suspendTracking=false;lastSavedText=editor.value;lastSavedFilename=filenameInput?filenameInput.value:'';currentEncoding=String(data.selectedEncoding||encodingValue||'auto');if(encodingSelect)encodingSelect.value=currentEncoding;resizeEditor();updateUndoButtons();updateFindSummary();const updatedAtText=document.getElementById('updatedAtText');if(updatedAtText)updatedAtText.textContent=data.updatedAtLabel||'';const metaDotPrimary=document.getElementById('metaDotPrimary'),updatedByText=document.getElementById('updatedByText'),updatedByWrap=document.getElementById('updatedByWrap'),updatedDot=document.getElementById('updatedDot');if(updatedByText)updatedByText.textContent=data.updatedByLabel||'';if(metaDotPrimary)metaDotPrimary.style.display=data.updatedAtLabel?'':'none';if(updatedByWrap)updatedByWrap.style.display=data.updatedByLabel?'':'none';if(updatedDot)updatedDot.style.display=(data.updatedAtLabel&&data.updatedByLabel)?'':'none';const pageUrl=new URL(window.location.href);if(currentEncoding&&currentEncoding!=='auto')pageUrl.searchParams.set('encoding',currentEncoding);else pageUrl.searchParams.delete('encoding');window.history.replaceState({},'',pageUrl.toString());setStatusMessage('已切換為 '+(data.encoding||currentEncoding||'auto')+'。','success');syncDirtyState();return true;}
+    async function handleEncodingChange(){const nextEncoding=getSelectedEncoding();if(nextEncoding===currentEncoding)return;if(hasUnsavedChanges()&&!window.confirm('目前還有尚未儲存的內容，切換編碼會重新載入文字內容。要繼續嗎？')){if(encodingSelect)encodingSelect.value=currentEncoding;return;}try{await refreshTxtWithEncoding(nextEncoding);}catch(err){if(encodingSelect)encodingSelect.value=currentEncoding;setStatusMessage(err.message||'切換編碼失敗','error');}}
