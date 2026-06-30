@@ -1753,6 +1753,13 @@ function decodeTextBuffer(buf) {
     '探索者', '目星', '聞き耳', 'アイデア', 'SAN', '推奨', '概要',
     '導入', '終了', '秘匿', '公開', '技能', '時間', '人数'
   ];
+  const COMMON_JP_KANJI = [
+    '本', '文', '問', '死', '定', '義', '告', '知', '年', '月', '日', '時', '間',
+    '人', '物', '場', '合', '前', '後', '上', '下', '中', '大', '小', '出', '入',
+    '見', '行', '来', '気', '心', '名', '何', '事', '者', '生', '会', '話', '家',
+    '手', '目', '耳', '情', '報', '探', '索', '者', '導', '入', '終', '了', '公',
+    '開', '技', '能', '設', '定', '役', '割', '相', '手', '部', '屋', '扉', '声'
+  ];
   const COMMON_JP_CHARS = 'のにをたがでてとしれさあるいるもするからなこととしていくられるへるやだですます';
   const COMMON_CJK_CHAR_RE = new RegExp('[' + COMMON_CJK_CHARS + ']', 'gu');
   const HAN_RE = /\p{Script=Han}/gu;
@@ -1770,10 +1777,14 @@ function decodeTextBuffer(buf) {
     const kanaCount = (value.match(HIRAGANA_KATAKANA_RE) || []).length;
     const commonCharCount = (value.match(COMMON_CJK_CHAR_RE) || []).length;
     const commonJpCharCount = [...COMMON_JP_CHARS].reduce((count, char) => count + (value.includes(char) ? 1 : 0), 0);
+    const commonJpKanjiCount = COMMON_JP_KANJI.reduce((count, char) => count + (value.includes(char) ? 1 : 0), 0);
     const commonWordCount = COMMON_CJK_WORDS.reduce((count, word) => count + (value.includes(word) ? 1 : 0), 0);
     const commonJpWordCount = COMMON_JP_WORDS.reduce((count, word) => count + (value.includes(word) ? 1 : 0), 0);
     const mojibakeCount = (value.match(MOJIBAKE_RE) || []).length;
     const printableCount = (value.match(PRINTABLE_RE) || []).length;
+    const looksJapanese = kanaCount >= Math.max(2, length * 0.015) || commonJpWordCount > 0;
+    const effectiveJpKanjiCount = looksJapanese ? commonJpKanjiCount : 0;
+    const commonHanRatio = hanCount > 0 ? (commonCharCount + effectiveJpKanjiCount) / hanCount : 0;
     let score = 0;
     score += printableCount / length * 30;
     score += commonCharCount / Math.max(1, hanCount) * 34;
@@ -1781,6 +1792,7 @@ function decodeTextBuffer(buf) {
     score += Math.min(hanCount / length, 0.85) * 12;
     score += Math.min(kanaCount / length, 0.45) * 18;
     score += commonJpCharCount * 0.8;
+    score += effectiveJpKanjiCount * 0.45;
     score += commonJpWordCount * 4;
     score -= replacement * 25;
     score -= suspicious * 6;
@@ -1789,6 +1801,8 @@ function decodeTextBuffer(buf) {
     if (/utf-?8|utf8/i.test(encoding) && utf8Strict !== null) score += 20;
     if (kanaCount >= Math.max(6, length * 0.05) && !/shift_jis|cp932|euc-jp|utf-?8/i.test(encoding)) score -= 18;
     if ((hanCount > 0 || kanaCount > 0) && commonCharCount === 0 && commonWordCount === 0 && commonJpWordCount === 0 && commonJpCharCount === 0) score -= 10;
+    if (hanCount >= 24 && kanaCount <= 1 && commonWordCount === 0 && commonJpWordCount === 0 && commonHanRatio < 0.16) score -= 26;
+    if (/big5|cp950|gb18030/i.test(encoding) && hanCount >= 24 && kanaCount <= 1 && commonHanRatio < 0.2) score -= 12;
     return score;
   }
 
