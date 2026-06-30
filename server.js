@@ -1827,7 +1827,26 @@ function decodeTextBuffer(buf) {
 
   if (candidates.length) {
     candidates.sort((a, b) => b.score - a.score);
-    return { text: candidates[0].text, encoding: candidates[0].encoding, bom: null };
+    const isJpEncoding = encoding => /shift_jis|cp932|euc-jp/i.test(String(encoding || ''));
+    const isCnEncoding = encoding => /big5|cp950|gb18030/i.test(String(encoding || ''));
+    const countKana = text => (String(text || '').match(HIRAGANA_KATAKANA_RE) || []).length;
+    const countJpWords = text => COMMON_JP_WORDS.reduce((count, word) => count + (String(text || '').includes(word) ? 1 : 0), 0);
+    const top = candidates[0];
+    const bestJp = candidates.find(candidate => isJpEncoding(candidate.encoding));
+    if (bestJp && isCnEncoding(top.encoding)) {
+      const topKana = countKana(top.text);
+      const jpKana = countKana(bestJp.text);
+      const topJpWords = countJpWords(top.text);
+      const jpJpWords = countJpWords(bestJp.text);
+      const jpClearlyMoreJapanese =
+        jpKana >= Math.max(6, topKana + 4) ||
+        jpJpWords >= Math.max(2, topJpWords + 1);
+      const scoreCloseEnough = bestJp.score >= top.score - 18;
+      if (jpClearlyMoreJapanese && scoreCloseEnough) {
+        return { text: bestJp.text, encoding: bestJp.encoding, bom: null };
+      }
+    }
+    return { text: top.text, encoding: top.encoding, bom: null };
   }
   return { text: utf8.replace(/\uFFFD/g, ''), encoding: 'utf8', bom: null };
 }
