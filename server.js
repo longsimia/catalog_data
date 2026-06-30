@@ -1851,8 +1851,46 @@ function decodeTextBuffer(buf) {
   return { text: utf8.replace(/\uFFFD/g, ''), encoding: 'utf8', bom: null };
 }
 
-function readTextFile(absPath) {
-  return decodeTextBuffer(fs.readFileSync(absPath));
+const MANUAL_TEXT_ENCODINGS = ['utf8', 'utf16le', 'utf16be', 'big5', 'cp950', 'gb18030', 'shift_jis', 'cp932', 'euc-jp'];
+
+function normalizeTextEncodingChoice(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw || raw === 'auto') return '';
+  if (raw === 'utf-8') return 'utf8';
+  if (raw === 'utf-16le') return 'utf16le';
+  if (raw === 'utf-16be') return 'utf16be';
+  if (raw === 'sjis') return 'shift_jis';
+  return MANUAL_TEXT_ENCODINGS.includes(raw) ? raw : '';
+}
+
+function decodeTextBufferWithEncoding(buf, encoding) {
+  const normalizedEncoding = normalizeTextEncodingChoice(encoding);
+  if (!normalizedEncoding) return decodeTextBuffer(buf);
+  if (normalizedEncoding === 'utf8') {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^\uFEFF/, '');
+    const bom = buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF ? 'utf8' : null;
+    return { text, encoding: 'utf8', bom };
+  }
+  if (normalizedEncoding === 'utf16le') {
+    const hasBom = buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE;
+    const text = (hasBom ? buf.slice(2) : buf).toString('utf16le').replace(/^\uFEFF/, '');
+    return { text, encoding: 'utf16le', bom: hasBom ? 'utf16le' : null };
+  }
+  if (normalizedEncoding === 'utf16be') {
+    const hasBom = buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF;
+    const source = hasBom ? buf.slice(2) : buf;
+    const swapped = Buffer.allocUnsafe(source.length);
+    for (let i = 0; i < source.length; i += 2) {
+      swapped[i] = source[i + 1] ?? 0;
+      swapped[i + 1] = source[i] ?? 0;
+    }
+    return { text: swapped.toString('utf16le').replace(/^\uFEFF/, ''), encoding: 'utf16be', bom: hasBom ? 'utf16be' : null };
+  }
+  return { text: iconv.decode(buf, normalizedEncoding).replace(/^\uFEFF/, ''), encoding: normalizedEncoding, bom: null };
+}
+
+function readTextFile(absPath, preferredEncoding = '') {
+  return decodeTextBufferWithEncoding(fs.readFileSync(absPath), preferredEncoding);
 }
 
 function ensureHtmlPreviewCharset(htmlText = '') {
@@ -1885,7 +1923,7 @@ function encodeTextBuffer(text, meta = {}) {
     const body = Buffer.from(normalized, 'utf16le');
     return meta.bom === 'utf16le' ? Buffer.concat([Buffer.from([0xFF, 0xFE]), body]) : body;
   }
-  if (['big5', 'gb18030', 'cp932', 'shift_jis', 'euc-jp'].includes(meta.encoding)) {
+  if (['big5', 'cp950', 'gb18030', 'cp932', 'shift_jis', 'euc-jp'].includes(meta.encoding)) {
     return iconv.encode(normalized, meta.encoding);
   }
   const body = Buffer.from(normalized, 'utf8');
@@ -2065,10 +2103,10 @@ function normalizePreviewText(text) {
 }
 
 */
-function getPreviewSourceText(file) {
+function getPreviewSourceText(file, preferredEncoding = '') {
   if (!file?.abs || !fs.existsSync(file.abs)) throw new Error('Preview source file was not found.');
   if (file.ext === '.txt') {
-    return readTextFile(file.abs).text;
+    return readTextFile(file.abs, preferredEncoding).text;
   }
   if (file.ext === '.docx') {
     return extractDocxText(file.abs);
@@ -2313,6 +2351,34 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   });
   const noContextMenuScript = options.disableContextMenu ? `\n  ${getNoContextMenuScript()}` : '';
   const filenameValue = escapeXml(path.parse(fileNameRaw).name || fileNameRaw);
+  const selectedEncoding = normalizeTextEncodingChoice(options.selectedEncoding) || 'auto';
+  const detectedEncoding = normalizeTextEncodingChoice(options.detectedEncoding) || 'utf8';
+  const getEncodingLabel = encoding => {
+    switch (encoding) {
+      case 'utf8': return 'UTF-8';
+      case 'utf16le': return 'Unicode（UTF-16 LE）';
+      case 'utf16be': return 'Unicode（UTF-16 BE）';
+      case 'big5': return '繁體中文（Big5）';
+      case 'cp950': return '繁體中文（CP950）';
+      case 'gb18030': return '簡體中文（GB18030）';
+      case 'shift_jis': return '日文（Shift_JIS）';
+      case 'cp932': return '日文（Windows / CP932）';
+      case 'euc-jp': return '日文（EUC-JP）';
+      default: return String(encoding || '').toUpperCase();
+    }
+  };
+  const encodingOptionsHtml = isTxt ? [
+    `<option value="auto"${selectedEncoding === 'auto' ? ' selected' : ''}>自動偵測（目前：${escapeXml(getEncodingLabel(detectedEncoding))}）</option>`,
+    `<optgroup label="Unicode">`,
+    ...['utf8', 'utf16le', 'utf16be'].map(encoding => `<option value="${escapeXml(encoding)}"${selectedEncoding === encoding ? ' selected' : ''}>${escapeXml(getEncodingLabel(encoding))}</option>`),
+    `</optgroup>`,
+    `<optgroup label="日文">`,
+    ...['cp932', 'shift_jis', 'euc-jp'].map(encoding => `<option value="${escapeXml(encoding)}"${selectedEncoding === encoding ? ' selected' : ''}>${escapeXml(getEncodingLabel(encoding))}</option>`),
+    `</optgroup>`,
+    `<optgroup label="中文">`,
+    ...['big5', 'cp950', 'gb18030'].map(encoding => `<option value="${escapeXml(encoding)}"${selectedEncoding === encoding ? ' selected' : ''}>${escapeXml(getEncodingLabel(encoding))}</option>`),
+    `</optgroup>`
+  ].join('') : '';
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -2341,6 +2407,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .action-btn{border:none;background:transparent;color:var(--muted);padding:0 2px;font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;height:30px;line-height:1}
     .action-btn:hover{color:var(--text)}
     .action-btn:disabled{opacity:.55;cursor:default}
+    .encoding-select{height:30px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--text);padding:0 12px;font:inherit;font-size:13px;outline:none;max-width:min(42vw,190px)}
+    .encoding-select:focus{border-color:var(--link)}
     .article{font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word}
     .article-body,.editor{margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.92;font-size:16px;font-family:inherit;letter-spacing:.01em}
     .editor{display:block;width:100%;min-height:0;border:none;outline:none;resize:none;overflow:hidden;background:transparent;color:inherit;padding:0}
@@ -2443,6 +2511,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
           ${isTxt && canEditTxt ? `<input id="filenameInput" class="filename-input" type="text" value="${filenameValue}" spellcheck="false" aria-label="TXT 檔名">` : `<h1 class="title">${pageTitle}</h1>`}
         </div>
         <div class="actions">
+          ${isTxt ? `<select id="encodingSelect" class="encoding-select" aria-label="TXT 編碼">${encodingOptionsHtml}</select>` : ''}
           ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="redoBtn" title="重做（Ctrl+Shift+Z）" style="display:none">重做</button>` : ''}
           ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="undoBtn" title="復原（Ctrl+Z）" style="display:none">復原</button>` : ''}
           ${isTxt && canEditTxt ? `<span id="historySlot"></span>` : ''}
@@ -2477,7 +2546,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   ${isTxt && canEditTxt ? `<script src="/vendor/opencc-js/full.js"></script>` : ''}
   ${isTxt ? `<script>(()=>{const previewEditor=document.getElementById('editor');window.resizeEditor=function(){if(!previewEditor)return;const pageX=window.scrollX;const pageY=window.scrollY;const selectionStart=previewEditor.selectionStart;const selectionEnd=previewEditor.selectionEnd;previewEditor.style.height='auto';previewEditor.style.height=previewEditor.scrollHeight+'px';if(typeof selectionStart==='number'&&typeof selectionEnd==='number'){previewEditor.selectionStart=selectionStart;previewEditor.selectionEnd=selectionEnd;}window.scrollTo(pageX,pageY);requestAnimationFrame(()=>window.scrollTo(pageX,pageY));};window.resizeEditor();window.addEventListener('load',window.resizeEditor);window.addEventListener('resize',window.resizeEditor);previewEditor?.addEventListener('input',()=>window.resizeEditor());})();</script>` : ''}
   ${isTxt && canEditTxt ? `<script>
-    const INDENT='\\u3000\\u3000',AUTOSAVE_MS=300000,UNDO_GROUP_IDLE_MS=900,editor=document.getElementById('editor'),formatBtn=document.getElementById('formatBtn'),undoBtn=document.getElementById('undoBtn'),redoBtn=document.getElementById('redoBtn'),historySlot=document.getElementById('historySlot'),formatModal=document.getElementById('formatModal'),formatModalBg=document.getElementById('formatModalBg'),formatWindow=document.getElementById('formatWindow'),formatDragHandle=document.getElementById('formatDragHandle'),formatCloseBtn=document.getElementById('formatCloseBtn'),formatActionBtns=Array.from(document.querySelectorAll('.format-action-btn')),findReplaceModal=document.getElementById('findReplaceModal'),findReplaceModalBg=document.getElementById('findReplaceModalBg'),findReplaceWindow=document.getElementById('findReplaceWindow'),findDragHandle=document.getElementById('findDragHandle'),findReplaceCloseBtn=document.getElementById('findReplaceCloseBtn'),findInput=document.getElementById('findInput'),replaceInput=document.getElementById('replaceInput'),findSummary=document.getElementById('findSummary'),findNextBtn=document.getElementById('findNextBtn'),replaceOneBtn=document.getElementById('replaceOneBtn'),replaceAllBtn=document.getElementById('replaceAllBtn'),historyModal=document.getElementById('historyModal'),historyModalBg=document.getElementById('historyModalBg'),historyCloseBtn=document.getElementById('historyCloseBtn'),historyClearBtn=document.getElementById('historyClearBtn'),historyDetailModal=document.getElementById('historyDetailModal'),historyDetailModalBg=document.getElementById('historyDetailModalBg'),historyDetailCloseBtn=document.getElementById('historyDetailCloseBtn'),historyRestoreBtn=document.getElementById('historyRestoreBtn'),historyInlineRestoreBtn=document.getElementById('historyInlineRestoreBtn'),historyList=document.getElementById('historyList'),historyVersionTitle=document.getElementById('historyVersionTitle'),historyVersionMeta=document.getElementById('historyVersionMeta'),historyVersionDiff=document.getElementById('historyVersionDiff'),historyInlineVersionTitle=document.getElementById('historyInlineVersionTitle'),historyInlineVersionMeta=document.getElementById('historyInlineVersionMeta'),historyInlineVersionDiff=document.getElementById('historyInlineVersionDiff'),historyInlineCurrentDiff=document.getElementById('historyInlineCurrentDiff'),historyClearConfirmModal=document.getElementById('historyClearConfirmModal'),historyClearConfirmModalBg=document.getElementById('historyClearConfirmModalBg'),historyClearCancelBtn=document.getElementById('historyClearCancelBtn'),historyClearConfirmBtn=document.getElementById('historyClearConfirmBtn'),filenameInput=document.getElementById('filenameInput'),saveBtn=document.getElementById('saveBtn'),status=document.getElementById('saveStatus'),saveUrlRaw=${JSON.stringify(options.saveUrl || '')},saveUrl=saveUrlRaw?new URL(saveUrlRaw,window.location.origin).toString():'',historyUrlRaw=${JSON.stringify(options.historyUrl || '')},historyUrl=historyUrlRaw?new URL(historyUrlRaw,window.location.origin).toString():'',leaveModal=document.getElementById('leaveModal'),leaveModalBg=document.getElementById('leaveModalBg'),leaveStayBtn=document.getElementById('leaveStayBtn'),leaveConfirmBtn=document.getElementById('leaveConfirmBtn'),openccReady=typeof OpenCC!=='undefined'&&typeof OpenCC.Converter==='function',cnToTwp=openccReady?OpenCC.Converter({from:'cn',to:'twp'}):null,tToCn=openccReady?OpenCC.Converter({from:'t',to:'cn'}):null;let lastSavedText=editor?editor.value:'',lastSavedFilename=filenameInput?filenameInput.value:'',allowLeave=false,leaveViaHistory=false,saveInFlight=false,suspendTracking=false,selectedHistoryId='',historyVersions=[],undoStack=[],redoStack=[],pendingInputState=null,inputGroupState=null,inputGroupTarget='',inputGroupTimer=0,isComposing=false,historyClearConfirmResolve=null;
+    const INDENT='\\u3000\\u3000',AUTOSAVE_MS=300000,UNDO_GROUP_IDLE_MS=900,editor=document.getElementById('editor'),formatBtn=document.getElementById('formatBtn'),undoBtn=document.getElementById('undoBtn'),redoBtn=document.getElementById('redoBtn'),historySlot=document.getElementById('historySlot'),formatModal=document.getElementById('formatModal'),formatModalBg=document.getElementById('formatModalBg'),formatWindow=document.getElementById('formatWindow'),formatDragHandle=document.getElementById('formatDragHandle'),formatCloseBtn=document.getElementById('formatCloseBtn'),formatActionBtns=Array.from(document.querySelectorAll('.format-action-btn')),findReplaceModal=document.getElementById('findReplaceModal'),findReplaceModalBg=document.getElementById('findReplaceModalBg'),findReplaceWindow=document.getElementById('findReplaceWindow'),findDragHandle=document.getElementById('findDragHandle'),findReplaceCloseBtn=document.getElementById('findReplaceCloseBtn'),findInput=document.getElementById('findInput'),replaceInput=document.getElementById('replaceInput'),findSummary=document.getElementById('findSummary'),findNextBtn=document.getElementById('findNextBtn'),replaceOneBtn=document.getElementById('replaceOneBtn'),replaceAllBtn=document.getElementById('replaceAllBtn'),historyModal=document.getElementById('historyModal'),historyModalBg=document.getElementById('historyModalBg'),historyCloseBtn=document.getElementById('historyCloseBtn'),historyClearBtn=document.getElementById('historyClearBtn'),historyDetailModal=document.getElementById('historyDetailModal'),historyDetailModalBg=document.getElementById('historyDetailModalBg'),historyDetailCloseBtn=document.getElementById('historyDetailCloseBtn'),historyRestoreBtn=document.getElementById('historyRestoreBtn'),historyInlineRestoreBtn=document.getElementById('historyInlineRestoreBtn'),historyList=document.getElementById('historyList'),historyVersionTitle=document.getElementById('historyVersionTitle'),historyVersionMeta=document.getElementById('historyVersionMeta'),historyVersionDiff=document.getElementById('historyVersionDiff'),historyInlineVersionTitle=document.getElementById('historyInlineVersionTitle'),historyInlineVersionMeta=document.getElementById('historyInlineVersionMeta'),historyInlineVersionDiff=document.getElementById('historyInlineVersionDiff'),historyInlineCurrentDiff=document.getElementById('historyInlineCurrentDiff'),historyClearConfirmModal=document.getElementById('historyClearConfirmModal'),historyClearConfirmModalBg=document.getElementById('historyClearConfirmModalBg'),historyClearCancelBtn=document.getElementById('historyClearCancelBtn'),historyClearConfirmBtn=document.getElementById('historyClearConfirmBtn'),filenameInput=document.getElementById('filenameInput'),saveBtn=document.getElementById('saveBtn'),status=document.getElementById('saveStatus'),encodingSelect=document.getElementById('encodingSelect'),currentEncoding=${JSON.stringify(selectedEncoding)},saveUrlRaw=${JSON.stringify(options.saveUrl || '')},saveUrl=saveUrlRaw?new URL(saveUrlRaw,window.location.origin).toString():'',historyUrlRaw=${JSON.stringify(options.historyUrl || '')},historyUrl=historyUrlRaw?new URL(historyUrlRaw,window.location.origin).toString():'',leaveModal=document.getElementById('leaveModal'),leaveModalBg=document.getElementById('leaveModalBg'),leaveStayBtn=document.getElementById('leaveStayBtn'),leaveConfirmBtn=document.getElementById('leaveConfirmBtn'),openccReady=typeof OpenCC!=='undefined'&&typeof OpenCC.Converter==='function',cnToTwp=openccReady?OpenCC.Converter({from:'cn',to:'twp'}):null,tToCn=openccReady?OpenCC.Converter({from:'t',to:'cn'}):null;let lastSavedText=editor?editor.value:'',lastSavedFilename=filenameInput?filenameInput.value:'',allowLeave=false,leaveViaHistory=false,saveInFlight=false,suspendTracking=false,selectedHistoryId='',historyVersions=[],undoStack=[],redoStack=[],pendingInputState=null,inputGroupState=null,inputGroupTarget='',inputGroupTimer=0,isComposing=false,historyClearConfirmResolve=null;
     function setStatusMessage(message,state=''){if(!status)return;status.dataset.state=state;status.textContent=message||'';}
     function normalizeLineEndings(text){return String(text||'').replace(/\\r\\n/g,'\\n').replace(/\\r/g,'\\n');}
     function snapshotState(){return{text:editor?editor.value:'',filename:filenameInput?filenameInput.value:''};}
@@ -2553,10 +2622,10 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     function closeLeaveModal(){closeModal(leaveModal);leaveViaHistory=false;}
     function showLeaveModal(viaHistory=false){leaveViaHistory=viaHistory;openModal(leaveModal);leaveStayBtn?.focus();}
     function confirmLeave(){allowLeave=true;closeLeaveModal();if(leaveViaHistory)history.back();else window.close();}
-    async function saveText(mode='manual'){if(!saveUrl||saveInFlight)return false;if(mode==='auto'&&!hasUnsavedChanges())return false;commitPendingInputGroup();saveInFlight=true;if(saveBtn)saveBtn.disabled=true;setStatusMessage(mode==='auto'?'自動儲存中…':'儲存中…');try{const res=await fetch(saveUrl,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('adm-token')||'')} ,body:JSON.stringify({text:editor.value,filename:filenameInput?.value||'',saveMode:mode})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'儲存失敗');if(filenameInput&&typeof data.filename==='string'&&data.filename){filenameInput.value=data.filename.replace(/\\.txt$/i,'');document.title=data.filename.replace(/\\.txt$/i,'');}lastSavedText=editor.value;lastSavedFilename=filenameInput?filenameInput.value:'';setStatusMessage(mode==='auto'?'已自動儲存。':'已儲存。','success');const updatedAtText=document.getElementById('updatedAtText');if(updatedAtText&&data.updatedAtLabel)updatedAtText.textContent=data.updatedAtLabel;const metaDotPrimary=document.getElementById('metaDotPrimary'),updatedByText=document.getElementById('updatedByText'),updatedByWrap=document.getElementById('updatedByWrap'),updatedDot=document.getElementById('updatedDot');if(updatedByText&&data.updatedByLabel)updatedByText.textContent=data.updatedByLabel;if(metaDotPrimary)metaDotPrimary.style.display=data.updatedAtLabel?'':'none';if(updatedByWrap)updatedByWrap.style.display=data.updatedByLabel?'':'none';if(updatedDot)updatedDot.style.display=(data.updatedAtLabel&&data.updatedByLabel)?'':'none';await loadHistoryVersions();syncDirtyState();return true;}catch(err){setStatusMessage(err.message||'儲存失敗','error');return false;}finally{saveInFlight=false;if(saveBtn)saveBtn.disabled=false;}}
+    async function saveText(mode='manual'){if(!saveUrl||saveInFlight)return false;if(mode==='auto'&&!hasUnsavedChanges())return false;commitPendingInputGroup();saveInFlight=true;if(saveBtn)saveBtn.disabled=true;setStatusMessage(mode==='auto'?'自動儲存中…':'儲存中…');try{const res=await fetch(buildUrlWithEncoding(saveUrl,getSelectedEncoding()),{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('adm-token')||'')} ,body:JSON.stringify({text:editor.value,filename:filenameInput?.value||'',saveMode:mode,encoding:getSelectedEncoding()})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||'儲存失敗');if(filenameInput&&typeof data.filename==='string'&&data.filename){filenameInput.value=data.filename.replace(/\\.txt$/i,'');document.title=data.filename.replace(/\\.txt$/i,'');}lastSavedText=editor.value;lastSavedFilename=filenameInput?filenameInput.value:'';setStatusMessage(mode==='auto'?'已自動儲存。':'已儲存。','success');const updatedAtText=document.getElementById('updatedAtText');if(updatedAtText&&data.updatedAtLabel)updatedAtText.textContent=data.updatedAtLabel;const metaDotPrimary=document.getElementById('metaDotPrimary'),updatedByText=document.getElementById('updatedByText'),updatedByWrap=document.getElementById('updatedByWrap'),updatedDot=document.getElementById('updatedDot');if(updatedByText&&data.updatedByLabel)updatedByText.textContent=data.updatedByLabel;if(metaDotPrimary)metaDotPrimary.style.display=data.updatedAtLabel?'':'none';if(updatedByWrap)updatedByWrap.style.display=data.updatedByLabel?'':'none';if(updatedDot)updatedDot.style.display=(data.updatedAtLabel&&data.updatedByLabel)?'':'none';await loadHistoryVersions();syncDirtyState();return true;}catch(err){setStatusMessage(err.message||'儲存失敗','error');return false;}finally{saveInFlight=false;if(saveBtn)saveBtn.disabled=false;}}
     function handleBeforeUnload(event){if(allowLeave||!hasUnsavedChanges())return;event.preventDefault();event.returnValue='';}
     function handleUndoRedoKey(event){const key=event.key.toLowerCase();if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&!event.metaKey&&key==='z'){event.preventDefault();undoAction();return true;}if(event.ctrlKey&&event.shiftKey&&!event.altKey&&!event.metaKey&&key==='z'){event.preventDefault();redoAction();return true;}return false;}
-    makeFloatingWindowDraggable(formatWindow,formatDragHandle);makeFloatingWindowDraggable(findReplaceWindow,findDragHandle);editor?.addEventListener('beforeinput',handleFieldBeforeInput);editor?.addEventListener('input',handleEditorInput);editor?.addEventListener('compositionstart',handleCompositionStart);editor?.addEventListener('compositionend',handleCompositionEnd);editor?.addEventListener('keydown',event=>{if(handleUndoRedoKey(event))return;if(insertIndentAtCursor(event))return;continueIndentedParagraph(event);});filenameInput?.addEventListener('beforeinput',handleFieldBeforeInput);filenameInput?.addEventListener('input',handleFilenameInput);filenameInput?.addEventListener('compositionstart',handleCompositionStart);filenameInput?.addEventListener('compositionend',handleCompositionEnd);filenameInput?.addEventListener('keydown',handleUndoRedoKey);formatBtn?.addEventListener('click',openFormatModal);undoBtn?.addEventListener('click',undoAction);redoBtn?.addEventListener('click',redoAction);formatModalBg?.addEventListener('click',closeFormatModal);formatCloseBtn?.addEventListener('click',closeFormatModal);formatActionBtns.forEach(btn=>btn.addEventListener('click',()=>runFormatAction(btn.dataset.action||'')));findReplaceModalBg?.addEventListener('click',closeFindReplaceModal);findReplaceCloseBtn?.addEventListener('click',closeFindReplaceModal);findInput?.addEventListener('input',()=>updateFindSummary());findNextBtn?.addEventListener('click',()=>findNextMatch());replaceOneBtn?.addEventListener('click',replaceCurrentMatch);replaceAllBtn?.addEventListener('click',replaceAllMatches);historyModalBg?.addEventListener('click',closeHistoryModal);historyCloseBtn?.addEventListener('click',closeHistoryModal);historyClearBtn?.addEventListener('click',clearHistoryVersions);historyDetailModalBg?.addEventListener('click',closeHistoryDetailModal);historyDetailCloseBtn?.addEventListener('click',closeHistoryDetailModal);historyRestoreBtn?.addEventListener('click',restoreHistoryVersion);historyInlineRestoreBtn?.addEventListener('click',restoreHistoryVersion);historyClearConfirmModalBg?.addEventListener('click',()=>closeHistoryClearConfirm(false));historyClearCancelBtn?.addEventListener('click',()=>closeHistoryClearConfirm(false));historyClearConfirmBtn?.addEventListener('click',()=>closeHistoryClearConfirm(true));saveBtn?.addEventListener('click',()=>saveText('manual'));leaveModalBg?.addEventListener('click',closeLeaveModal);leaveStayBtn?.addEventListener('click',closeLeaveModal);leaveConfirmBtn?.addEventListener('click',confirmLeave);
+    makeFloatingWindowDraggable(formatWindow,formatDragHandle);makeFloatingWindowDraggable(findReplaceWindow,findDragHandle);editor?.addEventListener('beforeinput',handleFieldBeforeInput);editor?.addEventListener('input',handleEditorInput);editor?.addEventListener('compositionstart',handleCompositionStart);editor?.addEventListener('compositionend',handleCompositionEnd);editor?.addEventListener('keydown',event=>{if(handleUndoRedoKey(event))return;if(insertIndentAtCursor(event))return;continueIndentedParagraph(event);});filenameInput?.addEventListener('beforeinput',handleFieldBeforeInput);filenameInput?.addEventListener('input',handleFilenameInput);filenameInput?.addEventListener('compositionstart',handleCompositionStart);filenameInput?.addEventListener('compositionend',handleCompositionEnd);filenameInput?.addEventListener('keydown',handleUndoRedoKey);encodingSelect?.addEventListener('change',handleEncodingChange);formatBtn?.addEventListener('click',openFormatModal);undoBtn?.addEventListener('click',undoAction);redoBtn?.addEventListener('click',redoAction);formatModalBg?.addEventListener('click',closeFormatModal);formatCloseBtn?.addEventListener('click',closeFormatModal);formatActionBtns.forEach(btn=>btn.addEventListener('click',()=>runFormatAction(btn.dataset.action||'')));findReplaceModalBg?.addEventListener('click',closeFindReplaceModal);findReplaceCloseBtn?.addEventListener('click',closeFindReplaceModal);findInput?.addEventListener('input',()=>updateFindSummary());findNextBtn?.addEventListener('click',()=>findNextMatch());replaceOneBtn?.addEventListener('click',replaceCurrentMatch);replaceAllBtn?.addEventListener('click',replaceAllMatches);historyModalBg?.addEventListener('click',closeHistoryModal);historyCloseBtn?.addEventListener('click',closeHistoryModal);historyClearBtn?.addEventListener('click',clearHistoryVersions);historyDetailModalBg?.addEventListener('click',closeHistoryDetailModal);historyDetailCloseBtn?.addEventListener('click',closeHistoryDetailModal);historyRestoreBtn?.addEventListener('click',restoreHistoryVersion);historyInlineRestoreBtn?.addEventListener('click',restoreHistoryVersion);historyClearConfirmModalBg?.addEventListener('click',()=>closeHistoryClearConfirm(false));historyClearCancelBtn?.addEventListener('click',()=>closeHistoryClearConfirm(false));historyClearConfirmBtn?.addEventListener('click',()=>closeHistoryClearConfirm(true));saveBtn?.addEventListener('click',()=>saveText('manual'));leaveModalBg?.addEventListener('click',closeLeaveModal);leaveStayBtn?.addEventListener('click',closeLeaveModal);leaveConfirmBtn?.addEventListener('click',confirmLeave);
     document.addEventListener('keydown',event=>{const key=event.key.toLowerCase();if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&!event.metaKey&&key==='h'){event.preventDefault();openFindReplaceModal();return;}if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&!event.metaKey&&key==='s'){event.preventDefault();saveText('manual');return;}if(event.ctrlKey&&!event.shiftKey&&!event.altKey&&!event.metaKey&&key==='z'){event.preventDefault();undoAction();return;}if(event.ctrlKey&&event.shiftKey&&!event.altKey&&!event.metaKey&&key==='z'){event.preventDefault();redoAction();return;}if(event.key==='Escape'&&historyClearConfirmModal?.classList.contains('on')){event.preventDefault();closeHistoryClearConfirm(false);return;}if(event.key==='Escape'&&historyDetailModal?.classList.contains('on')){event.preventDefault();closeHistoryDetailModal();return;}if(event.key==='Escape'&&historyModal?.classList.contains('on')){event.preventDefault();closeHistoryModal();return;}if(event.key==='Escape'&&findReplaceModal?.classList.contains('on')){event.preventDefault();closeFindReplaceModal();return;}if(event.key==='Escape'&&formatModal?.classList.contains('on')){event.preventDefault();closeFormatModal();return;}if(event.key==='Escape'&&leaveModal?.classList.contains('on')){event.preventDefault();closeLeaveModal();}});
     updateUndoButtons();loadHistoryVersions();window.setInterval(()=>{if(hasUnsavedChanges())saveText('auto');},AUTOSAVE_MS);window.addEventListener('beforeunload',handleBeforeUnload);history.pushState({txtPreviewGuard:true},'');window.addEventListener('popstate',()=>{if(allowLeave||!hasUnsavedChanges())return;history.pushState({txtPreviewGuard:true},'');showLeaveModal(true);});
   </script>` : ''}
@@ -2678,7 +2747,7 @@ function buildPreviewPdf(text, title) {
   return Buffer.from(pdf, 'utf8');
 }
 
-function resolvePreview(item, previewIndex = 0, collection = 'scenario') {
+function resolvePreview(item, previewIndex = 0, collection = 'scenario', preferredEncoding = '') {
   const files = getPreviewableFiles(item, collection);
   const file = files[Number(previewIndex)];
   if (!file) return null;
@@ -2716,6 +2785,10 @@ function resolvePreview(item, previewIndex = 0, collection = 'scenario') {
       abs: null
     };
   }
+  const selectedEncoding = normalizeTextEncodingChoice(preferredEncoding);
+  const textMeta = file.ext === '.txt'
+    ? readTextFile(file.abs, selectedEncoding)
+    : null;
   if (file.ext === '.html' || file.ext === '.htm') {
     return {
       type: 'html-file',
@@ -2727,13 +2800,15 @@ function resolvePreview(item, previewIndex = 0, collection = 'scenario') {
       abs: null
     };
   }
-  const text = getPreviewSourceText(file);
+  const text = file.ext === '.txt' ? (textMeta?.text || '') : getPreviewSourceText(file, selectedEncoding);
   return {
     type: 'html',
     filename: `${path.parse(file.name).name}.html`,
     label: getPreviewLabel(file),
     file,
     text,
+    textEncoding: textMeta?.encoding || '',
+    selectedEncoding: selectedEncoding || 'auto',
     html: '',
     abs: null
   };
@@ -3750,7 +3825,10 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
         document.documentElement.style.background = '#111118';
         document.body.style.background = '#111118';
       }
-      const url = '/api/preview/' + encodeURIComponent(itemId) + '/' + encodeURIComponent(previewIndex) + (collection === 'scenario' ? '' : ('?c=' + encodeURIComponent(collection)));
+      const params = new URLSearchParams(window.location.search);
+      if (collection !== 'scenario') params.set('c', collection); else params.delete('c');
+      const queryString = params.toString();
+      const url = '/api/preview/' + encodeURIComponent(itemId) + '/' + encodeURIComponent(previewIndex) + (queryString ? ('?' + queryString) : '');
       const resp = await fetch(url, {
         headers: { Authorization: 'Bearer ' + token }
       });
@@ -4013,6 +4091,8 @@ function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
         createdAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.createdAt) : '',
         updatedAtLabel: textEditMeta ? formatDateTimeToSecond(textEditMeta.savedAt) : '',
         updatedByLabel: textEditMeta?.savedBy || '',
+        selectedEncoding: preview.selectedEncoding || 'auto',
+        detectedEncoding: preview.textEncoding || '',
         canEditTxt,
         disableContextMenu
       });
@@ -4068,7 +4148,7 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
     if (!item) return res.status(404).json({ error: '找不到項目。' });
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
     const previewIndex = Number(req.params.index) || 0;
-    const preview = resolvePreview(item, previewIndex, collection);
+    const preview = resolvePreview(item, previewIndex, collection, req.query?.encoding);
     if (!preview) return res.status(415).json({ error: '這個檔案類型不支援線上閱覽。' });
     return sendResolvedPreview(res, item, preview, previewIndex, {
       collection,
@@ -4130,9 +4210,16 @@ app.put('/api/preview/:id/:index', auth, (req, res) => {
     }
     if (!fs.existsSync(file.abs)) return res.status(404).json({ error: '找不到 TXT 檔案。' });
     const renamedFile = renameTxtPreviewFile(collection, item, file, req.body?.filename);
-    const sourceMeta = readTextFile(renamedFile.abs);
+    const requestedEncoding = normalizeTextEncodingChoice(req.body?.encoding);
+    const sourceMeta = readTextFile(renamedFile.abs, requestedEncoding);
     const nextText = typeof req.body?.text === 'string' ? req.body.text : '';
-    fs.writeFileSync(renamedFile.abs, encodeTextBuffer(nextText, sourceMeta));
+    const writeMeta = requestedEncoding
+      ? {
+          encoding: requestedEncoding,
+          bom: sourceMeta.encoding === requestedEncoding ? sourceMeta.bom : null
+        }
+      : sourceMeta;
+    fs.writeFileSync(renamedFile.abs, encodeTextBuffer(nextText, writeMeta));
     item.textEditMeta = item.textEditMeta && typeof item.textEditMeta === 'object' ? item.textEditMeta : {};
     const savedAt = new Date();
     const historyVersions = appendTextHistoryVersion(collection, item, renamedFile.key, {
@@ -4152,6 +4239,7 @@ app.put('/api/preview/:id/:index', auth, (req, res) => {
     return res.json({
       ok: true,
       filename: renamedFile.name,
+      encoding: writeMeta.encoding || sourceMeta.encoding || 'utf8',
       historyCount: historyVersions.length,
       updatedAt: savedAt.toISOString(),
       updatedAtLabel: formatDateTimeToSecond(savedAt),
@@ -4993,3 +5081,7 @@ app.listen(PORT, '0.0.0.0', () => {
     })();
   }, 0);
 });
+    function getSelectedEncoding(){return String(encodingSelect?.value||'auto');}
+    function buildUrlWithEncoding(rawUrl,encodingValue){if(!rawUrl)return'';const url=new URL(rawUrl,window.location.origin);if(encodingValue&&encodingValue!=='auto')url.searchParams.set('encoding',encodingValue);else url.searchParams.delete('encoding');return url.toString();}
+    function reloadWithEncoding(encodingValue){const url=new URL(window.location.href);if(encodingValue&&encodingValue!=='auto')url.searchParams.set('encoding',encodingValue);else url.searchParams.delete('encoding');window.location.href=url.toString();}
+    function handleEncodingChange(){const nextEncoding=getSelectedEncoding();if(nextEncoding===currentEncoding)return;if(hasUnsavedChanges()&&!window.confirm('目前還有尚未儲存的內容，切換編碼會重新載入頁面。要繼續嗎？')){if(encodingSelect)encodingSelect.value=currentEncoding;return;}reloadWithEncoding(nextEncoding);}
