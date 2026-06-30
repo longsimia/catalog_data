@@ -1947,6 +1947,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
   }).join('');
 
   const noContextMenuScript = options.disableContextMenu ? `\n  ${getNoContextMenuScript()}` : '';
+  const openccScript = `\n  <script src="/vendor/opencc-js/full.js"></script>`;
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -1972,6 +1973,11 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
     .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .actions{display:flex;align-items:center;gap:10px}
+    .action-btn{
+      border:none;background:transparent;color:var(--muted);padding:0 2px;
+      font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;height:30px;line-height:1
+    }
+    .action-btn:hover{color:var(--text)}
     .icon-btn{
       width:30px;height:30px;border:none;background:transparent;color:var(--muted);
       display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0
@@ -2034,6 +2040,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     <div class="topbar">
       <div class="brand">${docxMetaTitle}</div>
       <div class="actions">
+        <button class="action-btn" id="docxCnToTwpBtn" type="button" title="简体中文 轉 繁體中文">简转繁</button>
         <button class="icon-btn" id="theme-btn" type="button" aria-label="切換顯示模式" title="切換顯示模式"></button>
       </div>
     </div>
@@ -2045,6 +2052,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     <div class="footer">Read-only preview.</div>
   </main>
   <div class="docx-zoom" id="docxZoom" aria-hidden="true"><img id="docxZoomImg" alt=""></div>
+  ${openccScript}
   <script>
     const themeIcon = kind => kind === 'moon'
       ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>'
@@ -2065,6 +2073,42 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     }
     const zoom = document.getElementById('docxZoom');
     const zoomImg = document.getElementById('docxZoomImg');
+    const article = document.querySelector('.article');
+    const docxCnToTwpBtn = document.getElementById('docxCnToTwpBtn');
+    const openccReady = typeof OpenCC !== 'undefined' && typeof OpenCC.Converter === 'function';
+    const cnToTwp = openccReady ? OpenCC.Converter({ from: 'cn', to: 'twp' }) : null;
+    let docxConverted = false;
+    let docxTextNodes = null;
+
+    function getDocxTextNodes() {
+      if (docxTextNodes) return docxTextNodes;
+      const nodes = [];
+      if (!article) return nodes;
+      const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          return node.nodeValue && node.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+      });
+      let current;
+      while ((current = walker.nextNode())) {
+        nodes.push({ node: current, original: current.nodeValue });
+      }
+      docxTextNodes = nodes;
+      return nodes;
+    }
+
+    function toggleDocxCnToTwp() {
+      if (!cnToTwp) {
+        window.alert('繁簡轉換元件尚未載入。');
+        return;
+      }
+      const nodes = getDocxTextNodes();
+      nodes.forEach(entry => {
+        entry.node.nodeValue = docxConverted ? entry.original : cnToTwp(entry.original);
+      });
+      docxConverted = !docxConverted;
+      if (docxCnToTwpBtn) docxCnToTwpBtn.textContent = docxConverted ? '顯示原文' : '简转繁';
+    }
 
     function openZoom(src) {
       if (!zoom || !zoomImg || !src) return;
@@ -2080,6 +2124,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       zoomImg.src = '';
     }
 
+    docxCnToTwpBtn?.addEventListener('click', toggleDocxCnToTwp);
     document.getElementById('theme-btn')?.addEventListener('click', toggleTheme);
     applyTheme(localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light');
     document.querySelectorAll('.docx-image').forEach(img => {
