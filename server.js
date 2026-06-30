@@ -1852,10 +1852,12 @@ function decodeTextBuffer(buf) {
 }
 
 const MANUAL_TEXT_ENCODINGS = ['utf8', 'utf16le', 'utf16be', 'big5', 'cp950', 'gb18030', 'shift_jis', 'cp932', 'euc-jp'];
+const TEXT_ENCODING_FAMILIES = ['jp-auto', 'zh-hant-auto', 'zh-hans-auto'];
 
 function normalizeTextEncodingChoice(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw || raw === 'auto') return '';
+  if (TEXT_ENCODING_FAMILIES.includes(raw)) return raw;
   if (raw === 'utf-8') return 'utf8';
   if (raw === 'utf-16le') return 'utf16le';
   if (raw === 'utf-16be') return 'utf16be';
@@ -1866,6 +1868,43 @@ function normalizeTextEncodingChoice(value) {
 function decodeTextBufferWithEncoding(buf, encoding) {
   const normalizedEncoding = normalizeTextEncodingChoice(encoding);
   if (!normalizedEncoding) return decodeTextBuffer(buf);
+  if (normalizedEncoding === 'jp-auto' || normalizedEncoding === 'zh-hant-auto' || normalizedEncoding === 'zh-hans-auto') {
+    const candidates = normalizedEncoding === 'jp-auto'
+      ? ['cp932', 'shift_jis', 'euc-jp']
+      : normalizedEncoding === 'zh-hant-auto'
+        ? ['cp950', 'big5']
+        : ['gb18030'];
+    const JP_WORDS = ['シナリオ', 'ハンドアウト', '探索者', '情報', '導入', '終了', '公開', '秘匿', '技能', '時間'];
+    const JP_CHARS = 'のにをたがでてとしれさあるいるもするからなこととしていくられるへるやだですます';
+    const CJK_WORDS = ['設定', '內容', '說明', '角色', '資料', '規則', '場景', '檔案', '編輯', '版本'];
+    const PRINTABLE_RE = /[\t\n\r\u0020-\u007E\u00A0-\u024F\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/gu;
+    const SUSPICIOUS_RE = /[�□�▲△◆◇○◎●☆★※〒→←↑↓╳╱╲]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/gu;
+    const KANA_RE = /[\u3040-\u30FF]/gu;
+    const scoreFamilyText = (text, family) => {
+      const value = String(text || '');
+      if (!value) return Number.NEGATIVE_INFINITY;
+      const length = value.length || 1;
+      const printable = (value.match(PRINTABLE_RE) || []).length;
+      const suspicious = (value.match(SUSPICIOUS_RE) || []).length;
+      if (family === 'jp-auto') {
+        const kana = (value.match(KANA_RE) || []).length;
+        const jpWords = JP_WORDS.reduce((count, word) => count + (value.includes(word) ? 1 : 0), 0);
+        const jpChars = [...JP_CHARS].reduce((count, char) => count + (value.includes(char) ? 1 : 0), 0);
+        return printable / length * 18 + kana * 1.8 + jpWords * 10 + jpChars * 0.6 - suspicious * 12;
+      }
+      const cjkWords = CJK_WORDS.reduce((count, word) => count + (value.includes(word) ? 1 : 0), 0);
+      return printable / length * 18 + cjkWords * 6 - suspicious * 12;
+    };
+    let best = null;
+    for (const candidate of candidates) {
+      try {
+        const text = iconv.decode(buf, candidate).replace(/^\uFEFF/, '');
+        const score = scoreFamilyText(text, normalizedEncoding);
+        if (!best || score > best.score) best = { text, encoding: candidate, bom: null, score };
+      } catch {}
+    }
+    if (best) return { text: best.text, encoding: best.encoding, bom: best.bom };
+  }
   if (normalizedEncoding === 'utf8') {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^\uFEFF/, '');
     const bom = buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF ? 'utf8' : null;
@@ -2544,7 +2583,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     applyTheme(localStorage.getItem('theme-mode')==='dark'?'dark':'light');
   </script>
   ${isTxt && canEditTxt ? `<script src="/vendor/opencc-js/full.js"></script>` : ''}
-  ${isTxt ? `<script>(()=>{const previewEditor=document.getElementById('editor');window.resizeEditor=function(){if(!previewEditor)return;const pageX=window.scrollX;const pageY=window.scrollY;const selectionStart=previewEditor.selectionStart;const selectionEnd=previewEditor.selectionEnd;previewEditor.style.height='auto';previewEditor.style.height=previewEditor.scrollHeight+'px';if(typeof selectionStart==='number'&&typeof selectionEnd==='number'){previewEditor.selectionStart=selectionStart;previewEditor.selectionEnd=selectionEnd;}window.scrollTo(pageX,pageY);requestAnimationFrame(()=>window.scrollTo(pageX,pageY));};window.resizeEditor();window.addEventListener('load',window.resizeEditor);window.addEventListener('resize',window.resizeEditor);previewEditor?.addEventListener('input',()=>window.resizeEditor());})();</script>` : ''}
+  ${isTxt ? `<script>(()=>{const previewEditor=document.getElementById('editor');const previewFilenameInput=document.getElementById('filenameInput');if(previewEditor)previewEditor.value=previewEditor.defaultValue;if(previewFilenameInput)previewFilenameInput.value=previewFilenameInput.defaultValue;window.resizeEditor=function(){if(!previewEditor)return;const pageX=window.scrollX;const pageY=window.scrollY;const selectionStart=previewEditor.selectionStart;const selectionEnd=previewEditor.selectionEnd;previewEditor.style.height='auto';previewEditor.style.height=previewEditor.scrollHeight+'px';if(typeof selectionStart==='number'&&typeof selectionEnd==='number'){previewEditor.selectionStart=selectionStart;previewEditor.selectionEnd=selectionEnd;}window.scrollTo(pageX,pageY);requestAnimationFrame(()=>window.scrollTo(pageX,pageY));};window.resizeEditor();window.addEventListener('load',window.resizeEditor);window.addEventListener('resize',window.resizeEditor);previewEditor?.addEventListener('input',()=>window.resizeEditor());})();</script>` : ''}
   ${isTxt && canEditTxt ? `<script>
     const INDENT='\\u3000\\u3000',AUTOSAVE_MS=300000,UNDO_GROUP_IDLE_MS=900,editor=document.getElementById('editor'),formatBtn=document.getElementById('formatBtn'),undoBtn=document.getElementById('undoBtn'),redoBtn=document.getElementById('redoBtn'),historySlot=document.getElementById('historySlot'),formatModal=document.getElementById('formatModal'),formatModalBg=document.getElementById('formatModalBg'),formatWindow=document.getElementById('formatWindow'),formatDragHandle=document.getElementById('formatDragHandle'),formatCloseBtn=document.getElementById('formatCloseBtn'),formatActionBtns=Array.from(document.querySelectorAll('.format-action-btn')),findReplaceModal=document.getElementById('findReplaceModal'),findReplaceModalBg=document.getElementById('findReplaceModalBg'),findReplaceWindow=document.getElementById('findReplaceWindow'),findDragHandle=document.getElementById('findDragHandle'),findReplaceCloseBtn=document.getElementById('findReplaceCloseBtn'),findInput=document.getElementById('findInput'),replaceInput=document.getElementById('replaceInput'),findSummary=document.getElementById('findSummary'),findNextBtn=document.getElementById('findNextBtn'),replaceOneBtn=document.getElementById('replaceOneBtn'),replaceAllBtn=document.getElementById('replaceAllBtn'),historyModal=document.getElementById('historyModal'),historyModalBg=document.getElementById('historyModalBg'),historyCloseBtn=document.getElementById('historyCloseBtn'),historyClearBtn=document.getElementById('historyClearBtn'),historyDetailModal=document.getElementById('historyDetailModal'),historyDetailModalBg=document.getElementById('historyDetailModalBg'),historyDetailCloseBtn=document.getElementById('historyDetailCloseBtn'),historyRestoreBtn=document.getElementById('historyRestoreBtn'),historyInlineRestoreBtn=document.getElementById('historyInlineRestoreBtn'),historyList=document.getElementById('historyList'),historyVersionTitle=document.getElementById('historyVersionTitle'),historyVersionMeta=document.getElementById('historyVersionMeta'),historyVersionDiff=document.getElementById('historyVersionDiff'),historyInlineVersionTitle=document.getElementById('historyInlineVersionTitle'),historyInlineVersionMeta=document.getElementById('historyInlineVersionMeta'),historyInlineVersionDiff=document.getElementById('historyInlineVersionDiff'),historyInlineCurrentDiff=document.getElementById('historyInlineCurrentDiff'),historyClearConfirmModal=document.getElementById('historyClearConfirmModal'),historyClearConfirmModalBg=document.getElementById('historyClearConfirmModalBg'),historyClearCancelBtn=document.getElementById('historyClearCancelBtn'),historyClearConfirmBtn=document.getElementById('historyClearConfirmBtn'),filenameInput=document.getElementById('filenameInput'),saveBtn=document.getElementById('saveBtn'),status=document.getElementById('saveStatus'),encodingSelect=document.getElementById('encodingSelect'),currentEncoding=${JSON.stringify(selectedEncoding)},saveUrlRaw=${JSON.stringify(options.saveUrl || '')},saveUrl=saveUrlRaw?new URL(saveUrlRaw,window.location.origin).toString():'',historyUrlRaw=${JSON.stringify(options.historyUrl || '')},historyUrl=historyUrlRaw?new URL(historyUrlRaw,window.location.origin).toString():'',leaveModal=document.getElementById('leaveModal'),leaveModalBg=document.getElementById('leaveModalBg'),leaveStayBtn=document.getElementById('leaveStayBtn'),leaveConfirmBtn=document.getElementById('leaveConfirmBtn'),openccReady=typeof OpenCC!=='undefined'&&typeof OpenCC.Converter==='function',cnToTwp=openccReady?OpenCC.Converter({from:'cn',to:'twp'}):null,tToCn=openccReady?OpenCC.Converter({from:'t',to:'cn'}):null;let lastSavedText=editor?editor.value:'',lastSavedFilename=filenameInput?filenameInput.value:'',allowLeave=false,leaveViaHistory=false,saveInFlight=false,suspendTracking=false,selectedHistoryId='',historyVersions=[],undoStack=[],redoStack=[],pendingInputState=null,inputGroupState=null,inputGroupTarget='',inputGroupTimer=0,isComposing=false,historyClearConfirmResolve=null;
     function setStatusMessage(message,state=''){if(!status)return;status.dataset.state=state;status.textContent=message||'';}
