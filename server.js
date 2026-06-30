@@ -1645,6 +1645,11 @@ function decodeTextBuffer(buf) {
   if (utf16ZeroCount > buf.length / 6) {
     return { text: buf.toString('utf16le').replace(/^\uFEFF/, ''), encoding: 'utf16le', bom: null };
   }
+  // If the buffer is valid UTF-8, prefer it directly instead of letting
+  // legacy encodings win via heuristic scoring on Japanese/CJK text.
+  if (utf8Strict !== null) {
+    return { text: utf8Strict.replace(/^\uFEFF/, ''), encoding: 'utf8', bom: null };
+  }
   const COMMON_CJK_CHARS = [
     '的一是在不了有人我他這個們來到時大地為子中你說生國年著就那和要她出也得裡後自以會家可下而過天去能對小多然於心學之都好看起發當沒成只如事把還用第樣道想作種開美總從無情己面最女但現前些所同日手又行意動方期它頭經長兒回位分愛老因很給名法間斯知世什兩次使身者被高已親其進此話常與活正感以及让讓點應'
   ].join('');
