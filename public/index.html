@@ -586,20 +586,33 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .disc-page-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.22rem .52rem;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02);color:var(--muted);font-size:.72rem;font-family:inherit;cursor:pointer;transition:all .18s}
 .disc-page-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gglow)}
 .share-admin-shell{display:grid;gap:.7rem}
+.share-admin-toolbar{display:flex;justify-content:flex-end}
+.share-admin-sort-btn{min-height:32px;padding:.32rem .65rem;font-size:.76rem;white-space:nowrap}
 .share-admin-empty{padding:.95rem .3rem .2rem;text-align:center;color:var(--muted);font-size:.8rem}
 .share-admin-list{display:grid;gap:.65rem}
-.share-admin-row{display:grid;gap:.55rem;padding:.8rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel)}
-.share-admin-main{display:flex;align-items:flex-start;justify-content:space-between;gap:.7rem}
+.share-admin-row{display:grid;grid-template-columns:88px minmax(0,1fr);gap:.8rem;padding:.8rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel)}
+.share-admin-thumb{width:88px;aspect-ratio:4/3;border-radius:8px;border:1px solid var(--border);background:var(--bg2);overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.share-admin-thumb img,.share-admin-thumb video{width:100%;height:100%;object-fit:cover;display:block}
+.share-admin-thumb.empty .ico{width:1.2rem;height:1.2rem;color:var(--gold)}
+.share-admin-main{display:grid;gap:.55rem;min-width:0}
+.share-admin-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.7rem}
 .share-admin-title{min-width:0}
+.share-admin-item-name{display:block;font-size:.75rem;color:var(--muted);line-height:1.5}
 .share-admin-title strong{display:block;font-size:.84rem;color:var(--text);line-height:1.55}
-.share-admin-title span{display:block;font-size:.75rem;color:var(--muted);line-height:1.55;word-break:break-all}
+.share-admin-title span{display:block;font-size:.75rem;color:var(--muted);line-height:1.55}
+.share-admin-link-token{word-break:break-all;color:var(--gdim)}
 .share-admin-meta{display:flex;flex-wrap:wrap;gap:.35rem}
 .share-admin-badge{display:inline-flex;align-items:center;gap:.26rem;padding:.16rem .45rem;border-radius:999px;border:1px solid var(--border);font-size:.68rem;color:var(--muted);background:var(--bg2)}
 .share-admin-badge.on{border-color:rgba(77,180,126,.35);color:#73c993;background:rgba(77,180,126,.08)}
 .share-admin-badge.off{border-color:rgba(201,116,96,.35);color:#d98f7f;background:rgba(201,116,96,.08)}
 .share-admin-badge.locked{border-color:rgba(201,168,76,.35);color:var(--gold);background:var(--gglow)}
-.share-admin-actions{display:flex;flex-wrap:wrap;gap:.42rem}
+.share-admin-actions{display:flex;flex-wrap:wrap;gap:.42rem;grid-column:2}
 .share-admin-actions .btn{min-height:30px;padding:.28rem .62rem;font-size:.74rem;white-space:nowrap}
+@media(max-width:700px){
+  .share-admin-row{grid-template-columns:1fr}
+  .share-admin-thumb{width:100%;max-width:150px}
+  .share-admin-actions{grid-column:1}
+}
 .manage-page{display:none}
 .manage-page.on{
   display:flex;flex-direction:column;
@@ -1382,6 +1395,9 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <summary><div class="disc-head"><span>公開閱覽清單</span><span class="disc-head-actions"></span></div></summary>
         <div class="disc-body">
           <div class="share-admin-shell" id="share-admin-shell">
+            <div class="share-admin-toolbar">
+              <button class="btn btn-out share-admin-sort-btn" id="share-admin-sort-btn" type="button" onclick="togglePreviewShareAdminSortDir()">項目順序：正序</button>
+            </div>
             <div class="share-admin-empty" id="share-admin-empty">目前頁籤還沒有已建立的公開閱覽連結</div>
             <div class="share-admin-list" id="share-admin-list"></div>
           </div>
@@ -1490,6 +1506,9 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         </div>
         <div class="manage-page-body">
           <div class="share-admin-shell">
+            <div class="share-admin-toolbar">
+              <button class="btn btn-out share-admin-sort-btn" id="share-admin-page-sort-btn" type="button" onclick="togglePreviewShareAdminSortDir()">項目順序：正序</button>
+            </div>
             <div class="share-admin-empty" id="share-admin-page-empty">目前頁籤還沒有已建立的公開閱覽連結</div>
             <div class="share-admin-list" id="share-admin-page-list"></div>
           </div>
@@ -1690,6 +1709,7 @@ const S = {
   savedRoleLabels: null, savedRolePerms: null,
   previewShareAdmin: [],
   previewShareAdminLoading: false,
+  previewShareAdminSortDir: 'asc',
   downloadModalData: null,
   hostUsage: null,
   previewModalState: null,
@@ -5841,27 +5861,30 @@ function extractRolePerms(cfg) {
 
 function getPreviewShareAdminRowsHtml(rows = []) {
   return rows.map(share => {
+    const item = String(share.itemId || '').trim() ? (S.cat.items || []).find(entry => entry.id === String(share.itemId || '').trim()) : null;
     const statusBadge = share.enabled
       ? `<span class="share-admin-badge on">公開中</span>`
       : `<span class="share-admin-badge off">已停用</span>`;
     const passwordBadge = share.hasPassword
       ? `<span class="share-admin-badge locked">${icon('lock')}<span>密碼保護中</span></span>`
       : '';
-    const createdAt = share.createdAtLabel || formatAdminDateTime(share.createdAt);
+    const previewLabel = share.previewLabel || share.previewFilename || '預覽檔';
+    const linkToken = getPreviewShareAdminLinkToken(share);
+    const thumbHtml = getPreviewShareAdminThumbHtml(item, previewLabel);
     return `<div class="share-admin-row">
+      ${thumbHtml}
       <div class="share-admin-main">
-        <div class="share-admin-title">
-          <strong>${esc(share.itemTitle || '未命名項目')}</strong>
-          <span>${esc(share.previewLabel || share.previewFilename || '預覽檔')}</span>
-          <span>${esc(share.shareUrl || '')}</span>
+        <div class="share-admin-head">
+          <div class="share-admin-title">
+            <span class="share-admin-item-name">${esc(share.itemTitle || '未命名項目')}</span>
+            <strong>${esc(previewLabel)}</strong>
+            <span class="share-admin-link-token">${esc(linkToken)}</span>
+          </div>
+          <div class="share-admin-meta">
+            ${statusBadge}
+            ${passwordBadge}
+          </div>
         </div>
-        <div class="share-admin-meta">
-          ${statusBadge}
-          ${passwordBadge}
-        </div>
-      </div>
-      <div class="share-admin-title">
-        <span>建立時間：${esc(createdAt || '-')}</span>
       </div>
       <div class="share-admin-actions">
         <button class="btn btn-out" type="button" onclick="copyPreviewShareLink('${esc(share.token)}')">${icon('link')}<span>複製連結</span></button>
@@ -5874,14 +5897,75 @@ function getPreviewShareAdminRowsHtml(rows = []) {
   }).join('');
 }
 
+function getPreviewShareAdminLinkToken(share = {}) {
+  const raw = String(share.shareUrl || share.sharePath || share.token || '').trim();
+  if (!raw) return '-';
+  try {
+    const url = new URL(raw, window.location.origin);
+    return url.pathname.split('/').filter(Boolean).pop() || raw;
+  } catch {
+    return raw.split('/').filter(Boolean).pop() || raw;
+  }
+}
+
+function getPreviewShareAdminThumbHtml(item, label = '') {
+  const coverEntry = item ? getItemCoverEntry(item) : null;
+  if (!coverEntry?.src) return `<div class="share-admin-thumb empty">${icon('file')}</div>`;
+  const positionStyle = item ? ` style="object-position:${esc(getItemCoverObjectPosition(item))}"` : '';
+  if (coverEntry.kind === 'audio') {
+    return `<div class="share-admin-thumb empty">${icon('audio')}</div>`;
+  }
+  if (coverEntry.kind === 'video') {
+    return `<div class="share-admin-thumb"><video src="${esc(coverEntry.src)}" muted playsinline preload="metadata"${positionStyle}></video></div>`;
+  }
+  const displaySrc = coverEntry.thumbSrc || coverEntry.src;
+  return `<div class="share-admin-thumb"><img src="${esc(displaySrc)}" alt="${esc(label)}" loading="lazy"${positionStyle}${imgThumbFallbackAttrs(displaySrc, coverEntry.src)}></div>`;
+}
+
+function getPreviewShareAdminItemOrder(share = {}) {
+  const itemId = String(share.itemId || '').trim();
+  if (itemId) {
+    const idx = (S.cat.items || []).findIndex(item => item.id === itemId);
+    if (idx >= 0) return idx + 1;
+  }
+  const fallback = [share.itemOrder, share.itemOrdinal, share.itemIndex, share.order]
+    .map(value => Number(value))
+    .find(value => Number.isFinite(value));
+  return Number.isFinite(fallback) ? fallback : Number.MAX_SAFE_INTEGER;
+}
+
+function getSortedPreviewShareAdminRows(rows = []) {
+  const dir = S.previewShareAdminSortDir === 'desc' ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const orderDiff = getPreviewShareAdminItemOrder(a) - getPreviewShareAdminItemOrder(b);
+    if (orderDiff) return orderDiff * dir;
+    const itemDiff = String(a.itemTitle || '').localeCompare(String(b.itemTitle || ''), 'zh-Hant');
+    if (itemDiff) return itemDiff * dir;
+    const fileDiff = String(a.previewLabel || a.previewFilename || '').localeCompare(String(b.previewLabel || b.previewFilename || ''), 'zh-Hant');
+    if (fileDiff) return fileDiff * dir;
+    return String(a.token || '').localeCompare(String(b.token || ''), 'en') * dir;
+  });
+}
+
+function togglePreviewShareAdminSortDir() {
+  S.previewShareAdminSortDir = S.previewShareAdminSortDir === 'desc' ? 'asc' : 'desc';
+  renderPreviewShareAdminPanel();
+}
+
 function renderPreviewShareAdminPanel() {
   const disc = document.getElementById('share-links-disc');
   const targets = [
     { empty: document.getElementById('share-admin-empty'), list: document.getElementById('share-admin-list') },
     { empty: document.getElementById('share-admin-page-empty'), list: document.getElementById('share-admin-page-list') }
   ];
+  const sortButtons = [document.getElementById('share-admin-sort-btn'), document.getElementById('share-admin-page-sort-btn')];
   const isOwner = S.currentAuthUser?.role === 'owner';
   if (disc) disc.style.display = isOwner ? '' : 'none';
+  sortButtons.forEach(btn => {
+    if (!btn) return;
+    btn.textContent = `項目順序：${S.previewShareAdminSortDir === 'desc' ? '倒序' : '正序'}`;
+    btn.style.display = isOwner ? 'inline-flex' : 'none';
+  });
   if (!targets.some(target => target.empty && target.list)) return;
   if (!isOwner) {
     targets.forEach(target => {
@@ -5900,7 +5984,7 @@ function renderPreviewShareAdminPanel() {
     });
     return;
   }
-  const rows = Array.isArray(S.previewShareAdmin) ? S.previewShareAdmin : [];
+  const rows = getSortedPreviewShareAdminRows(Array.isArray(S.previewShareAdmin) ? S.previewShareAdmin : []);
   const html = getPreviewShareAdminRowsHtml(rows);
   targets.forEach(target => {
     if (!target.empty || !target.list) return;
@@ -5943,6 +6027,7 @@ async function syncPreviewShareAdmin(url, method, body, successMessage) {
 async function copyPreviewShareLink(token) {
   const share = (S.previewShareAdmin || []).find(entry => entry.token === token);
   if (!share?.shareUrl) { toast('找不到可複製的網址', 'err'); return; }
+  try { window.open(share.shareUrl, '_blank', 'noopener'); } catch {}
   try {
     await copyText(share.shareUrl);
     toast('已複製公開網址', 'ok');
