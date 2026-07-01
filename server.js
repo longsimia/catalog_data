@@ -2395,8 +2395,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   const getEncodingLabel = encoding => {
     switch (encoding) {
       case 'utf8': return 'UTF-8';
-      case 'utf16le': return 'Unicode（UTF-16 LE）';
-      case 'utf16be': return 'Unicode（UTF-16 BE）';
+      case 'utf16le': return 'UTF-16 LE';
+      case 'utf16be': return 'UTF-16 BE';
       case 'big5': return '繁體中文（Big5）';
       case 'cp950': return '繁體中文（CP950）';
       case 'gb18030': return '簡體中文（GB18030）';
@@ -2478,8 +2478,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .action-btn:disabled{opacity:.55;cursor:default}
     .encoding-field{display:flex;align-items:center;gap:10px;margin:2px 0 10px}
     .encoding-field label{font-size:15px;line-height:1.9;color:var(--muted);white-space:nowrap}
-    .encoding-menu-wrap{position:relative;display:inline-block;max-width:100%}
-    .encoding-toggle{display:inline-flex;align-items:center;gap:5px;width:auto;max-width:100%;border:none;background:transparent;color:var(--muted);padding:0;font:inherit;font-size:15px;line-height:1.35;text-align:left;cursor:pointer}
+    .encoding-menu-wrap{position:relative;display:inline-block;width:156px;max-width:100%}
+    .encoding-toggle{display:inline-flex;align-items:center;gap:5px;width:100%;max-width:100%;border:none;background:transparent;color:var(--muted);padding:0;font:inherit;font-size:15px;line-height:1.35;text-align:left;cursor:pointer}
     .encoding-toggle:hover,.encoding-toggle[aria-expanded="true"]{color:var(--text)}
     .encoding-toggle-caret{display:inline-block;font-size:11px;line-height:1;transform:translateY(1px) rotate(0deg);transition:transform .22s ease;order:-1}
     .encoding-toggle[aria-expanded="true"] .encoding-toggle-caret{transform:translateY(1px) rotate(180deg)}
