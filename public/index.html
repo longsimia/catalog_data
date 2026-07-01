@@ -590,11 +590,12 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .share-admin-sort-btn{min-height:32px;padding:.32rem .65rem;font-size:.76rem;white-space:nowrap}
 .share-admin-empty{padding:.95rem .3rem .2rem;text-align:center;color:var(--muted);font-size:.8rem}
 .share-admin-list{display:grid;gap:.65rem}
-.share-admin-row{display:grid;grid-template-columns:88px minmax(0,1fr);gap:.8rem;padding:.8rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel);align-items:start}
+.share-admin-row{display:grid;grid-template-columns:88px minmax(0,1fr);grid-template-areas:"thumb main" "actions actions";grid-template-rows:auto auto;gap:.8rem;padding:.8rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel);align-items:start}
 .share-admin-thumb{width:88px;aspect-ratio:4/3;border-radius:8px;border:1px solid var(--border);background:var(--bg2);overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .share-admin-thumb img,.share-admin-thumb video{width:100%;height:100%;object-fit:cover;display:block}
 .share-admin-thumb.empty .ico{width:1.2rem;height:1.2rem;color:var(--gold)}
-.share-admin-main{display:grid;gap:.55rem;min-width:0}
+.share-admin-thumb{grid-area:thumb}
+.share-admin-main{grid-area:main;display:grid;gap:.55rem;min-width:0}
 .share-admin-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.7rem}
 .share-admin-title{min-width:0}
 .share-admin-item-name{display:block;font-size:.75rem;color:var(--muted);line-height:1.5}
@@ -607,17 +608,19 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .share-admin-badge.on{border-color:rgba(77,180,126,.35);color:#73c993;background:rgba(77,180,126,.08)}
 .share-admin-badge.off{border-color:rgba(201,116,96,.35);color:#d98f7f;background:rgba(201,116,96,.08)}
 .share-admin-badge.locked{width:96px;min-width:96px;white-space:nowrap;border-color:rgba(201,168,76,.35);color:var(--gold);background:var(--gglow)}
-.share-admin-actions{display:flex;flex-wrap:wrap;gap:.42rem;grid-column:2}
+.share-admin-actions{grid-area:actions;display:flex;flex-wrap:wrap;gap:.42rem;align-self:start}
 .share-admin-actions .btn{min-height:30px;padding:.28rem .62rem;font-size:.74rem;white-space:nowrap}
-#share-admin-shell .share-admin-actions{grid-column:1 / -1}
-#share-admin-page .share-admin-row{grid-template-columns:120px minmax(0,1fr);align-items:stretch}
-#share-admin-page .share-admin-thumb{width:120px;height:100%;min-height:100%;aspect-ratio:auto;align-self:stretch}
+#share-admin-shell .share-admin-actions{justify-content:flex-start}
+#share-admin-page .share-admin-row{grid-template-columns:132px minmax(0,1fr);grid-template-areas:"thumb main" "thumb actions";grid-template-rows:minmax(0,1fr) auto;align-items:stretch}
+#share-admin-page .share-admin-thumb{width:132px;height:132px;aspect-ratio:auto;align-self:stretch}
+#share-admin-page .share-admin-main{align-self:center;min-height:0}
+#share-admin-page .share-admin-actions{align-self:end}
 @media(max-width:700px){
-  .share-admin-row{grid-template-columns:1fr}
+  .share-admin-row{grid-template-columns:1fr;grid-template-areas:"thumb" "main" "actions"}
   .share-admin-thumb{width:100%;max-width:150px}
-  .share-admin-actions{grid-column:1}
-  #share-admin-page .share-admin-row{grid-template-columns:1fr}
+  #share-admin-page .share-admin-row{grid-template-columns:1fr;grid-template-areas:"thumb" "main" "actions"}
   #share-admin-page .share-admin-thumb{width:100%;max-width:180px;aspect-ratio:4/3;height:auto;min-height:0}
+  #share-admin-page .share-admin-actions{align-self:start}
 }
 .manage-page{display:none}
 .manage-page.on{
@@ -1661,6 +1664,16 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
     </div>
   </div>
 </div>
+<div class="confirm-modal" id="preview-share-clear-password-modal" onclick="onPreviewShareClearPasswordModalBackdrop(event)">
+  <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="preview-share-clear-password-title">
+    <h3 id="preview-share-clear-password-title">清除訪問密碼</h3>
+    <p id="preview-share-clear-password-msg">清除後這筆公開閱覽連結將不再需要輸入密碼。<br>確定要清除密碼嗎？</p>
+    <div class="confirm-actions">
+      <button class="btn btn-out" type="button" onclick="closePreviewShareClearPasswordModal()">取消</button>
+      <button class="btn btn-gold" type="button" onclick="confirmPreviewShareClearPasswordModal()">確定清除</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ════════════════════════════════════════════════════
@@ -1746,6 +1759,7 @@ const S = {
   previewShareAdminQ: '',
   previewSharePasswordToken: '',
   previewShareDeleteToken: '',
+  previewShareClearPasswordToken: '',
   downloadModalData: null,
   hostUsage: null,
   previewModalState: null,
@@ -5205,6 +5219,10 @@ document.addEventListener('keydown', e => {
     closePreviewShareDeleteModal();
     return;
   }
+  if (e.key === 'Escape' && document.getElementById('preview-share-clear-password-modal')?.classList.contains('on')) {
+    closePreviewShareClearPasswordModal();
+    return;
+  }
   if (e.key === 'Escape' && document.getElementById('man-page')?.classList.contains('on')) {
     closeManageListPage();
   }
@@ -6201,9 +6219,27 @@ async function confirmPreviewSharePasswordModal() {
 }
 
 async function clearPreviewSharePassword(token) {
-  if (!confirm('確定要清除此公開網址的訪問密碼？')) return;
+  const modal = document.getElementById('preview-share-clear-password-modal');
+  if (!modal) return;
+  S.previewShareClearPasswordToken = token;
+  modal.classList.add('on');
+}
+
+function closePreviewShareClearPasswordModal() {
+  document.getElementById('preview-share-clear-password-modal')?.classList.remove('on');
+  S.previewShareClearPasswordToken = '';
+}
+
+function onPreviewShareClearPasswordModalBackdrop(event) {
+  if (event.target?.id === 'preview-share-clear-password-modal') closePreviewShareClearPasswordModal();
+}
+
+async function confirmPreviewShareClearPasswordModal() {
+  const token = S.previewShareClearPasswordToken;
+  if (!token) return closePreviewShareClearPasswordModal();
   try {
     await syncPreviewShareAdmin(`/api/preview-share-links/${encodeURIComponent(token)}/password`, 'DELETE', undefined, '已清除訪問密碼');
+    closePreviewShareClearPasswordModal();
   } catch (e) {
     toast(e.message || '清除密碼失敗', 'err');
   }

@@ -4176,7 +4176,8 @@ function renderPreviewShareShell(token = '', options = {}) {
     .pw-form{display:none;gap:10px;margin-top:16px}
     .pw-form.on{display:grid}
     .pw-form input{width:100%;min-height:44px;padding:0 14px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;outline:none}
-    .pw-form button{min-height:44px;border:1px solid var(--border);background:var(--panel);color:var(--text);font:inherit;cursor:pointer}
+    .pw-form button{min-height:44px;border:1px solid var(--gold);background:var(--gold);color:#140f00;font:inherit;font-weight:500;cursor:pointer;transition:background .18s ease,border-color .18s ease,transform .18s ease}
+    .pw-form button:hover{background:#d5b45a;border-color:#d5b45a}
     .pw-hint{display:none;margin-top:10px;color:#d98f7f}
     .pw-hint.on{display:block}
     iframe,embed{display:block;border:none;width:100%;height:100vh}
