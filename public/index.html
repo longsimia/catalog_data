@@ -601,8 +601,9 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .share-admin-title strong{display:block;font-size:.84rem;color:var(--text);line-height:1.55}
 .share-admin-title span{display:block;font-size:.75rem;color:var(--muted);line-height:1.55}
 .share-admin-link-token{word-break:break-all;color:var(--gdim)}
-.share-admin-meta{display:flex;flex-wrap:wrap;gap:.35rem}
-.share-admin-badge{display:inline-flex;align-items:center;gap:.26rem;padding:.16rem .45rem;border-radius:999px;border:1px solid var(--border);font-size:.68rem;color:var(--muted);background:var(--bg2)}
+.share-admin-meta{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem;flex:0 0 76px;min-width:76px}
+.share-admin-badge{display:inline-flex;align-items:center;justify-content:center;gap:.26rem;padding:.16rem .45rem;border-radius:999px;border:1px solid var(--border);font-size:.68rem;color:var(--muted);background:var(--bg2);text-align:center}
+.share-admin-badge.on,.share-admin-badge.off{width:60px;min-width:60px}
 .share-admin-badge.on{border-color:rgba(77,180,126,.35);color:#73c993;background:rgba(77,180,126,.08)}
 .share-admin-badge.off{border-color:rgba(201,116,96,.35);color:#d98f7f;background:rgba(201,116,96,.08)}
 .share-admin-badge.locked{border-color:rgba(201,168,76,.35);color:var(--gold);background:var(--gglow)}
