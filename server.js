@@ -2401,7 +2401,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
       case 'cp950': return '繁體中文（CP950）';
       case 'gb18030': return '簡體中文（GB18030）';
       case 'shift_jis': return '日文（Shift_JIS）';
-      case 'cp932': return '日文（Windows / CP932）';
+      case 'cp932': return '日文（Windows-31J）';
       case 'euc-jp': return '日文（EUC-JP）';
       default: return String(encoding || '').toUpperCase();
     }
