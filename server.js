@@ -3998,7 +3998,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
     html{color-scheme:dark}
     html[data-theme="light"],body[data-theme="light"]{
       color-scheme:light;
-      --bg:#e6e6e6;--panel:#ffffff;--text:#3b342d;--muted:#9b9084;--border:#ece5db;
+      --bg:#e6e6e6;--panel:#ffffff;--text:#3b342d;--muted:#9b9084;--border:#ece5db;--gold:#a18d79;
     }
     html[data-theme="light"] .pw-form button,body[data-theme="light"] .pw-form button{color:#5E4F36}
     html[data-theme="light"] .pw-form button:hover,body[data-theme="light"] .pw-form button:hover{color:#140f00}
@@ -4167,7 +4167,7 @@ function renderPreviewShareShell(token = '', options = {}) {
     html{color-scheme:dark}
     html[data-theme="light"],body[data-theme="light"]{
       color-scheme:light;
-      --bg:#e6e6e6;--panel:#ffffff;--text:#3b342d;--muted:#9b9084;--border:#ece5db;
+      --bg:#e6e6e6;--panel:#ffffff;--text:#3b342d;--muted:#9b9084;--border:#ece5db;--gold:#a18d79;
     }
     html[data-theme="light"] .pw-form button,body[data-theme="light"] .pw-form button{color:#5E4F36}
     html[data-theme="light"] .pw-form button:hover,body[data-theme="light"] .pw-form button:hover{color:#140f00}
@@ -4180,7 +4180,7 @@ function renderPreviewShareShell(token = '', options = {}) {
     .pw-form{display:none;gap:10px;margin-top:16px}
     .pw-form.on{display:grid}
     .pw-form input{width:100%;min-height:44px;padding:0 14px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;outline:none}
-    .pw-form button{min-height:44px;border:1px solid var(--gold);background:var(--gold);color:#140f00;font:inherit;font-weight:500;cursor:pointer;transition:all .2s ease;text-align:center}
+    .pw-form button{min-height:44px;border:1px solid var(--gold);border-radius:7px;background:var(--gold);color:#140f00;font:inherit;font-weight:500;cursor:pointer;transition:all .2s ease;text-align:center}
     .pw-form button:hover{background:#d5b45a;border-color:#d5b45a}
     .pw-hint{display:none;margin-top:10px;color:#d98f7f}
     .pw-hint.on{display:block}
