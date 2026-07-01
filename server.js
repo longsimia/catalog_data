@@ -4173,6 +4173,12 @@ function renderPreviewShareShell(token = '', options = {}) {
     .card{background:var(--panel);border:1px solid var(--border);padding:24px 28px;max-width:520px;width:100%}
     h1{margin:0 0 10px;font-family:"Noto Serif TC",serif;font-size:1.25rem}
     p{margin:0;color:var(--muted);line-height:1.7}
+    .pw-form{display:none;gap:10px;margin-top:16px}
+    .pw-form.on{display:grid}
+    .pw-form input{width:100%;min-height:44px;padding:0 14px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;outline:none}
+    .pw-form button{min-height:44px;border:1px solid var(--border);background:var(--panel);color:var(--text);font:inherit;cursor:pointer}
+    .pw-hint{display:none;margin-top:10px;color:#d98f7f}
+    .pw-hint.on{display:block}
     iframe,embed{display:block;border:none;width:100%;height:100vh}
     .media-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
     .media-wrap img,.media-wrap video{display:block;max-width:min(100%,1200px);max-height:calc(100vh - 40px);border:none}
@@ -4251,6 +4257,7 @@ function renderPreviewShareShell(token = '', options = {}) {
             showPasswordForm(data.error || '此公開連結需要密碼');
             return;
           }
+          pwForm.classList.remove('on');
           text = data.error || text;
         } catch {}
         pwForm.classList.remove('on');
