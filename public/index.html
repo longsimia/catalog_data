@@ -1475,6 +1475,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           <span id="mp-trash-sel-info" style="font-size:.79rem;color:var(--muted)"></span>
         </div>
       </div>
+      </div>
       <div class="manage-page" id="share-admin-page">
         <div class="manage-page-head">
           <div class="manage-head-left">
@@ -1494,7 +1495,6 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           </div>
         </div>
       </div>
-    </div>
   </div>
 </div>
 </div>
@@ -5836,101 +5836,6 @@ function extractRolePerms(cfg) {
     out[k] = { permissions: JSON.parse(JSON.stringify(v.permissions || {})) };
   });
   return out;
-}
-
-function getPreviewShareAdminRowsHtml(rows = []) {
-  return rows.map(share => {
-    const statusBadge = share.enabled
-      ? `<span class="share-admin-badge on">公開中</span>`
-      : `<span class="share-admin-badge off">已停用</span>`;
-    const passwordBadge = share.hasPassword
-      ? `<span class="share-admin-badge locked">${icon('lock')}<span>密碼保護中</span></span>`
-      : '';
-    const createdAt = share.createdAtLabel || formatAdminDateTime(share.createdAt);
-    return `<div class="share-admin-row">
-      <div class="share-admin-main">
-        <div class="share-admin-title">
-          <strong>${esc(share.itemTitle || '未命名項目')}</strong>
-          <span>${esc(share.previewLabel || share.previewFilename || '預覽檔')}</span>
-          <span>${esc(share.shareUrl || '')}</span>
-        </div>
-        <div class="share-admin-meta">
-          ${statusBadge}
-          ${passwordBadge}
-        </div>
-      </div>
-      <div class="share-admin-title">
-        <span>建立時間：${esc(createdAt || '-')}</span>
-      </div>
-      <div class="share-admin-actions">
-        <button class="btn btn-out" type="button" onclick="copyPreviewShareLink('${esc(share.token)}')">${icon('link')}<span>複製連結</span></button>
-        <button class="btn btn-out" type="button" onclick="togglePreviewShareEnabled('${esc(share.token)}', ${share.enabled ? 'false' : 'true'})">${share.enabled ? '取消公開' : '恢復公開'}</button>
-        <button class="btn btn-out" type="button" onclick="setPreviewSharePasswordPrompt('${esc(share.token)}')">${share.hasPassword ? '修改密碼' : '設定密碼'}</button>
-        ${share.hasPassword ? `<button class="btn btn-out" type="button" onclick="clearPreviewSharePassword('${esc(share.token)}')">清除密碼</button>` : ''}
-        <button class="btn btn-out" type="button" onclick="deletePreviewShareLink('${esc(share.token)}')">${icon('trash')}<span>刪除連結</span></button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function renderPreviewShareAdminPanel() {
-  const disc = document.getElementById('share-links-disc');
-  const targets = [
-    { empty: document.getElementById('share-admin-empty'), list: document.getElementById('share-admin-list') },
-    { empty: document.getElementById('share-admin-page-empty'), list: document.getElementById('share-admin-page-list') }
-  ];
-  const isOwner = S.currentAuthUser?.role === 'owner';
-  if (disc) disc.style.display = isOwner ? '' : 'none';
-  if (!targets.some(target => target.empty && target.list)) return;
-  if (!isOwner) {
-    targets.forEach(target => {
-      if (!target.empty || !target.list) return;
-      target.list.innerHTML = '';
-      target.empty.style.display = 'none';
-    });
-    return;
-  }
-  if (S.previewShareAdminLoading) {
-    empty.style.display = '';
-    empty.textContent = '公開連結讀取中...';
-    list.innerHTML = '';
-    return;
-  }
-  const rows = Array.isArray(S.previewShareAdmin) ? S.previewShareAdmin : [];
-  empty.style.display = rows.length ? 'none' : '';
-  empty.textContent = '目前頁籤還沒有已建立的公開連結';
-  list.innerHTML = rows.map(share => {
-    const statusBadge = share.enabled
-      ? `<span class="share-admin-badge on">公開中</span>`
-      : `<span class="share-admin-badge off">已停用</span>`;
-    const passwordBadge = share.hasPassword
-      ? `<span class="share-admin-badge locked">${icon('lock')}<span>密碼保護中</span></span>`
-      : '';
-    const createdAt = share.createdAtLabel || formatAdminDateTime(share.createdAt);
-    return `<div class="share-admin-row">
-      <div class="share-admin-main">
-        <div class="share-admin-title">
-          <strong>${esc(share.itemTitle || '未命名項目')}</strong>
-          <span>${esc(share.previewLabel || share.previewFilename || '附件')}</span>
-          <span>${esc(share.shareUrl || '')}</span>
-        </div>
-        <div class="share-admin-meta">
-          ${statusBadge}
-          ${passwordBadge}
-        </div>
-      </div>
-      <div class="share-admin-title">
-        <span>建立時間：${esc(createdAt || '-')}</span>
-      </div>
-      <div class="share-admin-actions">
-        <button class="btn btn-out" type="button" onclick="copyPreviewShareLink('${esc(share.token)}')">${icon('link')}<span>複製網址</span></button>
-        <button class="btn btn-out" type="button" onclick="togglePreviewShareEnabled('${esc(share.token)}', ${share.enabled ? 'false' : 'true'})">${share.enabled ? '取消公開' : '恢復公開'}</button>
-        <button class="btn btn-out" type="button" onclick="setPreviewSharePasswordPrompt('${esc(share.token)}')">${share.hasPassword ? '更新密碼' : '設定密碼'}</button>
-        ${share.hasPassword ? `<button class="btn btn-out" type="button" onclick="clearPreviewSharePassword('${esc(share.token)}')">清除密碼</button>` : ''}
-        <button class="btn btn-out" type="button" onclick="deletePreviewShareLink('${esc(share.token)}')">${icon('trash')}<span>刪除公開網址</span></button>
-      </div>
-    </div>`;
-  }).join('');
 }
 
 function getPreviewShareAdminRowsHtml(rows = []) {
