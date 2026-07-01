@@ -1144,9 +1144,9 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   <!-- Main -->
   <div id="adm-body" style="display:none">
     <div class="adm-tabs">
-      <button class="atb on" onclick="setTab('up')">上傳</button>
-      <button class="atb" onclick="setTab('man')">管理</button>
-      <button class="atb" onclick="setTab('cfg')">設定</button>
+      <button class="atb on" id="adm-tab-btn-up" data-admin-tab="up" onclick="setTab('up')">上傳</button>
+      <button class="atb" id="adm-tab-btn-man" data-admin-tab="man" onclick="setTab('man')">管理</button>
+      <button class="atb" id="adm-tab-btn-cfg" data-admin-tab="cfg" onclick="setTab('cfg')">設定</button>
     </div>
 
     <!-- Settings Tab -->
@@ -1379,10 +1379,10 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         </div>
       </details>
       <details class="disc" id="share-links-disc" data-disc-id="share-links-disc" style="display:none">
-        <summary><div class="disc-head"><span>公開連結管理</span><span class="disc-head-actions"></span></div></summary>
+        <summary><div class="disc-head"><span>公開閱覽清單</span><span class="disc-head-actions"></span></div></summary>
         <div class="disc-body">
           <div class="share-admin-shell" id="share-admin-shell">
-            <div class="share-admin-empty" id="share-admin-empty">目前頁籤還沒有已建立的公開連結</div>
+            <div class="share-admin-empty" id="share-admin-empty">目前頁籤還沒有已建立的公開閱覽連結</div>
             <div class="share-admin-list" id="share-admin-list"></div>
           </div>
         </div>
@@ -1473,6 +1473,25 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         </div>
         <div class="mp-trash-foot" id="mp-trash-foot" style="display:none">
           <span id="mp-trash-sel-info" style="font-size:.79rem;color:var(--muted)"></span>
+        </div>
+      </div>
+      <div class="manage-page" id="share-admin-page">
+        <div class="manage-page-head">
+          <div class="manage-head-left">
+            <button class="btn btn-out mp-back" id="share-admin-page-back" onclick="closePreviewShareAdminPage()" aria-label="返回後台管理"></button>
+            <div class="manage-page-title">
+              <div>
+                <h3 id="share-admin-page-title">公開閱覽清單</h3>
+                <p id="share-admin-page-subtitle">可在獨立頁面管理目前資料庫的公開閱覽連結</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="manage-page-body">
+          <div class="share-admin-shell">
+            <div class="share-admin-empty" id="share-admin-page-empty">目前頁籤還沒有已建立的公開閱覽連結</div>
+            <div class="share-admin-list" id="share-admin-page-list"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1667,7 +1686,7 @@ const S = {
   MF:     { cats:[], tags:[] },
   up:     { prevs:[], files:[], tags:[], categories:[], mode:'up', attachmentPrevs: new Set() },
   eTags:  [], eCatsPicked: [], eId: null, ePrevs: [], eDownloadEntries: [],
-  authUsers: [], currentAuthUser: null, roleConfig: null, allRoleConfig: null,
+  authUsers: [], currentAuthUser: null, roleConfig: null, allRoleConfig: null, adminTab: 'up', adminTabSyncing: false, previewShareAdminPageOpen: false,
   savedRoleLabels: null, savedRolePerms: null,
   previewShareAdmin: [],
   previewShareAdminLoading: false,
@@ -2107,6 +2126,57 @@ function canRolePermission(key) {
   if (S.currentAuthUser.role === 'owner') return true;
   return !!S.roleConfig?.[S.currentAuthUser.role]?.permissions?.[key];
 }
+function getAdminManageDisclosureIds() {
+  if (!S.currentAuthUser) return [];
+  if (S.currentAuthUser.role === 'owner') return ['cat-disc', 'tag-disc', 'item-list-disc'];
+  const ids = [];
+  if (canRolePermission('editCategories')) ids.push('cat-disc');
+  if (canRolePermission('editTags')) ids.push('tag-disc');
+  if (canRolePermission('editItemOrder')) ids.push('item-list-disc');
+  return ids;
+}
+function canAccessAdminUploadTab() {
+  return !!S.currentAuthUser && canRolePermission('uploadItems');
+}
+function canAccessAdminManageTab() {
+  return !!S.currentAuthUser && getAdminManageDisclosureIds().length > 0;
+}
+function getVisibleAdminTabs() {
+  const tabs = [];
+  if (canAccessAdminUploadTab()) tabs.push('up');
+  if (canAccessAdminManageTab()) tabs.push('man');
+  tabs.push('cfg');
+  return tabs;
+}
+function getDefaultAdminTab() {
+  const visibleTabs = getVisibleAdminTabs();
+  if (!visibleTabs.length) return 'cfg';
+  if (S.currentAuthUser?.role !== 'owner' && visibleTabs.includes('cfg')) return 'cfg';
+  if (visibleTabs.includes('up')) return 'up';
+  if (visibleTabs.includes('man')) return 'man';
+  return visibleTabs[0];
+}
+function getDefaultManageDiscOrder() {
+  return ['appearance-disc', 'role-disc', 'cat-disc', 'tag-disc', 'item-list-disc', 'share-links-disc'];
+}
+function syncAdminTabVisibility(preferredTab = '') {
+  const visibleTabs = getVisibleAdminTabs();
+  const visibleSet = new Set(visibleTabs);
+  document.querySelectorAll('.adm-tabs [data-admin-tab]').forEach(btn => {
+    const tabKey = btn.dataset.adminTab;
+    btn.style.display = visibleSet.has(tabKey) ? '' : 'none';
+  });
+  if (S.adminTabSyncing) return;
+  const nextTab = visibleSet.has(preferredTab)
+    ? preferredTab
+    : (visibleSet.has(S.adminTab) ? S.adminTab : getDefaultAdminTab());
+  S.adminTabSyncing = true;
+  try {
+    setTab(nextTab, { skipVisibilitySync: true });
+  } finally {
+    S.adminTabSyncing = false;
+  }
+}
 function currentRoleCanRenameSelfRole() {
   return !!S.currentAuthUser;
 }
@@ -2403,7 +2473,7 @@ async function openManageListPage(ev) {
   renderManTagFilter();
   updateManSelUI();
   document.getElementById('man-page')?.classList.add('on');
-  document.body.style.overflow = 'hidden';
+  syncAdminOverlayScrollLock();
   initManVirtualScroll();
   initManMarquee();
   renderManVirtual();
@@ -2418,18 +2488,48 @@ async function closeManageListPage(ev) {
   closeManCategoryFilter();
   closeManTagFilter();
   document.getElementById('man-page')?.classList.remove('on');
-  document.body.style.overflow = '';
+  syncAdminOverlayScrollLock();
   await releaseManagePageLock(true);
+}
+
+function syncAdminOverlayScrollLock() {
+  document.body.style.overflow = (S.manPageOpen || S.previewShareAdminPageOpen) ? 'hidden' : '';
+}
+
+async function openPreviewShareAdminPage(ev) {
+  if (ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+  if (S.currentAuthUser?.role !== 'owner' || !getToken()) {
+    toast('只有站主可以查看公開閱覽清單', 'err');
+    return;
+  }
+  await loadPreviewShareAdminList();
+  S.previewShareAdminPageOpen = true;
+  document.getElementById('share-admin-page')?.classList.add('on');
+  syncAdminOverlayScrollLock();
+}
+
+function closePreviewShareAdminPage(ev) {
+  if (ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+  S.previewShareAdminPageOpen = false;
+  document.getElementById('share-admin-page')?.classList.remove('on');
+  syncAdminOverlayScrollLock();
 }
 
 function ensureManageDisclosure() {
   const tab = document.getElementById('tab-man');
   if (!tab) return;
   const topManagedIds = Array.from(tab.querySelectorAll(':scope > details.disc[data-disc-id]')).map(el => el.dataset.discId);
-  const hasValidManagedLayout = ['collection-disc', 'role-disc', 'cat-disc', 'tag-disc', 'item-list-disc'].every(id => topManagedIds.includes(id));
+  const hasValidManagedLayout = ['appearance-disc', 'role-disc', 'share-links-disc', 'cat-disc', 'tag-disc', 'item-list-disc'].every(id => topManagedIds.includes(id));
   if (tab.dataset.disclosureReady === '1' && hasValidManagedLayout) return;
   const head = tab.querySelector('.manage-sort-head') || tab.querySelector('div[style*="justify-content:space-between"]');
   const roleDisc = document.getElementById('role-disc');
+  const shareDisc = document.getElementById('share-links-disc');
   const catBox = document.getElementById('cat-man-box');
   const catTitle = catBox?.previousElementSibling?.classList.contains('sh') ? catBox.previousElementSibling : null;
   const tagBox = document.getElementById('tag-man-list')?.closest('.tag-man-box');
@@ -2440,6 +2540,7 @@ function ensureManageDisclosure() {
     tab.appendChild(el);
   };
   hoistToTab(head);
+  hoistToTab(shareDisc);
   hoistToTab(catBox);
   hoistToTab(tagBox);
   hoistToTab(manList);
@@ -2482,6 +2583,12 @@ function ensureManageDisclosure() {
     body.append(head, manList);
     tab.appendChild(det);
   }
+  if (shareDisc) {
+    const actionWrap = shareDisc.querySelector('.disc-head-actions');
+    if (actionWrap) {
+      actionWrap.innerHTML = `<button type="button" class="disc-page-btn" onclick="openPreviewShareAdminPage(event)">${icon('folder')}<span>獨立頁面</span></button>`;
+    }
+  }
   initManageDisclosureDnD();
   applyManageDisclosureOrder();
   tab.dataset.disclosureReady = '1';
@@ -2494,13 +2601,17 @@ function getManageDiscStorageKey() {
 function getManageDiscOrder() {
   const collectionKey = sanitizeCollectionKey(S.collection);
   const savedForUser = S.manageDiscOrderByCollection?.[collectionKey];
-  if (Array.isArray(savedForUser) && savedForUser.length) return savedForUser;
+  const defaults = getDefaultManageDiscOrder();
+  if (Array.isArray(savedForUser) && savedForUser.length) {
+    return [...new Set([...savedForUser, ...defaults])];
+  }
   try {
     const saved = JSON.parse(localStorage.getItem(getManageDiscStorageKey()) || '[]');
-    return Array.isArray(saved) ? saved : [];
+    if (Array.isArray(saved) && saved.length) return [...new Set([...saved, ...defaults])];
   } catch {
-    return [];
+    return defaults;
   }
+  return defaults;
 }
 
 async function saveManageDiscOrder() {
@@ -2550,6 +2661,21 @@ function applyManageDisclosureOrder() {
     if (el) tab.appendChild(el);
   });
 }
+function applyManageDisclosureVisibility() {
+  const tab = document.getElementById('tab-man');
+  if (!tab) return;
+  const isOwner = S.currentAuthUser?.role === 'owner';
+  const visibleIds = new Set(getAdminManageDisclosureIds());
+  ['cat-disc', 'tag-disc', 'item-list-disc'].forEach(id => {
+    const disc = document.getElementById(id);
+    if (!disc) return;
+    disc.style.display = visibleIds.has(id) ? '' : 'none';
+  });
+  document.querySelectorAll('#tab-man > details.disc[data-disc-id] > summary').forEach(summary => {
+    summary.draggable = !!isOwner;
+  });
+  if (!visibleIds.has('item-list-disc') && S.manPageOpen) closeManageListPage();
+}
 
 function clearManageDiscDropState() {
   document.querySelectorAll('#tab-man > details.disc').forEach(el => el.classList.remove('drag', 'drop-before', 'drop-after'));
@@ -2558,12 +2684,17 @@ function clearManageDiscDropState() {
 }
 
 function manageDiscDragStart(e, discId) {
+  if (S.currentAuthUser?.role !== 'owner') {
+    e.preventDefault();
+    return;
+  }
   S.manageDiscDragId = discId;
   e.currentTarget.classList.add('drag');
   e.dataTransfer.effectAllowed = 'move';
 }
 
 function manageDiscDragOver(e, discId) {
+  if (S.currentAuthUser?.role !== 'owner') return;
   e.preventDefault();
   if (!S.manageDiscDragId) return;
   const rect = e.currentTarget.getBoundingClientRect();
@@ -2576,6 +2707,7 @@ function manageDiscDragOver(e, discId) {
 }
 
 function manageDiscDrop(e, discId) {
+  if (S.currentAuthUser?.role !== 'owner') return;
   e.preventDefault();
   if (!S.manageDiscDragId) return;
   const tab = document.getElementById('tab-man');
@@ -2596,6 +2728,7 @@ function manageDiscDrop(e, discId) {
 }
 
 function manageDiscDragEnd(e) {
+  if (S.currentAuthUser?.role !== 'owner') return;
   document.querySelectorAll('#tab-man > details.disc').forEach(el => el.classList.remove('drag', 'drop-before', 'drop-after'));
   S.manageDiscDragId = '';
   clearManageDiscDropState();
@@ -5052,8 +5185,10 @@ function closeAdm() {
   document.getElementById('adm').classList.remove('on');
   document.getElementById('ovbg').classList.remove('on');
   closeAdminCollectionMenu();
+  if (S.manPageOpen) closeManageListPage().catch(() => {});
+  closePreviewShareAdminPage();
 }
-function closeAll() { closeAdm(); closeCategoryFilter(); closeTagFilter(); closeManCategoryFilter(); closeManTagFilter(); closeCollectionMenu(); closeAdminCollectionMenu(); }
+function closeAll() { closeAdm(); closeCategoryFilter(); closeTagFilter(); closeManCategoryFilter(); closeManTagFilter(); closeCollectionMenu(); closeAdminCollectionMenu(); closePreviewShareAdminPage(); }
 async function doLogout() {
   try { await releaseManagePageLock(true); } catch {}
   try {
@@ -5146,28 +5281,37 @@ function showAdmBody() {
   loadUiPreferences();
   loadCfgForm(); loadRoleConfig(); loadAuthUsers(); renderMan(); renderCategoryManager(); renderTagManager(); renderChips('u'); renderCategoryChips('u'); updCatDl();
   ensureManageDisclosure();
+  syncAdminTabVisibility(getDefaultAdminTab());
   startConnWatch();
   checkConn(false);
 }
 
-function setTab(t) {
+function setTab(t, options = {}) {
   const tabs = ['up', 'man', 'cfg'];
+  const visibleTabs = getVisibleAdminTabs();
+  const target = visibleTabs.includes(t) ? t : (visibleTabs.includes(S.adminTab) ? S.adminTab : getDefaultAdminTab());
+  S.adminTab = target;
   tabs.forEach(n => {
-    document.getElementById('tab-' + n).classList.toggle('on', n === t);
+    document.getElementById('tab-' + n).classList.toggle('on', n === target);
   });
-  document.querySelectorAll('.atb').forEach((b, i) => b.classList.toggle('on', tabs[i] === t));
-  if (t !== 'man') closeManageListPage();
-  if (t === 'man') {
+  document.querySelectorAll('.adm-tabs [data-admin-tab]').forEach(btn => {
+    btn.classList.toggle('on', btn.dataset.adminTab === target);
+  });
+  if (target !== 'man') closeManageListPage();
+  if (target === 'man') {
     loadAppearanceForm();
     renderMan(); renderCategoryManager(); renderTagManager(); ensureManageDisclosure();
   }
-  if (t === 'cfg') {
+  if (target === 'cfg') {
     loadCfgForm();
     renderCfgRoleList();
     renderAuthUserList();
     renderSelfRolePermissionPanel();
     applyRolePermissionUI();
-    refreshHostUsagePanel();
+    if (S.currentAuthUser?.role === 'owner') refreshHostUsagePanel();
+  }
+  if (!options.skipVisibilitySync) {
+    syncAdminTabVisibility(target);
   }
 }
 
@@ -5535,20 +5679,22 @@ function renderSelfRolePermissionPanel() {
     return;
   }
   const roleInfo = S.roleConfig?.[role] || S.allRoleConfig?.[role] || { label: getRoleLabel(role), permissions: {} };
-  const permGroups = getRolePermissionGroups();
+  const permGroups = getRolePermissionGroups()
+    .map(([groupTitle, perms]) => [groupTitle, perms.filter(([key]) => !!roleInfo.permissions?.[key])])
+    .filter(([, perms]) => perms.length > 0);
   panel.style.display = '';
   content.innerHTML = `
     <div class="role-card">
       <h4>${esc(roleInfo.label || getRoleLabel(role))}</h4>
       <div class="role-perms">
-        ${permGroups.map(([groupTitle, perms], idx) => {
+        ${permGroups.length ? permGroups.map(([groupTitle, perms], idx) => {
           return `
             <div class="role-perm-group">
               <div class="role-perm-title">${esc(groupTitle)}</div>
               ${perms.map(([key, label]) => `<label class="self-role-perm-item"><input type="checkbox" ${roleInfo.permissions?.[key] ? 'checked' : ''} disabled><span>${esc(label)}</span></label>`).join('')}
             </div>${idx < permGroups.length - 1 ? '<div class="role-perm-divider" aria-hidden="true"></div>' : ''}
           `;
-        }).join('')}
+        }).join('') : `<p class="role-note">目前這個身份組沒有勾選任何權限。</p>`}
       </div>
       <p class="role-note">只有${esc(getRoleLabel('owner'))}可以調整身份組權限。</p>
     </div>
@@ -5692,16 +5838,56 @@ function extractRolePerms(cfg) {
   return out;
 }
 
+function getPreviewShareAdminRowsHtml(rows = []) {
+  return rows.map(share => {
+    const statusBadge = share.enabled
+      ? `<span class="share-admin-badge on">公開中</span>`
+      : `<span class="share-admin-badge off">已停用</span>`;
+    const passwordBadge = share.hasPassword
+      ? `<span class="share-admin-badge locked">${icon('lock')}<span>密碼保護中</span></span>`
+      : '';
+    const createdAt = share.createdAtLabel || formatAdminDateTime(share.createdAt);
+    return `<div class="share-admin-row">
+      <div class="share-admin-main">
+        <div class="share-admin-title">
+          <strong>${esc(share.itemTitle || '未命名項目')}</strong>
+          <span>${esc(share.previewLabel || share.previewFilename || '預覽檔')}</span>
+          <span>${esc(share.shareUrl || '')}</span>
+        </div>
+        <div class="share-admin-meta">
+          ${statusBadge}
+          ${passwordBadge}
+        </div>
+      </div>
+      <div class="share-admin-title">
+        <span>建立時間：${esc(createdAt || '-')}</span>
+      </div>
+      <div class="share-admin-actions">
+        <button class="btn btn-out" type="button" onclick="copyPreviewShareLink('${esc(share.token)}')">${icon('link')}<span>複製連結</span></button>
+        <button class="btn btn-out" type="button" onclick="togglePreviewShareEnabled('${esc(share.token)}', ${share.enabled ? 'false' : 'true'})">${share.enabled ? '取消公開' : '恢復公開'}</button>
+        <button class="btn btn-out" type="button" onclick="setPreviewSharePasswordPrompt('${esc(share.token)}')">${share.hasPassword ? '修改密碼' : '設定密碼'}</button>
+        ${share.hasPassword ? `<button class="btn btn-out" type="button" onclick="clearPreviewSharePassword('${esc(share.token)}')">清除密碼</button>` : ''}
+        <button class="btn btn-out" type="button" onclick="deletePreviewShareLink('${esc(share.token)}')">${icon('trash')}<span>刪除連結</span></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderPreviewShareAdminPanel() {
   const disc = document.getElementById('share-links-disc');
-  const empty = document.getElementById('share-admin-empty');
-  const list = document.getElementById('share-admin-list');
+  const targets = [
+    { empty: document.getElementById('share-admin-empty'), list: document.getElementById('share-admin-list') },
+    { empty: document.getElementById('share-admin-page-empty'), list: document.getElementById('share-admin-page-list') }
+  ];
   const isOwner = S.currentAuthUser?.role === 'owner';
   if (disc) disc.style.display = isOwner ? '' : 'none';
-  if (!empty || !list) return;
+  if (!targets.some(target => target.empty && target.list)) return;
   if (!isOwner) {
-    list.innerHTML = '';
-    empty.style.display = 'none';
+    targets.forEach(target => {
+      if (!target.empty || !target.list) return;
+      target.list.innerHTML = '';
+      target.empty.style.display = 'none';
+    });
     return;
   }
   if (S.previewShareAdminLoading) {
@@ -5745,6 +5931,77 @@ function renderPreviewShareAdminPanel() {
       </div>
     </div>`;
   }).join('');
+}
+
+function getPreviewShareAdminRowsHtml(rows = []) {
+  return rows.map(share => {
+    const statusBadge = share.enabled
+      ? `<span class="share-admin-badge on">公開中</span>`
+      : `<span class="share-admin-badge off">已停用</span>`;
+    const passwordBadge = share.hasPassword
+      ? `<span class="share-admin-badge locked">${icon('lock')}<span>密碼保護中</span></span>`
+      : '';
+    const createdAt = share.createdAtLabel || formatAdminDateTime(share.createdAt);
+    return `<div class="share-admin-row">
+      <div class="share-admin-main">
+        <div class="share-admin-title">
+          <strong>${esc(share.itemTitle || '未命名項目')}</strong>
+          <span>${esc(share.previewLabel || share.previewFilename || '預覽檔')}</span>
+          <span>${esc(share.shareUrl || '')}</span>
+        </div>
+        <div class="share-admin-meta">
+          ${statusBadge}
+          ${passwordBadge}
+        </div>
+      </div>
+      <div class="share-admin-title">
+        <span>建立時間：${esc(createdAt || '-')}</span>
+      </div>
+      <div class="share-admin-actions">
+        <button class="btn btn-out" type="button" onclick="copyPreviewShareLink('${esc(share.token)}')">${icon('link')}<span>複製連結</span></button>
+        <button class="btn btn-out" type="button" onclick="togglePreviewShareEnabled('${esc(share.token)}', ${share.enabled ? 'false' : 'true'})">${share.enabled ? '取消公開' : '恢復公開'}</button>
+        <button class="btn btn-out" type="button" onclick="setPreviewSharePasswordPrompt('${esc(share.token)}')">${share.hasPassword ? '修改密碼' : '設定密碼'}</button>
+        ${share.hasPassword ? `<button class="btn btn-out" type="button" onclick="clearPreviewSharePassword('${esc(share.token)}')">清除密碼</button>` : ''}
+        <button class="btn btn-out" type="button" onclick="deletePreviewShareLink('${esc(share.token)}')">${icon('trash')}<span>刪除連結</span></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPreviewShareAdminPanel() {
+  const disc = document.getElementById('share-links-disc');
+  const targets = [
+    { empty: document.getElementById('share-admin-empty'), list: document.getElementById('share-admin-list') },
+    { empty: document.getElementById('share-admin-page-empty'), list: document.getElementById('share-admin-page-list') }
+  ];
+  const isOwner = S.currentAuthUser?.role === 'owner';
+  if (disc) disc.style.display = isOwner ? '' : 'none';
+  if (!targets.some(target => target.empty && target.list)) return;
+  if (!isOwner) {
+    targets.forEach(target => {
+      if (!target.empty || !target.list) return;
+      target.list.innerHTML = '';
+      target.empty.style.display = 'none';
+    });
+    return;
+  }
+  if (S.previewShareAdminLoading) {
+    targets.forEach(target => {
+      if (!target.empty || !target.list) return;
+      target.empty.style.display = '';
+      target.empty.textContent = '讀取公開閱覽連結中...';
+      target.list.innerHTML = '';
+    });
+    return;
+  }
+  const rows = Array.isArray(S.previewShareAdmin) ? S.previewShareAdmin : [];
+  const html = getPreviewShareAdminRowsHtml(rows);
+  targets.forEach(target => {
+    if (!target.empty || !target.list) return;
+    target.empty.style.display = rows.length ? 'none' : '';
+    target.empty.textContent = '目前頁籤還沒有已建立的公開閱覽連結';
+    target.list.innerHTML = html;
+  });
 }
 
 async function loadPreviewShareAdminList() {
@@ -5844,6 +6101,7 @@ async function loadRoleConfig() {
     applyRolePermissionUI();
     await loadPreviewShareAdminList();
     renderMan();
+    syncAdminTabVisibility(S.currentAuthUser?.role === 'owner' ? S.adminTab : 'cfg');
   } catch (e) {
     toast(e.message, 'err');
   }
@@ -5945,8 +6203,10 @@ function applyRolePermissionUI() {
   const canEditOrder = canRolePermission('editItemOrder');
   const canEditSite = S.currentAuthUser?.role === 'owner';
   const canEditAttachments = canRolePermission('editTxtAttachments');
+  const canManageTab = canAccessAdminManageTab();
   const appearanceSection = document.getElementById('appearance-disc');
   const collectionSection = document.getElementById('collection-disc');
+  const hostUsageSection = document.getElementById('cfg-host-usage-section');
   const globalSection = document.getElementById('cfg-global-section');
   const cfgRoleSection = document.getElementById('cfg-role-disc');
   const authSection = document.getElementById('cfg-auth-disc');
@@ -5955,10 +6215,13 @@ function applyRolePermissionUI() {
   const authHelp = document.getElementById('auth-user-help');
   const selfRolePanel = document.getElementById('cfg-self-role-panel');
   const authTitle = document.getElementById('cfg-auth-title');
+  const roleDisc = document.getElementById('role-disc');
   if (appearanceSection) appearanceSection.style.display = canEditSite ? '' : 'none';
   if (collectionSection) collectionSection.style.display = canEditSite ? '' : 'none';
+  if (hostUsageSection) hostUsageSection.style.display = canEditSite ? '' : 'none';
   if (globalSection) globalSection.style.display = canEditSite ? '' : 'none';
   if (cfgRoleSection) cfgRoleSection.style.display = canEditSite ? '' : 'none';
+  if (roleDisc) roleDisc.style.display = canEditSite ? '' : 'none';
   if (shareLinksDisc) shareLinksDisc.style.display = canEditSite ? '' : 'none';
   if (authSection) authSection.style.display = '';
   if (authSection) {
@@ -5971,6 +6234,8 @@ function applyRolePermissionUI() {
   if (authTitle) authTitle.textContent = '帳號';
   renderSelfRolePermissionPanel();
   renderPreviewShareAdminPanel();
+  applyManageDisclosureVisibility();
+  syncAdminTabVisibility(S.currentAuthUser?.role === 'owner' ? S.adminTab : 'cfg');
   document.getElementById('lb-dl')?.toggleAttribute('disabled', !canDownload);
   document.getElementById('btn-do-up')?.toggleAttribute('disabled', !canUpload);
   document.getElementById('btn-clear-form')?.toggleAttribute('disabled', !canUpload);
@@ -6001,6 +6266,7 @@ function applyRolePermissionUI() {
   document.getElementById('btn-man-page-save')?.toggleAttribute('disabled', !canEditOrder);
   document.getElementById('btn-man-page-cancel')?.toggleAttribute('disabled', !canEditOrder);
   document.querySelector('#tab-man .disc-page-btn')?.toggleAttribute('disabled', !canEditOrder);
+  document.getElementById('tab-man')?.classList.toggle('admin-man-readonly', !canManageTab);
 }
 
 function normalizeGoogleEmail(email) {
