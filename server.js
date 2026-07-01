@@ -48,6 +48,7 @@ const DEFAULT_COLLECTIONS = [
   { key: 'image', label: '圖庫', mode: 'image' }
 ];
 const MANAGE_LOCK_TTL_MS = 45 * 1000;
+const PREVIEW_SHARE_ACCESS_TTL_MS = 1000 * 60 * 60 * 12;
 const managePageLocks = new Map();
 
 // 確保目錄存在
@@ -2929,7 +2930,9 @@ function getPreviewShareEntry(cfg, token = '') {
     itemId: String(source.itemId || '').trim(),
     fileKey: String(source.fileKey || '').trim(),
     relativePath: String(source.relativePath || '').replace(/\\/g, '/').trim(),
-    createdAt: Number(source.createdAt) || Date.now()
+    createdAt: Number(source.createdAt) || Date.now(),
+    enabled: source.enabled !== false,
+    passwordHash: typeof source.passwordHash === 'string' ? source.passwordHash : ''
   };
 }
 
@@ -2984,7 +2987,9 @@ function normalizePreviewShareLinks(existingLinks = {}, cfg = null) {
       itemId: String(entry.itemId || '').trim(),
       fileKey: String(entry.fileKey || '').trim(),
       relativePath: String(entry.relativePath || '').replace(/\\/g, '/').trim(),
-      createdAt: Number(entry.createdAt) || Date.now()
+      createdAt: Number(entry.createdAt) || Date.now(),
+      enabled: entry.enabled !== false,
+      passwordHash: typeof entry.passwordHash === 'string' ? entry.passwordHash : ''
     };
     if (!share.itemId || (!share.fileKey && !share.relativePath)) continue;
     const targetKey = buildPreviewShareTargetKey(share);
@@ -3016,6 +3021,99 @@ function cleanupPreviewShareLinksInConfig(cfg = null) {
     writeJSON(CFG_FILE, currentCfg);
   }
   return currentCfg;
+}
+
+function buildPreviewShareUrl(req, token = '') {
+  const sharePath = `/preview-share/${encodeURIComponent(String(token || '').trim())}`;
+  return {
+    sharePath,
+    shareUrl: `${req.protocol}://${req.get('host')}${sharePath}`
+  };
+}
+
+function getPreviewSharePasswordVersion(cfg, share = {}) {
+  return sign(String(share?.passwordHash || ''), cfg?.authSecret || '');
+}
+
+function makePreviewShareAccessToken(cfg, share = {}) {
+  const body = Buffer.from(JSON.stringify({
+    iat: Date.now(),
+    rnd: crypto.randomBytes(8).toString('hex'),
+    token: String(share?.token || '').trim(),
+    pv: getPreviewSharePasswordVersion(cfg, share)
+  })).toString('base64url');
+  const sig = sign(body, cfg.authSecret);
+  return `${body}.${sig}`;
+}
+
+function verifyPreviewShareAccessToken(cfg, share = {}, token = '') {
+  if (!token || !token.includes('.')) return false;
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return false;
+  const expected = sign(body, cfg.authSecret);
+  if (!safeEq(sig, expected)) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (!(Number(payload.iat) > 0 && (Date.now() - Number(payload.iat)) <= PREVIEW_SHARE_ACCESS_TTL_MS)) return false;
+    if (String(payload.token || '').trim() !== String(share?.token || '').trim()) return false;
+    if (String(payload.pv || '') !== getPreviewSharePasswordVersion(cfg, share)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getPreviewShareAccessTokenFromReq(req) {
+  const headerToken = String(req.headers['x-preview-share-access'] || '').trim();
+  if (headerToken) return headerToken;
+  const queryToken = String(req.query?.access || '').trim();
+  return queryToken;
+}
+
+function getPreviewShareAccessState(cfg, share = {}, req = null) {
+  if (!share?.token) return { ok: false, status: 404, error: '找不到分享的線上閱覽檔案' };
+  if (share.enabled === false) return { ok: false, status: 403, error: '此公開連結目前已取消公開' };
+  if (!share.passwordHash) return { ok: true, requiresPassword: false };
+  const accessToken = req ? getPreviewShareAccessTokenFromReq(req) : '';
+  if (verifyPreviewShareAccessToken(cfg, share, accessToken)) return { ok: true, requiresPassword: true };
+  return {
+    ok: false,
+    status: 401,
+    error: '此公開連結需要密碼',
+    requiresPassword: true
+  };
+}
+
+function listPreviewSharesForCollection(cfg, collection = 'scenario', req = null) {
+  const cat = readCat(collection);
+  const itemMap = new Map((cat.items || []).map(item => [item.id, item]));
+  return Object.keys(cfg?.previewShareLinks || {})
+    .map(token => {
+      const share = getPreviewShareEntry(cfg, token);
+      if (!share || share.collection !== collection) return null;
+      const item = itemMap.get(share.itemId);
+      if (!item) return null;
+      const previewIndex = resolvePreviewFileIndexByShare(item, share);
+      if (previewIndex < 0) return null;
+      const preview = resolvePreview(item, previewIndex, share.collection);
+      if (!preview) return null;
+      const shareUrlInfo = req ? buildPreviewShareUrl(req, token) : { sharePath: `/preview-share/${encodeURIComponent(token)}`, shareUrl: '' };
+      return {
+        token,
+        itemId: item.id,
+        itemTitle: item.translatedTitle || item.title || item.subtitle || '未命名項目',
+        previewLabel: preview.label || preview.filename || preview.file?.name || '',
+        previewFilename: preview.filename || preview.file?.name || '',
+        createdAt: Number(share.createdAt) || Date.now(),
+        createdAtLabel: formatDateTimeToSecond(share.createdAt),
+        enabled: share.enabled !== false,
+        hasPassword: !!share.passwordHash,
+        sharePath: shareUrlInfo.sharePath,
+        shareUrl: shareUrlInfo.shareUrl
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 }
 
 function findExistingPreviewShareToken(existingLinks = {}, target = {}) {
@@ -3760,19 +3858,45 @@ app.post('/api/items/:id/preview-share', auth, (req, res) => {
       itemId: item.id,
       fileKey: String(file.key || '').trim(),
       relativePath: String(file.relativePath || file.name || '').replace(/\\/g, '/').trim(),
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      enabled: true,
+      passwordHash: ''
     };
     let token = findExistingPreviewShareToken(cfg.previewShareLinks, shareEntry);
-    if (!token) {
-      token = createPreviewShareToken(cfg.previewShareLinks);
-      cfg.previewShareLinks[token] = shareEntry;
-      saveCfg(cfg);
-    }
-    const sharePath = `/preview-share/${encodeURIComponent(token)}`;
+    if (!token) token = createPreviewShareToken(cfg.previewShareLinks);
+    const previous = cfg.previewShareLinks[token] && typeof cfg.previewShareLinks[token] === 'object' ? cfg.previewShareLinks[token] : {};
+    cfg.previewShareLinks[token] = {
+      ...previous,
+      ...shareEntry,
+      enabled: true,
+      passwordHash: typeof previous.passwordHash === 'string' ? previous.passwordHash : ''
+    };
+    saveCfg(cfg);
+    const { sharePath, shareUrl } = buildPreviewShareUrl(req, token);
     return res.json({
       ok: true,
       sharePath,
-      shareUrl: `${req.protocol}://${req.get('host')}${sharePath}`
+      shareUrl
+    });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/preview-share/:token/auth', (req, res) => {
+  try {
+    const cfg = readCfg();
+    const share = getPreviewShareEntry(cfg, req.params.token);
+    if (!share) return res.status(404).json({ error: '找不到分享的線上閱覽檔案' });
+    if (share.enabled === false) return res.status(403).json({ error: '此公開連結目前已取消公開' });
+    if (!share.passwordHash) return res.json({ ok: true, accessToken: '' });
+    const password = String(req.body?.password || '');
+    if (!password || !safeEq(sha256(password), share.passwordHash)) {
+      return res.status(401).json({ error: '密碼錯誤', requiresPassword: true });
+    }
+    return res.json({
+      ok: true,
+      accessToken: makePreviewShareAccessToken(cfg, share)
     });
   } catch (e) {
     return res.status(400).json({ error: e.message });
@@ -3882,6 +4006,13 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
     .card{background:var(--panel);border:1px solid var(--border);padding:24px 28px;max-width:520px;width:100%}
     h1{margin:0 0 10px;font-family:"Noto Serif TC",serif;font-size:1.25rem}
     p{margin:0;color:var(--muted);line-height:1.7}
+    .pw-form{display:none;gap:10px;margin-top:18px}
+    .pw-form.on{display:grid}
+    .pw-form input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:rgba(255,255,255,.03);color:var(--text);font:inherit;outline:none}
+    .pw-form input:focus{border-color:#c9a84c}
+    .pw-form button{padding:12px 14px;border:none;border-radius:12px;background:#c9a84c;color:#17120a;font:inherit;cursor:pointer}
+    .pw-hint{display:none;margin-top:10px;font-size:.92rem}
+    .pw-hint.on{display:block}
     iframe,embed{display:block;border:none;width:100%;height:100vh}
     .media-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
     .media-wrap img,.media-wrap video{display:block;max-width:min(100%,1200px);max-height:calc(100vh - 40px);border:none}
@@ -4053,6 +4184,11 @@ function renderPreviewShareShell(token = '', options = {}) {
     <div class="card">
       <h1>公開閱覽</h1>
       <p id="msg">正在載入檔案...</p>
+      <form class="pw-form" id="pw-form">
+        <input type="password" id="pw-input" placeholder="請輸入訪問密碼" autocomplete="current-password">
+        <button type="submit">送出密碼</button>
+      </form>
+      <p class="pw-hint" id="pw-hint"></p>
     </div>
   </div>
   <script>
@@ -4064,6 +4200,38 @@ function renderPreviewShareShell(token = '', options = {}) {
     document.addEventListener('contextmenu', event => event.preventDefault());
     const token = ${JSON.stringify(String(token || '').trim())};
     const msg = document.getElementById('msg');
+    const pwForm = document.getElementById('pw-form');
+    const pwInput = document.getElementById('pw-input');
+    const pwHint = document.getElementById('pw-hint');
+    let accessToken = '';
+
+    function showPasswordForm(text = '此公開連結需要密碼') {
+      msg.textContent = text;
+      pwForm.classList.add('on');
+      pwHint.classList.remove('on');
+      pwHint.textContent = '';
+      setTimeout(() => pwInput.focus(), 0);
+    }
+
+    function setPasswordHint(text = '') {
+      pwHint.textContent = text;
+      pwHint.classList.toggle('on', !!text);
+    }
+
+    async function submitPassword(password) {
+      const resp = await fetch('/api/preview-share/' + encodeURIComponent(token) + '/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || '密碼驗證失敗');
+      accessToken = typeof data.accessToken === 'string' ? data.accessToken : '';
+      pwForm.classList.remove('on');
+      setPasswordHint('');
+      msg.textContent = '密碼驗證成功，正在載入檔案...';
+      return openPreview();
+    }
 
     async function openPreview() {
       function applyMediaViewerTheme() {
@@ -4073,13 +4241,19 @@ function renderPreviewShareShell(token = '', options = {}) {
         document.body.style.background = '#111118';
       }
       const url = '/api/preview-share/' + encodeURIComponent(token);
-      const resp = await fetch(url);
+      const headers = accessToken ? { 'x-preview-share-access': accessToken } : {};
+      const resp = await fetch(url, { headers });
       if (!resp.ok) {
         let text = '無法載入檔案';
         try {
           const data = await resp.json();
+          if (resp.status === 401 && data.requiresPassword) {
+            showPasswordForm(data.error || '此公開連結需要密碼');
+            return;
+          }
           text = data.error || text;
         } catch {}
+        pwForm.classList.remove('on');
         msg.textContent = text;
         return;
       }
@@ -4144,6 +4318,19 @@ function renderPreviewShareShell(token = '', options = {}) {
       document.write(html);
       document.close();
     }
+
+    pwForm.addEventListener('submit', event => {
+      event.preventDefault();
+      const password = pwInput.value || '';
+      if (!password) {
+        setPasswordHint('請先輸入密碼');
+        pwInput.focus();
+        return;
+      }
+      submitPassword(password).catch(err => {
+        setPasswordHint(err.message || '密碼驗證失敗');
+      });
+    });
 
     openPreview().catch(() => {
       msg.textContent = '載入預覽失敗，請稍後再試。';
@@ -4240,6 +4427,13 @@ app.get('/api/preview-share/:token', (req, res) => {
     const cfg = readCfg();
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).json({ error: '找不到分享的線上閱覽檔案' });
+    const accessState = getPreviewShareAccessState(cfg, resolved.share, req);
+    if (!accessState.ok) {
+      return res.status(accessState.status || 403).json({
+        error: accessState.error || '無法存取這個公開連結',
+        requiresPassword: !!accessState.requiresPassword
+      });
+    }
     return sendResolvedPreview(res, resolved.item, resolved.preview, resolved.previewIndex, {
       collection: resolved.share.collection,
       canEditTxt: false,
@@ -4653,6 +4847,102 @@ app.get('/api/collections-config', auth, (req, res) => {
     const cfg = readCfg();
     res.json({ collections: getCollectionsConfig(cfg) });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/preview-share-links', auth, (req, res) => {
+  try {
+    if (req.authUser?.role !== 'owner') {
+      return res.status(403).json({ error: '只有站主可以管理公開連結' });
+    }
+    const cfg = readCfg();
+    const collection = getC(req);
+    return res.json({
+      shares: listPreviewSharesForCollection(cfg, collection, req)
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/preview-share-links/:token/status', auth, (req, res) => {
+  try {
+    if (req.authUser?.role !== 'owner') {
+      return res.status(403).json({ error: '只有站主可以管理公開連結' });
+    }
+    const cfg = readCfg();
+    const collection = getC(req);
+    const share = getPreviewShareEntry(cfg, req.params.token);
+    if (!share || share.collection !== collection) return res.status(404).json({ error: '找不到這筆公開連結' });
+    cfg.previewShareLinks[share.token] = {
+      ...(cfg.previewShareLinks[share.token] || {}),
+      enabled: req.body?.enabled !== false
+    };
+    saveCfg(cfg);
+    return res.json({
+      ok: true,
+      shares: listPreviewSharesForCollection(readCfg(), collection, req)
+    });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.put('/api/preview-share-links/:token/password', auth, (req, res) => {
+  try {
+    if (req.authUser?.role !== 'owner') {
+      return res.status(403).json({ error: '只有站主可以管理公開連結' });
+    }
+    const cfg = readCfg();
+    const collection = getC(req);
+    const share = getPreviewShareEntry(cfg, req.params.token);
+    if (!share || share.collection !== collection) return res.status(404).json({ error: '找不到這筆公開連結' });
+    const password = String(req.body?.password || '');
+    if (!password) return res.status(400).json({ error: '請輸入密碼' });
+    cfg.previewShareLinks[share.token] = {
+      ...(cfg.previewShareLinks[share.token] || {}),
+      passwordHash: sha256(password)
+    };
+    saveCfg(cfg);
+    return res.json({
+      ok: true,
+      shares: listPreviewSharesForCollection(readCfg(), collection, req)
+    });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.delete('/api/preview-share-links/:token/password', auth, (req, res) => {
+  try {
+    if (req.authUser?.role !== 'owner') {
+      return res.status(403).json({ error: '只有站主可以管理公開連結' });
+    }
+    const cfg = readCfg();
+    const collection = getC(req);
+    const share = getPreviewShareEntry(cfg, req.params.token);
+    if (!share || share.collection !== collection) return res.status(404).json({ error: '找不到這筆公開連結' });
+    cfg.previewShareLinks[share.token] = {
+      ...(cfg.previewShareLinks[share.token] || {}),
+      passwordHash: ''
+    };
+    saveCfg(cfg);
+    return res.json({
+      ok: true,
+      shares: listPreviewSharesForCollection(readCfg(), collection, req)
+    });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.delete('/api/preview-share-links/:token', auth, (req, res) => {
+  try {
+    if (req.authUser?.role !== 'owner') {
+      return res.status(403).json({ error: '只有站主可以管理公開連結' });
+    }
+    const cfg = readCfg();
+    const collection = getC(req);
+    const share = getPreviewShareEntry(cfg, req.params.token);
+    if (!share || share.collection !== collection) return res.status(404).json({ error: '找不到這筆公開連結' });
+    delete cfg.previewShareLinks[share.token];
+    saveCfg(cfg);
+    return res.json({
+      ok: true,
+      shares: listPreviewSharesForCollection(readCfg(), collection, req)
+    });
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 app.put('/api/collections-config', auth, (req, res) => {

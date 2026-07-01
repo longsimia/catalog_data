@@ -585,6 +585,21 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .self-role-perm-item input[type="checkbox"]{margin:.12rem 0 0;accent-color:var(--gold)}
 .disc-page-btn{display:inline-flex;align-items:center;gap:.3rem;padding:.22rem .52rem;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.02);color:var(--muted);font-size:.72rem;font-family:inherit;cursor:pointer;transition:all .18s}
 .disc-page-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gglow)}
+.share-admin-shell{display:grid;gap:.7rem}
+.share-admin-empty{padding:.95rem .3rem .2rem;text-align:center;color:var(--muted);font-size:.8rem}
+.share-admin-list{display:grid;gap:.65rem}
+.share-admin-row{display:grid;gap:.55rem;padding:.8rem;border:1px solid var(--border);border-radius:var(--r);background:var(--panel)}
+.share-admin-main{display:flex;align-items:flex-start;justify-content:space-between;gap:.7rem}
+.share-admin-title{min-width:0}
+.share-admin-title strong{display:block;font-size:.84rem;color:var(--text);line-height:1.55}
+.share-admin-title span{display:block;font-size:.75rem;color:var(--muted);line-height:1.55;word-break:break-all}
+.share-admin-meta{display:flex;flex-wrap:wrap;gap:.35rem}
+.share-admin-badge{display:inline-flex;align-items:center;gap:.26rem;padding:.16rem .45rem;border-radius:999px;border:1px solid var(--border);font-size:.68rem;color:var(--muted);background:var(--bg2)}
+.share-admin-badge.on{border-color:rgba(77,180,126,.35);color:#73c993;background:rgba(77,180,126,.08)}
+.share-admin-badge.off{border-color:rgba(201,116,96,.35);color:#d98f7f;background:rgba(201,116,96,.08)}
+.share-admin-badge.locked{border-color:rgba(201,168,76,.35);color:var(--gold);background:var(--gglow)}
+.share-admin-actions{display:flex;flex-wrap:wrap;gap:.42rem}
+.share-admin-actions .btn{min-height:30px;padding:.28rem .62rem;font-size:.74rem;white-space:nowrap}
 .manage-page{display:none}
 .manage-page.on{
   display:flex;flex-direction:column;
@@ -1363,6 +1378,15 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           <div class="role-grid" id="role-config-list"></div>
         </div>
       </details>
+      <details class="disc" id="share-links-disc" data-disc-id="share-links-disc" style="display:none">
+        <summary><div class="disc-head"><span>公開連結管理</span><span class="disc-head-actions"></span></div></summary>
+        <div class="disc-body">
+          <div class="share-admin-shell" id="share-admin-shell">
+            <div class="share-admin-empty" id="share-admin-empty">目前頁籤還沒有已建立的公開連結</div>
+            <div class="share-admin-list" id="share-admin-list"></div>
+          </div>
+        </div>
+      </details>
       <div class="sh">類別庫</div>
       <div class="tag-man-box" id="cat-man-box">
         <div class="manage-block-head">
@@ -1645,6 +1669,8 @@ const S = {
   eTags:  [], eCatsPicked: [], eId: null, ePrevs: [], eDownloadEntries: [],
   authUsers: [], currentAuthUser: null, roleConfig: null, allRoleConfig: null,
   savedRoleLabels: null, savedRolePerms: null,
+  previewShareAdmin: [],
+  previewShareAdminLoading: false,
   downloadModalData: null,
   hostUsage: null,
   previewModalState: null,
@@ -2811,6 +2837,34 @@ async function api(method, url, body) {
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
   return data;
+}
+
+function formatAdminDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('sv-SE', {
+    hour12: false,
+    timeZone: 'Asia/Taipei'
+  }).replace(',', '');
+}
+
+async function copyText(text) {
+  const value = String(text || '');
+  if (!value) return false;
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+  const input = document.createElement('textarea');
+  input.value = value;
+  input.setAttribute('readonly', 'readonly');
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  document.body.appendChild(input);
+  input.select();
+  const ok = document.execCommand('copy');
+  input.remove();
+  return ok;
 }
 
 function fileUrl(key) {
@@ -4657,6 +4711,7 @@ async function sharePreviewFile(index) {
     const sharePath = String(resp?.sharePath || '').trim();
     const shareUrl = String(resp?.shareUrl || '').trim() || (sharePath ? new URL(sharePath, window.location.origin).toString() : '');
     if (!shareUrl) throw new Error('分享連結建立失敗');
+    if (S.currentAuthUser?.role === 'owner') loadPreviewShareAdminList().catch(() => {});
     window.open(shareUrl, '_blank', 'noopener');
   } catch (e) {
     toast(e.message || '分享連結建立失敗', 'err');
@@ -4671,6 +4726,7 @@ async function sharePreviewFileDirect(itemId, index) {
     const sharePath = String(resp?.sharePath || '').trim();
     const shareUrl = String(resp?.shareUrl || '').trim() || (sharePath ? new URL(sharePath, window.location.origin).toString() : '');
     if (!shareUrl) throw new Error('分享連結建立失敗');
+    if (S.currentAuthUser?.role === 'owner') loadPreviewShareAdminList().catch(() => {});
     window.open(shareUrl, '_blank', 'noopener');
   } catch (e) {
     toast(e.message || '分享連結建立失敗', 'err');
@@ -5636,6 +5692,140 @@ function extractRolePerms(cfg) {
   return out;
 }
 
+function renderPreviewShareAdminPanel() {
+  const disc = document.getElementById('share-links-disc');
+  const empty = document.getElementById('share-admin-empty');
+  const list = document.getElementById('share-admin-list');
+  const isOwner = S.currentAuthUser?.role === 'owner';
+  if (disc) disc.style.display = isOwner ? '' : 'none';
+  if (!empty || !list) return;
+  if (!isOwner) {
+    list.innerHTML = '';
+    empty.style.display = 'none';
+    return;
+  }
+  if (S.previewShareAdminLoading) {
+    empty.style.display = '';
+    empty.textContent = '公開連結讀取中...';
+    list.innerHTML = '';
+    return;
+  }
+  const rows = Array.isArray(S.previewShareAdmin) ? S.previewShareAdmin : [];
+  empty.style.display = rows.length ? 'none' : '';
+  empty.textContent = '目前頁籤還沒有已建立的公開連結';
+  list.innerHTML = rows.map(share => {
+    const statusBadge = share.enabled
+      ? `<span class="share-admin-badge on">公開中</span>`
+      : `<span class="share-admin-badge off">已停用</span>`;
+    const passwordBadge = share.hasPassword
+      ? `<span class="share-admin-badge locked">${icon('lock')}<span>密碼保護中</span></span>`
+      : '';
+    const createdAt = share.createdAtLabel || formatAdminDateTime(share.createdAt);
+    return `<div class="share-admin-row">
+      <div class="share-admin-main">
+        <div class="share-admin-title">
+          <strong>${esc(share.itemTitle || '未命名項目')}</strong>
+          <span>${esc(share.previewLabel || share.previewFilename || '附件')}</span>
+          <span>${esc(share.shareUrl || '')}</span>
+        </div>
+        <div class="share-admin-meta">
+          ${statusBadge}
+          ${passwordBadge}
+        </div>
+      </div>
+      <div class="share-admin-title">
+        <span>建立時間：${esc(createdAt || '-')}</span>
+      </div>
+      <div class="share-admin-actions">
+        <button class="btn btn-out" type="button" onclick="copyPreviewShareLink('${esc(share.token)}')">${icon('link')}<span>複製網址</span></button>
+        <button class="btn btn-out" type="button" onclick="togglePreviewShareEnabled('${esc(share.token)}', ${share.enabled ? 'false' : 'true'})">${share.enabled ? '取消公開' : '恢復公開'}</button>
+        <button class="btn btn-out" type="button" onclick="setPreviewSharePasswordPrompt('${esc(share.token)}')">${share.hasPassword ? '更新密碼' : '設定密碼'}</button>
+        ${share.hasPassword ? `<button class="btn btn-out" type="button" onclick="clearPreviewSharePassword('${esc(share.token)}')">清除密碼</button>` : ''}
+        <button class="btn btn-out" type="button" onclick="deletePreviewShareLink('${esc(share.token)}')">${icon('trash')}<span>刪除公開網址</span></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadPreviewShareAdminList() {
+  if (S.currentAuthUser?.role !== 'owner' || !getToken()) {
+    S.previewShareAdminLoading = false;
+    S.previewShareAdmin = [];
+    renderPreviewShareAdminPanel();
+    return;
+  }
+  S.previewShareAdminLoading = true;
+  renderPreviewShareAdminPanel();
+  try {
+    const data = await api('GET', '/api/preview-share-links');
+    S.previewShareAdmin = Array.isArray(data?.shares) ? data.shares : [];
+  } catch (e) {
+    S.previewShareAdmin = [];
+    toast(e.message || '讀取公開連結失敗', 'err');
+  } finally {
+    S.previewShareAdminLoading = false;
+    renderPreviewShareAdminPanel();
+  }
+}
+
+async function syncPreviewShareAdmin(url, method, body, successMessage) {
+  const data = await api(method, url, body);
+  S.previewShareAdmin = Array.isArray(data?.shares) ? data.shares : [];
+  S.previewShareAdminLoading = false;
+  renderPreviewShareAdminPanel();
+  if (successMessage) toast(successMessage, 'ok');
+  return data;
+}
+
+async function copyPreviewShareLink(token) {
+  const share = (S.previewShareAdmin || []).find(entry => entry.token === token);
+  if (!share?.shareUrl) { toast('找不到可複製的網址', 'err'); return; }
+  try {
+    await copyText(share.shareUrl);
+    toast('已複製公開網址', 'ok');
+  } catch (e) {
+    toast(e.message || '複製網址失敗', 'err');
+  }
+}
+
+async function togglePreviewShareEnabled(token, enabled) {
+  try {
+    await syncPreviewShareAdmin(`/api/preview-share-links/${encodeURIComponent(token)}/status`, 'PUT', { enabled: !!enabled }, enabled ? '已恢復公開' : '已取消公開');
+  } catch (e) {
+    toast(e.message || '更新公開狀態失敗', 'err');
+  }
+}
+
+async function setPreviewSharePasswordPrompt(token) {
+  const password = prompt('請輸入新的訪問密碼');
+  if (password === null) return;
+  const raw = String(password || '');
+  if (!raw) { toast('密碼不可空白', 'err'); return; }
+  try {
+    await syncPreviewShareAdmin(`/api/preview-share-links/${encodeURIComponent(token)}/password`, 'PUT', { password: raw }, '已更新訪問密碼');
+  } catch (e) {
+    toast(e.message || '設定密碼失敗', 'err');
+  }
+}
+
+async function clearPreviewSharePassword(token) {
+  if (!confirm('確定要清除此公開網址的訪問密碼？')) return;
+  try {
+    await syncPreviewShareAdmin(`/api/preview-share-links/${encodeURIComponent(token)}/password`, 'DELETE', undefined, '已清除訪問密碼');
+  } catch (e) {
+    toast(e.message || '清除密碼失敗', 'err');
+  }
+}
+
+async function deletePreviewShareLink(token) {
+  if (!confirm('確定要刪除這個公開網址？刪除後它會從這個區塊消失，之後重新公開會產生新的固定連結。')) return;
+  try {
+    await syncPreviewShareAdmin(`/api/preview-share-links/${encodeURIComponent(token)}`, 'DELETE', undefined, '已刪除公開網址');
+  } catch (e) {
+    toast(e.message || '刪除公開網址失敗', 'err');
+  }
+}
+
 async function loadRoleConfig() {
   try {
     const data = await api('GET', '/api/role-config');
@@ -5652,6 +5842,7 @@ async function loadRoleConfig() {
     renderSelfRolePermissionPanel();
     applyRoleLabels();
     applyRolePermissionUI();
+    await loadPreviewShareAdminList();
     renderMan();
   } catch (e) {
     toast(e.message, 'err');
@@ -5759,6 +5950,7 @@ function applyRolePermissionUI() {
   const globalSection = document.getElementById('cfg-global-section');
   const cfgRoleSection = document.getElementById('cfg-role-disc');
   const authSection = document.getElementById('cfg-auth-disc');
+  const shareLinksDisc = document.getElementById('share-links-disc');
   const authInlineHead = document.getElementById('cfg-auth-inline-head');
   const authHelp = document.getElementById('auth-user-help');
   const selfRolePanel = document.getElementById('cfg-self-role-panel');
@@ -5767,6 +5959,7 @@ function applyRolePermissionUI() {
   if (collectionSection) collectionSection.style.display = canEditSite ? '' : 'none';
   if (globalSection) globalSection.style.display = canEditSite ? '' : 'none';
   if (cfgRoleSection) cfgRoleSection.style.display = canEditSite ? '' : 'none';
+  if (shareLinksDisc) shareLinksDisc.style.display = canEditSite ? '' : 'none';
   if (authSection) authSection.style.display = '';
   if (authSection) {
     authSection.classList.toggle('plain-section', !canEditSite);
@@ -5777,6 +5970,7 @@ function applyRolePermissionUI() {
   if (selfRolePanel) selfRolePanel.style.display = canEditSite ? 'none' : '';
   if (authTitle) authTitle.textContent = '帳號';
   renderSelfRolePermissionPanel();
+  renderPreviewShareAdminPanel();
   document.getElementById('lb-dl')?.toggleAttribute('disabled', !canDownload);
   document.getElementById('btn-do-up')?.toggleAttribute('disabled', !canUpload);
   document.getElementById('btn-clear-form')?.toggleAttribute('disabled', !canUpload);
