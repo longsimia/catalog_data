@@ -4163,12 +4163,14 @@ function renderPreviewShareShell(token = '', options = {}) {
   ${isImageShare ? '' : `<meta name="twitter:description" content="${safeDescription}">`}
   ${safeImageUrl ? `<meta name="twitter:image" content="${safeImageUrl}">` : ''}
   <style>
-    :root{--bg:#111118;--panel:#15151d;--text:#e8e2d6;--muted:#8e8a98;--border:#28283a}
+    :root{--bg:#111118;--panel:#15151d;--text:#e8e2d6;--muted:#8e8a98;--border:#28283a;--gold:#c9a84c}
     html{color-scheme:dark}
     html[data-theme="light"],body[data-theme="light"]{
       color-scheme:light;
       --bg:#e6e6e6;--panel:#ffffff;--text:#3b342d;--muted:#9b9084;--border:#ece5db;
     }
+    html[data-theme="light"] .pw-form button,body[data-theme="light"] .pw-form button{color:#5E4F36}
+    html[data-theme="light"] .pw-form button:hover,body[data-theme="light"] .pw-form button:hover{color:#140f00}
     *{box-sizing:border-box}
     body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif}
     .state{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center}
