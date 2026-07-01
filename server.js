@@ -1765,7 +1765,7 @@ function decodeTextBuffer(buf) {
   const HAN_RE = /\p{Script=Han}/gu;
   const HIRAGANA_KATAKANA_RE = /[\u3040-\u30FF]/gu;
   const PRINTABLE_RE = /[\t\n\r\u0020-\u007E\u00A0-\u024F\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/gu;
-  const SUSPICIOUS_RE = /[�□�▲△◆◇○◎●☆★※〒→←↑↓╳╱╲]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/gu;
+  const SUSPICIOUS_RE = /[ □ ▲△◆◇○◎●☆★※〒→←↑↓╳╱╲]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/gu;
   const MOJIBAKE_RE = /[螟譛縺繧繝莠蜈逕荳莉驛鬮鞜魍鮖籖]/gu;
   function scoreDecodedText(text, encoding) {
     const value = String(text || '');
@@ -1878,7 +1878,7 @@ function decodeTextBufferWithEncoding(buf, encoding) {
     const JP_CHARS = 'のにをたがでてとしれさあるいるもするからなこととしていくられるへるやだですます';
     const CJK_WORDS = ['設定', '內容', '說明', '角色', '資料', '規則', '場景', '檔案', '編輯', '版本'];
     const PRINTABLE_RE = /[\t\n\r\u0020-\u007E\u00A0-\u024F\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/gu;
-    const SUSPICIOUS_RE = /[�□�▲△◆◇○◎●☆★※〒→←↑↓╳╱╲]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/gu;
+    const SUSPICIOUS_RE = /[ □ ▲△◆◇○◎●☆★※〒→←↑↓╳╱╲]|[\u0000-\u0008\u000B\u000C\u000E-\u001F]/gu;
     const KANA_RE = /[\u3040-\u30FF]/gu;
     const scoreFamilyText = (text, family) => {
       const value = String(text || '');
@@ -2485,9 +2485,9 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .encoding-toggle[aria-expanded="true"] .encoding-toggle-caret{transform:translateY(1px) rotate(180deg)}
     .encoding-select{position:absolute;pointer-events:none;opacity:0;width:1px;height:1px;inset:auto}
     .encoding-menu{position:fixed;top:0;left:0;width:var(--encoding-menu-width,160px);padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);box-shadow:0 18px 48px rgba(0,0,0,.18);z-index:140;opacity:0;transform:translateY(-6px);transform-origin:top left;max-height:0;overflow:hidden;pointer-events:none;transition:opacity .2s ease,transform .22s ease,max-height .22s ease,padding-top .22s ease,padding-bottom .22s ease,border-color .22s ease}
-    .encoding-menu.is-open{opacity:1;transform:translateY(0);max-height:320px;pointer-events:auto}
+    .encoding-menu.is-open{opacity:1;transform:translateY(0);max-height:520px;pointer-events:auto}
     .encoding-menu-group + .encoding-menu-group{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
-    .encoding-menu-item{display:block;width:100%;border:none;background:transparent;color:var(--muted);padding:4px 0;font:inherit;font-size:15px;line-height:1.35;text-align:left;cursor:pointer}
+    .encoding-menu-item{display:block;width:100%;border:none;background:transparent;color:var(--muted);padding:4px 0;font:inherit;font-size:12px;line-height:1.35;text-align:left;cursor:pointer}
     .encoding-menu-item:hover,.encoding-menu-item.is-active{color:var(--text)}
     .article{font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word}
     .article-body,.editor{margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.92;font-size:16px;font-family:inherit;letter-spacing:.01em}
@@ -2573,7 +2573,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .article a{color:var(--link);text-decoration:none}
     .article a:hover{text-decoration:underline}
     @media (max-width: 720px){.history-layout{grid-template-columns:minmax(0,1fr)}.history-inline-view{display:none}.history-detail-modal{align-items:stretch;justify-content:stretch}.history-detail-modal .modal-bg{display:none}.history-detail-modal-card{width:100vw;max-height:100dvh;border:none;border-radius:0}.history-detail-shell{max-height:100dvh}.history-detail-topbar{padding:18px 18px 16px}.history-detail-body{padding:16px 16px 24px}.history-detail-footer{padding:14px 16px calc(18px + env(safe-area-inset-bottom))}.history-meta{display:grid;gap:6px;align-items:start}.history-record-body{padding:16px 16px 20px;font-size:16px;line-height:1.88}}
-    @media (max-width: 720px){.page{padding:40px 20px 48px}.meta-head{gap:12px;flex-direction:column}.meta-side{width:100%;align-items:flex-start;gap:12px}.actions{width:100%;justify-content:flex-start}.encoding-field{flex-wrap:wrap;align-items:flex-start}.encoding-toggle,.encoding-menu-item{font-size:15px}.filename-input,.title,.article,.article-body,.editor{font-size:16px;line-height:1.88}.format-grid{grid-template-columns:max-content}.format-action-btn-wide{grid-column:auto}}
+    @media (max-width: 720px){.page{padding:40px 20px 48px}.meta-head{gap:12px;flex-direction:column}.meta-side{width:100%;align-items:flex-start;gap:12px}.actions{width:100%;justify-content:flex-start}.encoding-field{flex-wrap:wrap;align-items:flex-start}.encoding-toggle,.encoding-menu-item{font-size:12px}.filename-input,.title,.article,.article-body,.editor{font-size:16px;line-height:1.88}.format-grid{grid-template-columns:max-content}.format-action-btn-wide{grid-column:auto}}
   </style>
   <script>
     (() => {
