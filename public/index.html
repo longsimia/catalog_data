@@ -611,6 +611,9 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .share-admin-actions{grid-area:actions;display:flex;flex-wrap:wrap;gap:.42rem;align-self:start}
 .share-admin-actions .btn{min-height:30px;padding:.28rem .62rem;font-size:.74rem;white-space:nowrap}
 #share-admin-shell .share-admin-actions{justify-content:flex-start}
+#share-admin-page .share-admin-row{position:relative;padding-left:2.2rem}
+#share-admin-page .share-admin-row.sel{border-color:var(--gold);background:color-mix(in srgb, var(--gglow) 55%, var(--panel));box-shadow:0 0 0 1px var(--gglow)}
+#share-admin-page .share-admin-row-chk{position:absolute;top:.95rem;left:.8rem;width:15px;height:15px;accent-color:var(--gold);cursor:pointer}
 #share-admin-page .share-admin-row{grid-template-columns:132px minmax(0,1fr);grid-template-areas:"thumb main" "thumb actions";grid-template-rows:minmax(0,1fr) auto;align-items:stretch}
 #share-admin-page .share-admin-thumb{width:132px;height:132px;aspect-ratio:auto;align-self:stretch}
 #share-admin-page .share-admin-main{align-self:center;min-height:0}
@@ -618,7 +621,8 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 @media(max-width:700px){
   .share-admin-row{grid-template-columns:1fr;grid-template-areas:"thumb" "main" "actions"}
   .share-admin-thumb{width:100%;max-width:150px}
-  #share-admin-page .share-admin-row{grid-template-columns:1fr;grid-template-areas:"thumb" "main" "actions"}
+  #share-admin-page .share-admin-row{grid-template-columns:1fr;grid-template-areas:"thumb" "main" "actions";padding-left:.8rem}
+  #share-admin-page .share-admin-row-chk{top:.7rem;left:.65rem}
   #share-admin-page .share-admin-thumb{width:100%;max-width:180px;aspect-ratio:4/3;height:auto;min-height:0}
   #share-admin-page .share-admin-actions{align-self:start}
 }
@@ -1525,6 +1529,19 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
             <div class="share-admin-list" id="share-admin-page-list"></div>
           </div>
         </div>
+        <div class="mp-status">
+          <div class="mp-sel-left">
+            <label class="mp-chk-all-lbl" id="share-admin-chk-all-lbl"><input type="checkbox" id="share-admin-chk-all" onchange="previewShareAdminToggleAll(this.checked)">全選目前結果</label>
+            <span class="mp-sel-badge" id="share-admin-sel-badge" style="display:none">已選 0 項</span>
+            <button type="button" class="mp-sel-clear" id="share-admin-sel-clear" onclick="clearPreviewShareAdminSelection()">取消選取</button>
+          </div>
+          <div class="mp-status-right">
+            <button class="btn btn-out" id="share-admin-batch-disable" type="button" onclick="previewShareAdminBatchDisable()" disabled>批量取消公開</button>
+            <button class="btn btn-out" id="share-admin-batch-enable" type="button" onclick="previewShareAdminBatchEnable()" disabled>批量恢復公開</button>
+            <button class="btn btn-gold" id="share-admin-batch-password" type="button" onclick="previewShareAdminBatchSetPassword()" disabled>批量設定密碼</button>
+            <button class="btn btn-err" id="share-admin-batch-delete" type="button" onclick="previewShareAdminBatchDelete()" disabled>批量刪除連結</button>
+          </div>
+        </div>
       </div>
   </div>
 </div>
@@ -1643,14 +1660,14 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 <div class="confirm-modal" id="preview-share-password-modal" onclick="onPreviewSharePasswordModalBackdrop(event)">
   <div class="confirm-box txt-create-modal-box" role="dialog" aria-modal="true" aria-labelledby="preview-share-password-title">
     <h3 id="preview-share-password-title">設定訪問密碼</h3>
-    <p class="txt-modal-help">請輸入新的公開閱覽訪問密碼。</p>
+    <p class="txt-modal-help" id="preview-share-password-help">請輸入新的公開閱覽訪問密碼。</p>
     <div class="txt-create-modal-field">
       <input class="txt-modal-input" id="preview-share-password-input" type="password" spellcheck="false" autocomplete="new-password" placeholder="請輸入密碼" onkeydown="onPreviewSharePasswordInputKeydown(event)">
     </div>
     <p class="txt-modal-help" id="preview-share-password-error" style="display:none;color:var(--err);margin-top:.55rem"></p>
     <div class="txt-modal-actions">
       <button class="btn btn-out" type="button" onclick="closePreviewSharePasswordModal()">取消</button>
-      <button class="btn btn-gold" type="button" onclick="confirmPreviewSharePasswordModal()">確定</button>
+      <button class="btn btn-gold" type="button" id="preview-share-password-confirm" onclick="confirmPreviewSharePasswordModal()">確定</button>
     </div>
   </div>
 </div>
@@ -1660,7 +1677,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
     <p id="preview-share-delete-msg">刪除後這筆公開閱覽連結會從清單消失，之後重新公開會產生新的固定連結。<br>確定要刪除嗎？</p>
     <div class="confirm-actions">
       <button class="btn btn-out" type="button" onclick="closePreviewShareDeleteModal()">取消</button>
-      <button class="btn btn-gold" type="button" onclick="confirmPreviewShareDeleteModal()">確定刪除</button>
+      <button class="btn btn-gold" type="button" id="preview-share-delete-confirm" onclick="confirmPreviewShareDeleteModal()">確定刪除</button>
     </div>
   </div>
 </div>
@@ -1757,8 +1774,9 @@ const S = {
   previewShareAdminLoading: false,
   previewShareAdminSortDir: 'asc',
   previewShareAdminQ: '',
-  previewSharePasswordToken: '',
-  previewShareDeleteToken: '',
+  previewShareAdminSel: new Set(),
+  previewSharePasswordTokens: [],
+  previewShareDeleteTokens: [],
   previewShareClearPasswordToken: '',
   downloadModalData: null,
   hostUsage: null,
@@ -2577,6 +2595,7 @@ async function openPreviewShareAdminPage(ev) {
     toast('只有站主可以查看公開閱覽清單', 'err');
     return;
   }
+  S.previewShareAdminSel.clear();
   await loadPreviewShareAdminList();
   const inp = document.getElementById('share-admin-page-search-inp');
   const clr = document.getElementById('share-admin-page-search-clear');
@@ -5926,7 +5945,8 @@ function extractRolePerms(cfg) {
   return out;
 }
 
-function getPreviewShareAdminRowsHtml(rows = []) {
+function getPreviewShareAdminRowsHtml(rows = [], options = {}) {
+  const selectable = !!options.selectable;
   return rows.map(share => {
     const item = String(share.itemId || '').trim() ? (S.cat.items || []).find(entry => entry.id === String(share.itemId || '').trim()) : null;
     const statusBadge = share.enabled
@@ -5938,7 +5958,10 @@ function getPreviewShareAdminRowsHtml(rows = []) {
     const previewLabel = share.previewLabel || share.previewFilename || '預覽檔';
     const linkToken = getPreviewShareAdminLinkToken(share);
     const thumbHtml = getPreviewShareAdminThumbHtml(item, previewLabel);
-    return `<div class="share-admin-row">
+    const token = String(share.token || '');
+    const selected = selectable && S.previewShareAdminSel.has(token);
+    return `<div class="share-admin-row${selected ? ' sel' : ''}" data-token="${esc(token)}">
+      ${selectable ? `<input class="share-admin-row-chk" type="checkbox" aria-label="選取公開連結" ${selected ? 'checked' : ''} onchange="togglePreviewShareAdminSelection('${esc(token)}', this.checked)">` : ''}
       ${thumbHtml}
       <div class="share-admin-main">
         <div class="share-admin-head">
@@ -5954,11 +5977,11 @@ function getPreviewShareAdminRowsHtml(rows = []) {
         </div>
       </div>
       <div class="share-admin-actions">
-        <button class="btn btn-out" type="button" onclick="copyPreviewShareLink('${esc(share.token)}')">${icon('link')}<span>複製連結</span></button>
-        <button class="btn btn-out" type="button" onclick="togglePreviewShareEnabled('${esc(share.token)}', ${share.enabled ? 'false' : 'true'})">${share.enabled ? '取消公開' : '恢復公開'}</button>
-        <button class="btn btn-out" type="button" onclick="setPreviewSharePasswordPrompt('${esc(share.token)}')">${share.hasPassword ? '修改密碼' : '設定密碼'}</button>
-        ${share.hasPassword ? `<button class="btn btn-out" type="button" onclick="clearPreviewSharePassword('${esc(share.token)}')">清除密碼</button>` : ''}
-        <button class="btn btn-out" type="button" onclick="deletePreviewShareLink('${esc(share.token)}')">${icon('trash')}<span>刪除連結</span></button>
+        <button class="btn btn-out" type="button" onclick="copyPreviewShareLink('${esc(token)}')">${icon('link')}<span>複製連結</span></button>
+        <button class="btn btn-out" type="button" onclick="togglePreviewShareEnabled('${esc(token)}', ${share.enabled ? 'false' : 'true'})">${share.enabled ? '取消公開' : '恢復公開'}</button>
+        <button class="btn btn-out" type="button" onclick="setPreviewSharePasswordPrompt('${esc(token)}')">${share.hasPassword ? '修改密碼' : '設定密碼'}</button>
+        ${share.hasPassword ? `<button class="btn btn-out" type="button" onclick="clearPreviewSharePassword('${esc(token)}')">清除密碼</button>` : ''}
+        <button class="btn btn-out" type="button" onclick="deletePreviewShareLink('${esc(token)}')">${icon('trash')}<span>刪除連結</span></button>
       </div>
     </div>`;
   }).join('');
@@ -6052,6 +6075,79 @@ function matchesPreviewShareAdminQuery(share = {}, query = '') {
   return haystack.includes(q);
 }
 
+function getFilteredPreviewShareAdminRows() {
+  const rows = getSortedPreviewShareAdminRows(Array.isArray(S.previewShareAdmin) ? S.previewShareAdmin : []);
+  return rows.filter(share => matchesPreviewShareAdminQuery(share, S.previewShareAdminQ));
+}
+
+function getSelectedPreviewShareAdminRows() {
+  const selected = S.previewShareAdminSel || new Set();
+  return (S.previewShareAdmin || []).filter(share => selected.has(String(share.token || '')));
+}
+
+function syncPreviewShareAdminSelectionWithVisibleRows(visibleRows = []) {
+  const visible = new Set((visibleRows || []).map(share => String(share.token || '')));
+  const next = new Set();
+  (S.previewShareAdminSel || new Set()).forEach(token => {
+    if (visible.has(String(token || ''))) next.add(String(token || ''));
+  });
+  S.previewShareAdminSel = next;
+}
+
+function togglePreviewShareAdminSelection(token, checked) {
+  const key = String(token || '');
+  if (!key) return;
+  if (!S.previewShareAdminSel) S.previewShareAdminSel = new Set();
+  if (checked) S.previewShareAdminSel.add(key);
+  else S.previewShareAdminSel.delete(key);
+  renderPreviewShareAdminPanel();
+}
+
+function clearPreviewShareAdminSelection() {
+  if (!S.previewShareAdminSel?.size) return;
+  S.previewShareAdminSel.clear();
+  renderPreviewShareAdminPanel();
+}
+
+function previewShareAdminToggleAll(checked) {
+  const rows = getFilteredPreviewShareAdminRows();
+  if (!S.previewShareAdminSel) S.previewShareAdminSel = new Set();
+  if (checked) rows.forEach(share => S.previewShareAdminSel.add(String(share.token || '')));
+  else S.previewShareAdminSel.clear();
+  renderPreviewShareAdminPanel();
+}
+
+function updatePreviewShareAdminSelUI() {
+  const rows = getFilteredPreviewShareAdminRows();
+  syncPreviewShareAdminSelectionWithVisibleRows(rows);
+  const count = S.previewShareAdminSel?.size || 0;
+  const allBox = document.getElementById('share-admin-chk-all');
+  const allLabel = document.getElementById('share-admin-chk-all-lbl');
+  const badge = document.getElementById('share-admin-sel-badge');
+  const clearBtn = document.getElementById('share-admin-sel-clear');
+  const batchDisableBtn = document.getElementById('share-admin-batch-disable');
+  const batchEnableBtn = document.getElementById('share-admin-batch-enable');
+  const batchPasswordBtn = document.getElementById('share-admin-batch-password');
+  const batchDeleteBtn = document.getElementById('share-admin-batch-delete');
+  const selectedRows = getSelectedPreviewShareAdminRows();
+  const canDisable = selectedRows.some(share => share.enabled);
+  const canEnable = selectedRows.some(share => !share.enabled);
+  if (badge) {
+    badge.style.display = count ? 'inline-flex' : 'none';
+    badge.textContent = `已選 ${count} 項`;
+  }
+  if (clearBtn) clearBtn.style.display = count ? 'inline-flex' : 'none';
+  if (allLabel) allLabel.classList.toggle('has-sel', count > 0);
+  if (allBox) {
+    allBox.checked = rows.length > 0 && count === rows.length;
+    allBox.indeterminate = count > 0 && count < rows.length;
+  }
+  if (batchDisableBtn) batchDisableBtn.disabled = !canDisable;
+  if (batchEnableBtn) batchEnableBtn.disabled = !canEnable;
+  if (batchPasswordBtn) batchPasswordBtn.disabled = count === 0;
+  if (batchDeleteBtn) batchDeleteBtn.disabled = count === 0;
+}
+
 function renderPreviewShareAdminPanel() {
   const disc = document.getElementById('share-links-disc');
   const targets = [
@@ -6073,6 +6169,7 @@ function renderPreviewShareAdminPanel() {
       target.list.innerHTML = '';
       target.empty.style.display = 'none';
     });
+    updatePreviewShareAdminSelUI();
     return;
   }
   if (S.previewShareAdminLoading) {
@@ -6082,18 +6179,21 @@ function renderPreviewShareAdminPanel() {
       target.empty.textContent = '讀取公開閱覽連結中...';
       target.list.innerHTML = '';
     });
+    updatePreviewShareAdminSelUI();
     return;
   }
   const rows = getSortedPreviewShareAdminRows(Array.isArray(S.previewShareAdmin) ? S.previewShareAdmin : []);
   targets.forEach(target => {
     if (!target.empty || !target.list) return;
     const visibleRows = target.filterable ? rows.filter(share => matchesPreviewShareAdminQuery(share, S.previewShareAdminQ)) : rows;
+    if (target.filterable) syncPreviewShareAdminSelectionWithVisibleRows(visibleRows);
     target.empty.style.display = visibleRows.length ? 'none' : '';
     target.empty.textContent = target.filterable && S.previewShareAdminQ
       ? '沒有符合搜尋條件的公開閱覽連結'
       : '目前頁籤還沒有已建立的公開閱覽連結';
-    target.list.innerHTML = getPreviewShareAdminRowsHtml(visibleRows);
+    target.list.innerHTML = getPreviewShareAdminRowsHtml(visibleRows, { selectable: !!target.filterable });
   });
+  updatePreviewShareAdminSelUI();
 }
 
 async function loadPreviewShareAdminList() {
@@ -6126,6 +6226,37 @@ async function syncPreviewShareAdmin(url, method, body, successMessage) {
   return data;
 }
 
+async function runPreviewShareAdminBatch(tokens = [], worker, options = {}) {
+  const list = [...new Set((tokens || []).map(token => String(token || '').trim()).filter(Boolean))];
+  if (!list.length) return false;
+  const loadingMessage = options.loadingMessage || '批量更新公開閱覽連結…';
+  showLdg(loadingMessage);
+  const failures = [];
+  for (const token of list) {
+    try {
+      await worker(token);
+    } catch (e) {
+      failures.push(e?.message || token);
+    }
+  }
+  try {
+    await loadPreviewShareAdminList();
+  } finally {
+    hideLdg();
+  }
+  clearPreviewShareAdminSelection();
+  if (!failures.length) {
+    toast(options.successMessage || '批量操作已完成', 'ok');
+    return true;
+  }
+  if (failures.length === list.length) {
+    toast(options.errorMessage || failures[0] || '批量操作失敗', 'err');
+    return false;
+  }
+  toast(`已完成 ${list.length - failures.length} 項，失敗 ${failures.length} 項`, 'err');
+  return false;
+}
+
 async function copyPreviewShareLink(token) {
   const share = (S.previewShareAdmin || []).find(entry => entry.token === token);
   if (!share?.shareUrl) { toast('找不到可複製的網址', 'err'); return; }
@@ -6146,17 +6277,55 @@ async function togglePreviewShareEnabled(token, enabled) {
   }
 }
 
+async function previewShareAdminBatchDisable() {
+  const tokens = getSelectedPreviewShareAdminRows().filter(share => share.enabled).map(share => share.token);
+  if (!tokens.length) { toast('已選項目沒有可取消公開的連結', 'err'); return; }
+  await runPreviewShareAdminBatch(tokens, token => api('PUT', `/api/preview-share-links/${encodeURIComponent(token)}/status`, { enabled: false }), {
+    loadingMessage: '批量取消公開中…',
+    successMessage: '已批量取消公開',
+    errorMessage: '批量取消公開失敗'
+  });
+}
+
+async function previewShareAdminBatchEnable() {
+  const tokens = getSelectedPreviewShareAdminRows().filter(share => !share.enabled).map(share => share.token);
+  if (!tokens.length) { toast('已選項目沒有可恢復公開的連結', 'err'); return; }
+  await runPreviewShareAdminBatch(tokens, token => api('PUT', `/api/preview-share-links/${encodeURIComponent(token)}/status`, { enabled: true }), {
+    loadingMessage: '批量恢復公開中…',
+    successMessage: '已批量恢復公開',
+    errorMessage: '批量恢復公開失敗'
+  });
+}
+
+function previewShareAdminBatchSetPassword() {
+  const tokens = getSelectedPreviewShareAdminRows().map(share => share.token);
+  if (!tokens.length) { toast('請先選取要設定密碼的公開連結', 'err'); return; }
+  setPreviewSharePasswordPrompt(tokens);
+}
+
+function previewShareAdminBatchDelete() {
+  const tokens = getSelectedPreviewShareAdminRows().map(share => share.token);
+  if (!tokens.length) { toast('請先選取要刪除的公開連結', 'err'); return; }
+  deletePreviewShareLink(tokens);
+}
+
 function closePreviewSharePasswordModal() {
   const modal = document.getElementById('preview-share-password-modal');
   const input = document.getElementById('preview-share-password-input');
   const error = document.getElementById('preview-share-password-error');
+  const title = document.getElementById('preview-share-password-title');
+  const help = document.getElementById('preview-share-password-help');
+  const confirmBtn = document.getElementById('preview-share-password-confirm');
   if (modal) modal.classList.remove('on');
   if (input) input.value = '';
   if (error) {
     error.textContent = '';
     error.style.display = 'none';
   }
-  S.previewSharePasswordToken = '';
+  if (title) title.textContent = '設定訪問密碼';
+  if (help) help.textContent = '請輸入新的公開閱覽訪問密碼。';
+  if (confirmBtn) confirmBtn.textContent = '確定';
+  S.previewSharePasswordTokens = [];
   syncViewportHeightVar();
 }
 
@@ -6176,16 +6345,25 @@ function onPreviewSharePasswordInputKeydown(event) {
   }
 }
 
-async function setPreviewSharePasswordPrompt(token) {
+async function setPreviewSharePasswordPrompt(tokenOrTokens) {
   const modal = document.getElementById('preview-share-password-modal');
   const input = document.getElementById('preview-share-password-input');
   const error = document.getElementById('preview-share-password-error');
+  const title = document.getElementById('preview-share-password-title');
+  const help = document.getElementById('preview-share-password-help');
+  const confirmBtn = document.getElementById('preview-share-password-confirm');
   if (!modal || !input) return;
-  S.previewSharePasswordToken = token;
+  const tokens = Array.isArray(tokenOrTokens) ? tokenOrTokens : [tokenOrTokens];
+  S.previewSharePasswordTokens = [...new Set(tokens.map(token => String(token || '').trim()).filter(Boolean))];
   if (error) {
     error.textContent = '';
     error.style.display = 'none';
   }
+  if (title) title.textContent = S.previewSharePasswordTokens.length > 1 ? '批量設定訪問密碼' : '設定訪問密碼';
+  if (help) help.textContent = S.previewSharePasswordTokens.length > 1
+    ? `請輸入要套用到已選 ${S.previewSharePasswordTokens.length} 筆公開閱覽連結的密碼。`
+    : '請輸入新的公開閱覽訪問密碼。';
+  if (confirmBtn) confirmBtn.textContent = S.previewSharePasswordTokens.length > 1 ? '套用到已選項目' : '確定';
   input.value = '';
   modal.classList.add('on');
   keepTxtCreateModalVisible();
@@ -6193,11 +6371,11 @@ async function setPreviewSharePasswordPrompt(token) {
 }
 
 async function confirmPreviewSharePasswordModal() {
-  const token = S.previewSharePasswordToken;
+  const tokens = [...(S.previewSharePasswordTokens || [])];
   const input = document.getElementById('preview-share-password-input');
   const error = document.getElementById('preview-share-password-error');
   const raw = String(input?.value || '').trim();
-  if (!token) return closePreviewSharePasswordModal();
+  if (!tokens.length) return closePreviewSharePasswordModal();
   if (!raw) {
     if (error) {
       error.textContent = '密碼不可空白';
@@ -6207,7 +6385,15 @@ async function confirmPreviewSharePasswordModal() {
     return;
   }
   try {
-    await syncPreviewShareAdmin(`/api/preview-share-links/${encodeURIComponent(token)}/password`, 'PUT', { password: raw }, '已更新訪問密碼');
+    if (tokens.length === 1) {
+      await syncPreviewShareAdmin(`/api/preview-share-links/${encodeURIComponent(tokens[0])}/password`, 'PUT', { password: raw }, '已更新訪問密碼');
+    } else {
+      await runPreviewShareAdminBatch(tokens, token => api('PUT', `/api/preview-share-links/${encodeURIComponent(token)}/password`, { password: raw }), {
+        loadingMessage: '批量設定訪問密碼中…',
+        successMessage: '已批量設定訪問密碼',
+        errorMessage: '批量設定訪問密碼失敗'
+      });
+    }
     closePreviewSharePasswordModal();
   } catch (e) {
     if (error) {
@@ -6247,25 +6433,50 @@ async function confirmPreviewShareClearPasswordModal() {
 
 function closePreviewShareDeleteModal() {
   document.getElementById('preview-share-delete-modal')?.classList.remove('on');
-  S.previewShareDeleteToken = '';
+  const title = document.getElementById('preview-share-delete-title');
+  const msg = document.getElementById('preview-share-delete-msg');
+  const confirmBtn = document.getElementById('preview-share-delete-confirm');
+  if (title) title.textContent = '刪除公開連結';
+  if (msg) msg.innerHTML = '刪除後這筆公開閱覽連結會從清單消失，之後重新公開會產生新的固定連結。<br>確定要刪除嗎？';
+  if (confirmBtn) confirmBtn.textContent = '確定刪除';
+  S.previewShareDeleteTokens = [];
 }
 
 function onPreviewShareDeleteModalBackdrop(event) {
   if (event.target?.id === 'preview-share-delete-modal') closePreviewShareDeleteModal();
 }
 
-async function deletePreviewShareLink(token) {
+async function deletePreviewShareLink(tokenOrTokens) {
   const modal = document.getElementById('preview-share-delete-modal');
+  const title = document.getElementById('preview-share-delete-title');
+  const msg = document.getElementById('preview-share-delete-msg');
+  const confirmBtn = document.getElementById('preview-share-delete-confirm');
   if (!modal) return;
-  S.previewShareDeleteToken = token;
+  const tokens = Array.isArray(tokenOrTokens) ? tokenOrTokens : [tokenOrTokens];
+  S.previewShareDeleteTokens = [...new Set(tokens.map(token => String(token || '').trim()).filter(Boolean))];
+  if (title) title.textContent = S.previewShareDeleteTokens.length > 1 ? '批量刪除公開連結' : '刪除公開連結';
+  if (msg) {
+    msg.innerHTML = S.previewShareDeleteTokens.length > 1
+      ? `刪除後這 ${S.previewShareDeleteTokens.length} 筆公開閱覽連結會從清單消失，之後重新公開會產生新的固定連結。<br>確定要刪除嗎？`
+      : '刪除後這筆公開閱覽連結會從清單消失，之後重新公開會產生新的固定連結。<br>確定要刪除嗎？';
+  }
+  if (confirmBtn) confirmBtn.textContent = S.previewShareDeleteTokens.length > 1 ? '確定批量刪除' : '確定刪除';
   modal.classList.add('on');
 }
 
 async function confirmPreviewShareDeleteModal() {
-  const token = S.previewShareDeleteToken;
-  if (!token) return closePreviewShareDeleteModal();
+  const tokens = [...(S.previewShareDeleteTokens || [])];
+  if (!tokens.length) return closePreviewShareDeleteModal();
   try {
-    await syncPreviewShareAdmin(`/api/preview-share-links/${encodeURIComponent(token)}`, 'DELETE', undefined, '已刪除公開網址');
+    if (tokens.length === 1) {
+      await syncPreviewShareAdmin(`/api/preview-share-links/${encodeURIComponent(tokens[0])}`, 'DELETE', undefined, '已刪除公開網址');
+    } else {
+      await runPreviewShareAdminBatch(tokens, token => api('DELETE', `/api/preview-share-links/${encodeURIComponent(token)}`), {
+        loadingMessage: '批量刪除公開閱覽連結中…',
+        successMessage: '已批量刪除公開閱覽連結',
+        errorMessage: '批量刪除公開閱覽連結失敗'
+      });
+    }
     closePreviewShareDeleteModal();
   } catch (e) {
     toast(e.message || '刪除公開網址失敗', 'err');
