@@ -8672,6 +8672,7 @@ function getManFilteredItems() {
     items = items.filter(item =>
       (item.title || '').toLowerCase().includes(q) ||
     (item.subtitle || '').toLowerCase().includes(q) ||
+    (item.description || '').toLowerCase().includes(q) ||
     (item.author || item.creator || '').toLowerCase().includes(q) ||
     (item.tags || []).some(t => t.toLowerCase().includes(q))
     );
