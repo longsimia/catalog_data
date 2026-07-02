@@ -611,18 +611,18 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .share-admin-actions{grid-area:actions;display:flex;flex-wrap:wrap;gap:.42rem;align-self:start}
 .share-admin-actions .btn{min-height:30px;padding:.28rem .62rem;font-size:.74rem;white-space:nowrap}
 #share-admin-shell .share-admin-actions{justify-content:flex-start}
-#share-admin-page .share-admin-row{position:relative;padding-left:2.2rem}
+#share-admin-page .share-admin-row{position:relative;padding:.62rem .62rem .62rem 2.1rem}
 #share-admin-page .share-admin-row.sel{border-color:var(--gold);background:color-mix(in srgb, var(--gglow) 55%, var(--panel));box-shadow:0 0 0 1px var(--gglow)}
-#share-admin-page .share-admin-row-chk{position:absolute;top:.95rem;left:.8rem;width:15px;height:15px;accent-color:var(--gold);cursor:pointer}
-#share-admin-page .share-admin-row{grid-template-columns:132px minmax(0,1fr);grid-template-areas:"thumb main" "thumb actions";grid-template-rows:minmax(0,1fr) auto;align-items:stretch}
-#share-admin-page .share-admin-thumb{width:132px;height:132px;aspect-ratio:auto;align-self:stretch}
-#share-admin-page .share-admin-main{align-self:center;min-height:0}
+#share-admin-page .share-admin-row-chk{position:absolute;top:50%;left:.78rem;transform:translateY(-50%);width:15px;height:15px;accent-color:var(--gold);cursor:pointer}
+#share-admin-page .share-admin-row{grid-template-columns:96px minmax(0,1fr);grid-template-areas:"thumb main" "thumb actions";grid-template-rows:minmax(0,1fr) auto;align-items:stretch;gap:.65rem}
+#share-admin-page .share-admin-thumb{width:96px;height:96px;aspect-ratio:auto;align-self:stretch}
+#share-admin-page .share-admin-main{align-self:center;min-height:0;gap:.35rem}
 #share-admin-page .share-admin-actions{align-self:end}
 @media(max-width:700px){
   .share-admin-row{grid-template-columns:1fr;grid-template-areas:"thumb" "main" "actions"}
   .share-admin-thumb{width:100%;max-width:150px}
-  #share-admin-page .share-admin-row{grid-template-columns:1fr;grid-template-areas:"thumb" "main" "actions";padding-left:.8rem}
-  #share-admin-page .share-admin-row-chk{top:.7rem;left:.65rem}
+  #share-admin-page .share-admin-row{grid-template-columns:1fr;grid-template-areas:"thumb" "main" "actions";padding:.62rem .62rem .62rem 2rem}
+  #share-admin-page .share-admin-row-chk{top:.95rem;left:.7rem;transform:none}
   #share-admin-page .share-admin-thumb{width:100%;max-width:180px;aspect-ratio:4/3;height:auto;min-height:0}
   #share-admin-page .share-admin-actions{align-self:start}
 }
@@ -1523,7 +1523,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
             <button class="btn btn-out mp-sort-btn" id="share-admin-page-sort-btn" type="button" onclick="togglePreviewShareAdminSortDir()">顯示排序：正序</button>
           </div>
         </div>
-        <div class="manage-page-body">
+        <div class="manage-page-body" id="share-admin-page-body">
           <div class="share-admin-shell">
             <div class="share-admin-empty" id="share-admin-page-empty">目前頁籤還沒有已建立的公開閱覽連結</div>
             <div class="share-admin-list" id="share-admin-page-list"></div>
@@ -1775,9 +1775,15 @@ const S = {
   previewShareAdminSortDir: 'asc',
   previewShareAdminQ: '',
   previewShareAdminSel: new Set(),
+  previewShareAdminLastSelIdx: -1,
   previewSharePasswordTokens: [],
   previewShareDeleteTokens: [],
   previewShareClearPasswordToken: '',
+  previewShareMarquee: null,
+  previewShareMarqueeBaseSel: null,
+  previewShareMarqueePointer: null,
+  previewShareMarqueeAutoScrollRaf: 0,
+  previewShareMarqueeIgnoreClickUntil: 0,
   downloadModalData: null,
   hostUsage: null,
   previewModalState: null,
@@ -2604,6 +2610,7 @@ async function openPreviewShareAdminPage(ev) {
   S.previewShareAdminPageOpen = true;
   document.getElementById('share-admin-page')?.classList.add('on');
   syncAdminOverlayScrollLock();
+  initPreviewShareMarquee();
 }
 
 function closePreviewShareAdminPage(ev) {
@@ -2614,6 +2621,7 @@ function closePreviewShareAdminPage(ev) {
   S.previewShareAdminPageOpen = false;
   document.getElementById('share-admin-page')?.classList.remove('on');
   syncAdminOverlayScrollLock();
+  resetPreviewShareMarquee();
 }
 
 function ensureManageDisclosure() {
@@ -5947,7 +5955,7 @@ function extractRolePerms(cfg) {
 
 function getPreviewShareAdminRowsHtml(rows = [], options = {}) {
   const selectable = !!options.selectable;
-  return rows.map(share => {
+  return rows.map((share, idx) => {
     const item = String(share.itemId || '').trim() ? (S.cat.items || []).find(entry => entry.id === String(share.itemId || '').trim()) : null;
     const statusBadge = share.enabled
       ? `<span class="share-admin-badge on">公開中</span>`
@@ -5960,8 +5968,8 @@ function getPreviewShareAdminRowsHtml(rows = [], options = {}) {
     const thumbHtml = getPreviewShareAdminThumbHtml(item, previewLabel);
     const token = String(share.token || '');
     const selected = selectable && S.previewShareAdminSel.has(token);
-    return `<div class="share-admin-row${selected ? ' sel' : ''}" data-token="${esc(token)}">
-      ${selectable ? `<input class="share-admin-row-chk" type="checkbox" aria-label="選取公開連結" ${selected ? 'checked' : ''} onchange="togglePreviewShareAdminSelection('${esc(token)}', this.checked)">` : ''}
+    return `<div class="share-admin-row${selected ? ' sel' : ''}" data-token="${esc(token)}" data-i="${idx}"${selectable ? ` onclick="previewShareAdminClick(event,'${esc(token)}',${idx})"` : ''}>
+      ${selectable ? `<input class="share-admin-row-chk" type="checkbox" aria-label="選取公開連結" ${selected ? 'checked' : ''} onclick="event.stopPropagation();previewShareAdminClick(event,'${esc(token)}',${idx},'toggle')">` : ''}
       ${thumbHtml}
       <div class="share-admin-main">
         <div class="share-admin-head">
@@ -6080,6 +6088,15 @@ function getFilteredPreviewShareAdminRows() {
   return rows.filter(share => matchesPreviewShareAdminQuery(share, S.previewShareAdminQ));
 }
 
+function syncPreviewShareAdminRenderedSelection() {
+  document.querySelectorAll('#share-admin-page-list .share-admin-row[data-token]').forEach(el => {
+    const sel = S.previewShareAdminSel.has(el.dataset.token);
+    el.classList.toggle('sel', sel);
+    const chk = el.querySelector('.share-admin-row-chk');
+    if (chk) chk.checked = sel;
+  });
+}
+
 function getSelectedPreviewShareAdminRows() {
   const selected = S.previewShareAdminSel || new Set();
   return (S.previewShareAdmin || []).filter(share => selected.has(String(share.token || '')));
@@ -6106,6 +6123,7 @@ function togglePreviewShareAdminSelection(token, checked) {
 function clearPreviewShareAdminSelection() {
   if (!S.previewShareAdminSel?.size) return;
   S.previewShareAdminSel.clear();
+  S.previewShareAdminLastSelIdx = -1;
   renderPreviewShareAdminPanel();
 }
 
@@ -6114,7 +6132,37 @@ function previewShareAdminToggleAll(checked) {
   if (!S.previewShareAdminSel) S.previewShareAdminSel = new Set();
   if (checked) rows.forEach(share => S.previewShareAdminSel.add(String(share.token || '')));
   else S.previewShareAdminSel.clear();
+  S.previewShareAdminLastSelIdx = checked && rows.length ? rows.length - 1 : -1;
   renderPreviewShareAdminPanel();
+}
+
+function previewShareAdminClick(e, token, idx, mode = 'default') {
+  if (Date.now() < (S.previewShareMarqueeIgnoreClickUntil || 0)) return;
+  e?.stopPropagation?.();
+  const rows = getFilteredPreviewShareAdminRows();
+  const key = String(token || '');
+  const actualIdx = rows.findIndex(share => String(share.token || '') === key);
+  if (actualIdx < 0) return;
+  if (mode === 'toggle') {
+    if (S.previewShareAdminSel.has(key)) S.previewShareAdminSel.delete(key);
+    else S.previewShareAdminSel.add(key);
+    S.previewShareAdminLastSelIdx = actualIdx;
+  } else if (e.shiftKey && S.previewShareAdminLastSelIdx >= 0) {
+    const lo = Math.min(S.previewShareAdminLastSelIdx, actualIdx);
+    const hi = Math.max(S.previewShareAdminLastSelIdx, actualIdx);
+    for (let i = lo; i <= hi; i++) if (rows[i]) S.previewShareAdminSel.add(String(rows[i].token || ''));
+  } else if (e.ctrlKey || e.metaKey) {
+    if (S.previewShareAdminSel.has(key)) S.previewShareAdminSel.delete(key);
+    else S.previewShareAdminSel.add(key);
+    S.previewShareAdminLastSelIdx = actualIdx;
+  } else {
+    const wasOnly = S.previewShareAdminSel.size === 1 && S.previewShareAdminSel.has(key);
+    S.previewShareAdminSel.clear();
+    if (!wasOnly) S.previewShareAdminSel.add(key);
+    S.previewShareAdminLastSelIdx = actualIdx;
+  }
+  updatePreviewShareAdminSelUI();
+  syncPreviewShareAdminRenderedSelection();
 }
 
 function updatePreviewShareAdminSelUI() {
@@ -6146,6 +6194,159 @@ function updatePreviewShareAdminSelUI() {
   if (batchEnableBtn) batchEnableBtn.disabled = !canEnable;
   if (batchPasswordBtn) batchPasswordBtn.disabled = count === 0;
   if (batchDeleteBtn) batchDeleteBtn.disabled = count === 0;
+}
+
+function ensurePreviewShareMarqueeEl() {
+  const viewport = document.getElementById('share-admin-page-body');
+  if (!viewport) return null;
+  let box = document.getElementById('share-admin-marquee');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'share-admin-marquee';
+    box.className = 'mp-marquee';
+    viewport.appendChild(box);
+  }
+  return box;
+}
+
+function resetPreviewShareMarquee() {
+  const viewport = document.getElementById('share-admin-page-body');
+  const box = document.getElementById('share-admin-marquee');
+  if (viewport) viewport.classList.remove('mp-selecting');
+  if (box) box.style.display = 'none';
+  window.removeEventListener('mousemove', onPreviewShareMarqueeMove);
+  window.removeEventListener('mouseup', onPreviewShareMarqueeUp);
+  if (S.previewShareMarqueeAutoScrollRaf) cancelAnimationFrame(S.previewShareMarqueeAutoScrollRaf);
+  S.previewShareMarquee = null;
+  S.previewShareMarqueeBaseSel = null;
+  S.previewShareMarqueePointer = null;
+  S.previewShareMarqueeAutoScrollRaf = 0;
+}
+
+function initPreviewShareMarquee() {
+  const viewport = document.getElementById('share-admin-page-body');
+  const page = document.getElementById('share-admin-page');
+  if (!viewport || viewport.dataset.previewShareMarqueeReady) return;
+  viewport.dataset.previewShareMarqueeReady = '1';
+  ensurePreviewShareMarqueeEl();
+  viewport.addEventListener('mousedown', onPreviewShareMarqueeDown);
+  page?.addEventListener('mousedown', onPreviewShareMarqueeDown);
+  viewport.addEventListener('click', onPreviewShareBlankClick);
+  page?.addEventListener('click', onPreviewShareBlankClick);
+}
+
+function onPreviewShareBlankClick(e) {
+  if (Date.now() < (S.previewShareMarqueeIgnoreClickUntil || 0)) return;
+  if (!S.previewShareAdminPageOpen || S.previewShareMarquee?.active) return;
+  if (e.target.closest('.share-admin-row,.manage-page-head,.mp-status,.btn,.ib,input,button,a,label,select,textarea')) return;
+  if (!S.previewShareAdminSel.size) return;
+  S.previewShareAdminSel.clear();
+  S.previewShareAdminLastSelIdx = -1;
+  updatePreviewShareAdminSelUI();
+  syncPreviewShareAdminRenderedSelection();
+}
+
+function onPreviewShareMarqueeDown(e) {
+  const viewport = document.getElementById('share-admin-page-body');
+  if (!S.previewShareAdminPageOpen || !viewport || e.button !== 0) return;
+  if (e.target.closest('.manage-page-head,.mp-status,.btn,.ib,input,button,a,label,select,textarea')) return;
+  const rowEl = e.target.closest('.share-admin-row');
+  const token = rowEl?.dataset?.token || '';
+  if (rowEl && token && S.previewShareAdminSel.size && S.previewShareAdminSel.has(token) && !e.shiftKey && !e.ctrlKey && !e.metaKey) return;
+  const startedOnItem = !!rowEl;
+  if (!startedOnItem) e.preventDefault();
+  S.previewShareMarquee = {
+    startX: e.clientX,
+    startY: e.clientY,
+    active: false,
+    append: !!(e.ctrlKey || e.metaKey),
+    startedOnItem
+  };
+  S.previewShareMarqueePointer = { x: e.clientX, y: e.clientY };
+  S.previewShareMarqueeBaseSel = new Set(S.previewShareAdminSel);
+  window.addEventListener('mousemove', onPreviewShareMarqueeMove);
+  window.addEventListener('mouseup', onPreviewShareMarqueeUp);
+}
+
+function updatePreviewShareMarqueeSelection(clientX, clientY) {
+  if (!S.previewShareMarquee) return;
+  const viewport = document.getElementById('share-admin-page-body');
+  const box = ensurePreviewShareMarqueeEl();
+  if (!viewport || !box) return;
+  const rect = viewport.getBoundingClientRect();
+  const x1 = Math.max(rect.left, Math.min(S.previewShareMarquee.startX, clientX));
+  const y1 = Math.max(rect.top, Math.min(S.previewShareMarquee.startY, clientY));
+  const x2 = Math.min(rect.right, Math.max(S.previewShareMarquee.startX, clientX));
+  const y2 = Math.min(rect.bottom, Math.max(S.previewShareMarquee.startY, clientY));
+  const dx = Math.abs(clientX - S.previewShareMarquee.startX);
+  const dy = Math.abs(clientY - S.previewShareMarquee.startY);
+  if (!S.previewShareMarquee.active && dx < 4 && dy < 4) return;
+  if (!S.previewShareMarquee.active) {
+    S.previewShareMarquee.active = true;
+    viewport.classList.add('mp-selecting');
+    box.style.display = 'block';
+  }
+  box.style.left = `${x1 - rect.left + viewport.scrollLeft}px`;
+  box.style.top = `${y1 - rect.top + viewport.scrollTop}px`;
+  box.style.width = `${Math.max(1, x2 - x1)}px`;
+  box.style.height = `${Math.max(1, y2 - y1)}px`;
+  const nextSel = S.previewShareMarquee.append ? new Set(S.previewShareMarqueeBaseSel) : new Set();
+  document.querySelectorAll('#share-admin-page-list .share-admin-row[data-token]').forEach(el => {
+    const r = el.getBoundingClientRect();
+    const hit = !(r.right < x1 || r.left > x2 || r.bottom < y1 || r.top > y2);
+    if (hit) nextSel.add(el.dataset.token);
+  });
+  S.previewShareAdminSel = nextSel;
+  updatePreviewShareAdminSelUI();
+  syncPreviewShareAdminRenderedSelection();
+}
+
+function stepPreviewShareMarqueeAutoScroll() {
+  if (!S.previewShareMarquee || !S.previewShareMarqueePointer) {
+    S.previewShareMarqueeAutoScrollRaf = 0;
+    return;
+  }
+  const viewport = document.getElementById('share-admin-page-body');
+  if (!viewport) {
+    S.previewShareMarqueeAutoScrollRaf = 0;
+    return;
+  }
+  const rect = viewport.getBoundingClientRect();
+  const edge = 48;
+  const maxStep = 18;
+  let dy = 0;
+  if (S.previewShareMarqueePointer.y < rect.top + edge) {
+    dy = -Math.ceil(((rect.top + edge) - S.previewShareMarqueePointer.y) / edge * maxStep);
+  } else if (S.previewShareMarqueePointer.y > rect.bottom - edge) {
+    dy = Math.ceil((S.previewShareMarqueePointer.y - (rect.bottom - edge)) / edge * maxStep);
+  }
+  if (dy) {
+    const prevTop = viewport.scrollTop;
+    viewport.scrollTop = Math.max(0, Math.min(viewport.scrollHeight - viewport.clientHeight, viewport.scrollTop + dy));
+    if (viewport.scrollTop !== prevTop) updatePreviewShareMarqueeSelection(S.previewShareMarqueePointer.x, S.previewShareMarqueePointer.y);
+  }
+  S.previewShareMarqueeAutoScrollRaf = requestAnimationFrame(stepPreviewShareMarqueeAutoScroll);
+}
+
+function onPreviewShareMarqueeMove(e) {
+  if (!S.previewShareMarquee) return;
+  S.previewShareMarqueePointer = { x: e.clientX, y: e.clientY };
+  updatePreviewShareMarqueeSelection(e.clientX, e.clientY);
+  if (!S.previewShareMarqueeAutoScrollRaf) {
+    S.previewShareMarqueeAutoScrollRaf = requestAnimationFrame(stepPreviewShareMarqueeAutoScroll);
+  }
+}
+
+function onPreviewShareMarqueeUp() {
+  const hadDrag = !!S.previewShareMarquee?.active;
+  if (hadDrag) S.previewShareMarqueeIgnoreClickUntil = Date.now() + 180;
+  if (!hadDrag && !S.previewShareMarquee?.startedOnItem) {
+    S.previewShareAdminSel.clear();
+    S.previewShareAdminLastSelIdx = -1;
+    updatePreviewShareAdminSelUI();
+    syncPreviewShareAdminRenderedSelection();
+  }
+  resetPreviewShareMarquee();
 }
 
 function renderPreviewShareAdminPanel() {
