@@ -1474,13 +1474,23 @@ function getDocxRunStyle(runXml) {
   const fontHint = fontEastAsia || fontAscii;
   const sizeHalfPoints = Number((rPr.match(/<w:sz\b[^>]*w:val="(\d+)"/) || [])[1] || 0);
   const styles = [];
-  if (/<w:b(?:\b[^>]*)?\/>|<w:b\b[\s\S]*?<\/w:b>/.test(rPr)) styles.push('font-weight:700');
-  if (/<w:i(?:\b[^>]*)?\/>|<w:i\b[\s\S]*?<\/w:i>/.test(rPr)) styles.push('font-style:italic');
+  if (isDocxTogglePropertyEnabled(rPr, 'b')) styles.push('font-weight:700');
+  if (isDocxTogglePropertyEnabled(rPr, 'i')) styles.push('font-style:italic');
   if (/<w:u\b[^>]*w:val="(?!none)[^"]+"/.test(rPr) || /<w:u(?:\b[^>]*)?\/>/.test(rPr)) styles.push('text-decoration:underline');
   if (color) styles.push(`color:#${color}`);
   if (sizeHalfPoints > 0) styles.push(`font-size:${(sizeHalfPoints / 2).toFixed(1).replace(/\.0$/, '')}pt`);
   if (fontHint) styles.push(`font-family:${JSON.stringify(fontHint)},"Noto Serif TC","Microsoft JhengHei","PingFang TC",serif`);
   return styles.join(';');
+}
+
+function isDocxTogglePropertyEnabled(xml, tagName) {
+  const re = new RegExp(`<w:${tagName}\\b([^>]*)/>|<w:${tagName}\\b([^>]*)>([\\s\\S]*?)</w:${tagName}>`, 'i');
+  const match = re.exec(String(xml || ''));
+  if (!match) return false;
+  const attrs = `${match[1] || ''} ${match[2] || ''} ${match[3] || ''}`;
+  const valMatch = attrs.match(/\bw:val="([^"]+)"/i);
+  if (!valMatch) return true;
+  return !/^(?:0|false|off)$/i.test(valMatch[1].trim());
 }
 
 function renderDocxRunInner(runXml, mediaMap) {
