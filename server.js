@@ -1505,7 +1505,8 @@ function getDocxRunStyle(runXml) {
   const color = ((rPr.match(/<w:color\b[^>]*w:val="([0-9A-Fa-f]{6})"/) || [])[1] || '').toUpperCase();
   const fontAscii = (rPr.match(/<w:rFonts\b[^>]*w:ascii="([^"]+)"/) || [])[1] || '';
   const fontEastAsia = (rPr.match(/<w:rFonts\b[^>]*w:eastAsia="([^"]+)"/) || [])[1] || '';
-  const fontHint = fontEastAsia || fontAscii;
+  const fontHintRaw = fontEastAsia || fontAscii;
+  const fontHint = fontHintRaw === '新細明體' ? 'Georgia' : fontHintRaw;
   const sizeHalfPoints = Number((rPr.match(/<w:sz\b[^>]*w:val="(\d+)"/) || [])[1] || 0);
   const styles = [];
   if (isDocxTogglePropertyEnabled(rPr, 'b')) styles.push('font-weight:700');
