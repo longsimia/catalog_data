@@ -28,6 +28,7 @@ const TEXT_HISTORY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const APP_TIME_ZONE = 'Asia/Taipei';
 const THUMB_MAX_EDGE = 400;
 const THUMB_QUALITY = 80;
+const DOCX_PARSER_DEBUG = /^(?:1|true|yes|on)$/i.test(String(process.env.DOCX_PARSER_DEBUG || ''));
 const CAT_FILE = path.join(DATA, 'catalog.json');
 const CFG_FILE = path.join(DATA, 'config.json');
 const VALID_COLLECTION_MODES = new Set(['scenario', 'image']);
@@ -1397,7 +1398,17 @@ function getDocxMediaMap(absPath, rels) {
   return images;
 }
 
-function getTopLevelDocxBlocks(xml, tags = ['p', 'tbl']) {
+function getDocxXmlSnippet(xml, center, radius = 180) {
+  const source = String(xml || '');
+  const start = Math.max(0, Number(center || 0) - radius);
+  const end = Math.min(source.length, Number(center || 0) + radius);
+  return source
+    .slice(start, end)
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getTopLevelDocxBlocks(xml, tags = ['p', 'tbl'], diagnostics = null) {
   const bodyMatch = xml.match(/<w:body\b[^>]*>([\s\S]*?)<\/w:body>/);
   const source = bodyMatch ? bodyMatch[1] : xml;
   const blocks = [];
@@ -1433,6 +1444,16 @@ function getTopLevelDocxBlocks(xml, tags = ['p', 'tbl']) {
       blocks.push({ tag, xml: source.slice(start, pos) });
       i = pos;
     } else {
+      if (Array.isArray(diagnostics)) {
+        diagnostics.push({
+          type: 'unclosed-top-level-block',
+          tag,
+          offset: start,
+          blockCount: blocks.length,
+          sourceLength: source.length,
+          snippet: getDocxXmlSnippet(source, start)
+        });
+      }
       break;
     }
   }
@@ -1702,8 +1723,9 @@ function extractDocxHtmlBlocks(absPath) {
   const rels = getDocxRelationships(absPath);
   const mediaMap = getDocxMediaMap(absPath, rels);
   const blocks = [];
+  const diagnostics = [];
 
-  getTopLevelDocxBlocks(documentXml).forEach(entry => {
+  getTopLevelDocxBlocks(documentXml, ['p', 'tbl'], diagnostics).forEach(entry => {
     if (entry.tag === 'p') {
       blocks.push(...renderDocxParagraphBlocks(entry.xml, mediaMap, rels));
       return;
@@ -1713,9 +1735,19 @@ function extractDocxHtmlBlocks(absPath) {
     }
   });
 
+  if (diagnostics.length) {
+    const first = diagnostics[0];
+    console.warn(
+      `[docx] block extraction truncated for ${path.basename(absPath)} after ${first.blockCount} blocks at offset ${first.offset}/${first.sourceLength} near: ${first.snippet}`
+    );
+  } else if (DOCX_PARSER_DEBUG) {
+    console.log(`[docx] parsed ${path.basename(absPath)} into ${blocks.length} preview blocks`);
+  }
+
   return {
     blocks,
-    layoutMode: detectDocxLayoutMode(blocks)
+    layoutMode: detectDocxLayoutMode(blocks),
+    diagnostics
   };
 }
 
