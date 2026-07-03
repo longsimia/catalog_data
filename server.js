@@ -1408,6 +1408,34 @@ function getDocxXmlSnippet(xml, center, radius = 180) {
     .trim();
 }
 
+function collectTopLevelDocxBlock(source, start, tag) {
+  const openMatch = source.slice(start).match(new RegExp(`^<w:${tag}\\b[^>]*\\/?>`, 'i'));
+  if (!openMatch) return null;
+  if (/\/>$/.test(openMatch[0])) {
+    return { end: start + openMatch[0].length, malformed: false };
+  }
+
+  let depth = 1;
+  let pos = start + openMatch[0].length;
+  const tagRe = new RegExp(`<(/?)w:${tag}\\b[^>]*?(/?)>`, 'gi');
+  tagRe.lastIndex = pos;
+  let next;
+
+  while (depth > 0 && (next = tagRe.exec(source))) {
+    const isClosing = next[1] === '/';
+    const isSelfClosing = next[2] === '/';
+    if (isSelfClosing) {
+      pos = tagRe.lastIndex;
+      continue;
+    }
+    depth += isClosing ? -1 : 1;
+    pos = tagRe.lastIndex;
+  }
+
+  if (depth !== 0) return { end: start + openMatch[0].length, malformed: true };
+  return { end: pos, malformed: false };
+}
+
 function getTopLevelDocxBlocks(xml, tags = ['p', 'tbl'], diagnostics = null) {
   const bodyMatch = xml.match(/<w:body\b[^>]*>([\s\S]*?)<\/w:body>/);
   const source = bodyMatch ? bodyMatch[1] : xml;
@@ -1424,25 +1452,10 @@ function getTopLevelDocxBlocks(xml, tags = ['p', 'tbl'], diagnostics = null) {
     }
 
     const tag = tagMatch[1];
-    const openEnd = start + tagMatch[0].length;
-    let depth = 1;
-    let pos = openEnd;
-    const tagRe = new RegExp(`<\\/?w:${tag}\\b[^>]*>`, 'g');
-    tagRe.lastIndex = openEnd;
-    let next;
-
-    while (depth > 0 && (next = tagRe.exec(source))) {
-      if (next[0].startsWith(`</w:${tag}`)) {
-        depth -= 1;
-      } else {
-        depth += 1;
-      }
-      pos = tagRe.lastIndex;
-    }
-
-    if (depth === 0) {
-      blocks.push({ tag, xml: source.slice(start, pos) });
-      i = pos;
+    const block = collectTopLevelDocxBlock(source, start, tag);
+    if (block && !block.malformed) {
+      blocks.push({ tag, xml: source.slice(start, block.end) });
+      i = block.end;
     } else {
       if (Array.isArray(diagnostics)) {
         diagnostics.push({
@@ -1454,7 +1467,7 @@ function getTopLevelDocxBlocks(xml, tags = ['p', 'tbl'], diagnostics = null) {
           snippet: getDocxXmlSnippet(source, start)
         });
       }
-      break;
+      i = start + 3;
     }
   }
 
@@ -1544,7 +1557,7 @@ function renderDocxRun(runXml, mediaMap) {
   const inner = renderDocxRunInner(runXml, mediaMap);
   if (!inner) return '';
   const style = getDocxRunStyle(runXml);
-  if (style) return `<span style="${style}">${inner}</span>`;
+  if (style) return `<span style="${escapeXml(style)}">${inner}</span>`;
   return inner;
 }
 
