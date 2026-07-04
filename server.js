@@ -29,6 +29,9 @@ const APP_TIME_ZONE = 'Asia/Taipei';
 const THUMB_MAX_EDGE = 400;
 const THUMB_QUALITY = 80;
 const DOCX_PARSER_DEBUG = /^(?:1|true|yes|on)$/i.test(String(process.env.DOCX_PARSER_DEBUG || ''));
+const PREVIEW_NOTO_FONT_LINKS = '<link rel="preconnect" href="https://fonts.googleapis.com">\n  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@300;400;600;700&family=Noto+Serif+TC:wght@300;400;600;700&family=Noto+Serif+SC:wght@300;400;600;700&family=Noto+Serif+JP:wght@300;400;600;700&family=Noto+Serif+KR:wght@300;400;600;700&display=swap" rel="stylesheet">';
+const PREVIEW_SERIF_FONT_STACK = 'Georgia,"Times New Roman","Noto Serif TC","Noto Serif SC","Noto Serif JP","Noto Serif KR","Noto Serif","Songti TC","PMingLiU",serif';
+const DOCX_RUN_FALLBACK_SERIF_STACK = '"Noto Serif TC","Noto Serif SC","Noto Serif JP","Noto Serif KR","Noto Serif","Microsoft JhengHei","PingFang TC",serif';
 const CAT_FILE = path.join(DATA, 'catalog.json');
 const CFG_FILE = path.join(DATA, 'config.json');
 const VALID_COLLECTION_MODES = new Set(['scenario', 'image']);
@@ -1514,7 +1517,7 @@ function getDocxRunStyle(runXml) {
   if (/<w:u\b[^>]*w:val="(?!none)[^"]+"/.test(rPr) || /<w:u(?:\b[^>]*)?\/>/.test(rPr)) styles.push('text-decoration:underline');
   if (color) styles.push(`color:#${color}`);
   if (sizeHalfPoints > 0) styles.push(`font-size:${(sizeHalfPoints / 2).toFixed(1).replace(/\.0$/, '')}pt`);
-  if (fontHint) styles.push(`font-family:${JSON.stringify(fontHint)},"Noto Serif TC","Microsoft JhengHei","PingFang TC",serif`);
+  if (fontHint) styles.push(`font-family:${JSON.stringify(fontHint)},${DOCX_RUN_FALLBACK_SERIF_STACK}`);
   return styles.join(';');
 }
 
@@ -2236,6 +2239,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${pageTitle}</title>
+  ${PREVIEW_NOTO_FONT_LINKS}
   <style>
     :root{
       --bg:#fff;--text:#222;--muted:#777;--line:#e8e8e8;--link:#2f6db5;
@@ -2246,7 +2250,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     *{box-sizing:border-box}
     html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
     body{
-      font-family:Georgia,"Times New Roman","Noto Serif TC","Songti TC","PMingLiU",serif;
+      font-family:${PREVIEW_SERIF_FONT_STACK};
       text-rendering:optimizeLegibility;
       -webkit-font-smoothing:antialiased;
       transition:background .2s ease,color .2s ease;
@@ -2509,12 +2513,13 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${pageTitle}</title>
+  ${PREVIEW_NOTO_FONT_LINKS}
   <style>
     :root{--bg:#fff;--text:#222;--muted:#777;--line:#e8e8e8;--link:#2f6db5;--panel:#fbfbfb}
     html[data-theme="dark"]{--bg:#111118;--text:#ece7df;--muted:#9a958d;--line:#2a2a34;--link:#8fb6ff;--panel:#171720}
     *{box-sizing:border-box}
     html,body{margin:0;padding:0;background:var(--bg);color:var(--text)}
-    body{font-family:Georgia,"Times New Roman","Noto Serif TC","Songti TC","PMingLiU",serif;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;transition:background .2s ease,color .2s ease}
+    body{font-family:${PREVIEW_SERIF_FONT_STACK};text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;transition:background .2s ease,color .2s ease}
     .page{width:min(100%,760px);margin:0 auto;padding:58px 24px 72px}
     .meta{margin-bottom:18px}
     .meta-head{display:flex;align-items:stretch;justify-content:space-between;gap:24px}
