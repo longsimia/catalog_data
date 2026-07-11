@@ -63,6 +63,25 @@ const THUMB_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gi
 // ── 工具函式 ──────────────────────────────────────
 const sha256 = s => crypto.createHash('sha256').update(String(s)).digest('hex');
 
+function normalizeHttpOrigin(raw = '') {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  try {
+    const url = new URL(text);
+    return /^https?:$/.test(url.protocol) ? url.origin : '';
+  } catch {
+    return '';
+  }
+}
+
+function normalizePublicShareSiteSlug(raw = '') {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/^-+|-+$/g, '');
+}
+
 function getDefaultInitialAuthUser() {
   return {
     id: 'default-admin',
@@ -973,7 +992,9 @@ const readCfg = () => {
     collections: getDefaultCollectionsConfig(),
     userUiPrefs: {},
     googleClientId: '',
-    uploadOrigin: ''
+    uploadOrigin: '',
+    publicShareOrigin: '',
+    publicShareSiteSlug: ''
   });
   let dirty = false;
   if (typeof cfg.pwdHash !== 'string') {
@@ -984,16 +1005,19 @@ const readCfg = () => {
     cfg.googleClientId = '';
     dirty = true;
   }
-  const rawUploadOrigin = String(cfg.uploadOrigin || '').trim();
-  let normalizedUploadOrigin = '';
-  if (rawUploadOrigin) {
-    try {
-      const url = new URL(rawUploadOrigin);
-      if (/^https?:$/.test(url.protocol)) normalizedUploadOrigin = url.origin;
-    } catch {}
-  }
+  const normalizedUploadOrigin = normalizeHttpOrigin(cfg.uploadOrigin);
   if (cfg.uploadOrigin !== normalizedUploadOrigin) {
     cfg.uploadOrigin = normalizedUploadOrigin;
+    dirty = true;
+  }
+  const normalizedPublicShareOrigin = normalizeHttpOrigin(cfg.publicShareOrigin);
+  if (cfg.publicShareOrigin !== normalizedPublicShareOrigin) {
+    cfg.publicShareOrigin = normalizedPublicShareOrigin;
+    dirty = true;
+  }
+  const normalizedPublicShareSiteSlug = normalizePublicShareSiteSlug(cfg.publicShareSiteSlug);
+  if (cfg.publicShareSiteSlug !== normalizedPublicShareSiteSlug) {
+    cfg.publicShareSiteSlug = normalizedPublicShareSiteSlug;
     dirty = true;
   }
   if (!cfg.authSecret) {
@@ -3084,12 +3108,54 @@ function cleanupPreviewShareLinksInConfig(cfg = null) {
   return currentCfg;
 }
 
-function buildPreviewShareUrl(req, token = '') {
-  const sharePath = `/preview-share/${encodeURIComponent(String(token || '').trim())}`;
+function getPublicShareOrigin(cfg = null) {
+  return normalizeHttpOrigin(process.env.PUBLIC_SHARE_ORIGIN) || normalizeHttpOrigin(cfg?.publicShareOrigin);
+}
+
+function getPublicShareSiteSlug(cfg = null) {
+  return normalizePublicShareSiteSlug(process.env.PUBLIC_SHARE_SITE_SLUG) || normalizePublicShareSiteSlug(cfg?.publicShareSiteSlug);
+}
+
+function buildPreviewSharePath(token = '', cfg = null) {
+  const encodedToken = encodeURIComponent(String(token || '').trim());
+  const siteSlug = getPublicShareSiteSlug(cfg);
+  if (siteSlug) return `/${siteSlug}/${encodedToken}`;
+  return `/preview-share/${encodedToken}`;
+}
+
+function buildPreviewShareUrl(req, token = '', cfg = null) {
+  const resolvedCfg = cfg || readCfg();
+  const sharePath = buildPreviewSharePath(token, resolvedCfg);
+  const publicShareOrigin = getPublicShareOrigin(resolvedCfg);
   return {
     sharePath,
-    shareUrl: `${req.protocol}://${req.get('host')}${sharePath}`
+    shareUrl: publicShareOrigin
+      ? new URL(sharePath, `${publicShareOrigin}/`).toString()
+      : `${req.protocol}://${req.get('host')}${sharePath}`
   };
+}
+
+function isTrustedPublicShareRequest(req, cfg = null) {
+  const publicShareOrigin = getPublicShareOrigin(cfg);
+  const siteSlug = getPublicShareSiteSlug(cfg);
+  if (!publicShareOrigin || !siteSlug) return true;
+  const forwardedHost = String(req?.headers['x-forwarded-host'] || '').trim().toLowerCase();
+  const sharedSlug = normalizePublicShareSiteSlug(req?.headers['x-share-site-slug'] || '');
+  let publicShareHost = '';
+  try {
+    publicShareHost = new URL(publicShareOrigin).host.toLowerCase();
+  } catch {}
+  return !!publicShareHost && forwardedHost === publicShareHost && sharedSlug === siteSlug;
+}
+
+function ensureTrustedPublicShareRequest(req, res, cfg = null, responseType = 'html') {
+  if (isTrustedPublicShareRequest(req, cfg)) return true;
+  if (responseType === 'json') {
+    res.status(404).json({ error: 'Not found' });
+  } else {
+    res.status(404).send('Not found');
+  }
+  return false;
 }
 
 function getPreviewSharePasswordVersion(cfg, share = {}) {
@@ -3158,7 +3224,9 @@ function listPreviewSharesForCollection(cfg, collection = 'scenario', req = null
       if (previewIndex < 0) return null;
       const preview = resolvePreview(item, previewIndex, share.collection);
       if (!preview) return null;
-      const shareUrlInfo = req ? buildPreviewShareUrl(req, token) : { sharePath: `/preview-share/${encodeURIComponent(token)}`, shareUrl: '' };
+      const shareUrlInfo = req
+        ? buildPreviewShareUrl(req, token, cfg)
+        : { sharePath: buildPreviewSharePath(token, cfg), shareUrl: '' };
       return {
         token,
         itemId: item.id,
@@ -3219,6 +3287,8 @@ function applyNoContextMenuToHtml(html = '') {
 }
 
 function getRequestOrigin(req, cfg = null) {
+  const publicShareOrigin = getPublicShareOrigin(cfg);
+  if (publicShareOrigin && isTrustedPublicShareRequest(req, cfg)) return publicShareOrigin;
   const uploadOrigin = String(cfg?.uploadOrigin || '').trim();
   if (uploadOrigin) return uploadOrigin;
   return `${req.protocol}://${req.get('host')}`;
@@ -3250,7 +3320,7 @@ function getPreviewShareMeta(req, cfg, resolved) {
   const title = item.translatedTitle || item.title || preview.label || preview.filename || '公開閱覽';
   const fileLabel = preview.label || preview.filename || '附件';
   const description = `${title}｜${fileLabel}`;
-  const url = buildAbsoluteUrl(req, `/preview-share/${encodeURIComponent(token)}`, cfg);
+  const url = buildAbsoluteUrl(req, buildPreviewSharePath(token, cfg), cfg);
   const imagePath = getPreviewShareEmbedImagePath(item, preview, token);
   const imageUrl = imagePath ? buildAbsoluteUrl(req, imagePath, cfg) : '';
   const isImageShare = preview?.type === 'media' && String(preview?.mimeType || '').toLowerCase().startsWith('image/');
@@ -3933,7 +4003,7 @@ app.post('/api/items/:id/preview-share', auth, (req, res) => {
       passwordHash: typeof previous.passwordHash === 'string' ? previous.passwordHash : ''
     };
     saveCfg(cfg);
-    const { sharePath, shareUrl } = buildPreviewShareUrl(req, token);
+    const { sharePath, shareUrl } = buildPreviewShareUrl(req, token, cfg);
     return res.json({
       ok: true,
       sharePath,
@@ -3947,6 +4017,7 @@ app.post('/api/items/:id/preview-share', auth, (req, res) => {
 app.post('/api/preview-share/:token/auth', (req, res) => {
   try {
     const cfg = readCfg();
+    if (!ensureTrustedPublicShareRequest(req, res, cfg, 'json')) return;
     const share = getPreviewShareEntry(cfg, req.params.token);
     if (!share) return res.status(404).json({ error: '找不到分享的線上閱覽檔案' });
     if (share.enabled === false) return res.status(403).json({ error: '此公開連結目前已取消公開' });
@@ -4484,6 +4555,7 @@ app.get('/preview-open/:id/:index', (req, res) => {
 app.get('/preview-share/:token', (req, res) => {
   try {
     const cfg = readCfg();
+    if (!ensureTrustedPublicShareRequest(req, res, cfg)) return;
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).send('找不到分享的線上閱覽檔案');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -4498,6 +4570,7 @@ app.get('/preview-share/:token', (req, res) => {
 app.get('/api/preview-share/:token', (req, res) => {
   try {
     const cfg = readCfg();
+    if (!ensureTrustedPublicShareRequest(req, res, cfg, 'json')) return;
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).json({ error: '找不到分享的線上閱覽檔案' });
     const accessState = getPreviewShareAccessState(cfg, resolved.share, req);
