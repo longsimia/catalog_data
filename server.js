@@ -3267,7 +3267,7 @@ function findExistingPreviewShareToken(existingLinks = {}, target = {}) {
 
 function createPreviewShareToken(existingLinks = {}) {
   for (let i = 0; i < 8; i += 1) {
-    const token = crypto.randomBytes(9).toString('base64')
+    const token = crypto.randomBytes(6).toString('base64')
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/g, '');
