@@ -368,7 +368,6 @@ function listStoredScenarioFiles(collection = 'scenario', itemId = '') {
 function syncScenarioDownloadFiles(item, collection = 'scenario', mode = 'scenario') {
   if (!item || mode !== 'scenario' || !item.id) return item;
   const diskFiles = listStoredScenarioFiles(collection, item.id);
-  const folderEntries = normalizeDownloadFolderEntries(item);
   const existingEntries = normalizeDownloadEntries(item);
   if (!diskFiles.length) {
     return existingEntries.length
@@ -380,24 +379,54 @@ function syncScenarioDownloadFiles(item, collection = 'scenario', mode = 'scenar
       : item;
   }
   const existingFiles = normalizeDownloadFiles(item);
-  const existingSignature = existingFiles
-    .map(file => `${file.relativePath || file.key}|${file.size || ''}`)
-    .join('\n');
-  const diskSignature = diskFiles
-    .map(file => `${file.relativePath || file.key}|${file.size || ''}`)
-    .join('\n');
-  if (existingSignature === diskSignature) return {
+  const diskByRelativePath = new Map(
+    diskFiles.map(file => [String(file.relativePath || file.key || '').replace(/\\/g, '/'), file])
+  );
+  const existingByRelativePath = new Map(
+    existingFiles.map(file => [String(file.relativePath || file.key || '').replace(/\\/g, '/'), file])
+  );
+  const existingKeys = [...existingByRelativePath.keys()];
+  const diskKeys = [...diskByRelativePath.keys()];
+  const sameMembership = existingKeys.length === diskKeys.length
+    && existingKeys.every(key => diskByRelativePath.has(key))
+    && diskKeys.every(key => existingByRelativePath.has(key));
+
+  const mergedFileByRelativePath = new Map(
+    existingFiles.map(file => {
+      const rel = String(file.relativePath || file.key || '').replace(/\\/g, '/');
+      const diskFile = diskByRelativePath.get(rel);
+      return [rel, diskFile ? { ...file, ...diskFile, relativePath: diskFile.relativePath || file.relativePath } : null];
+    }).filter(([, value]) => !!value)
+  );
+
+  const mergedOrderedEntries = existingEntries
+    .map(entry => {
+      if (entry?.kind === 'folder') return entry;
+      const rel = String(entry?.relativePath || entry?.key || '').replace(/\\/g, '/');
+      return mergedFileByRelativePath.get(rel) || null;
+    })
+    .filter(Boolean);
+
+  const extraDiskFiles = diskFiles.filter(file => {
+    const rel = String(file.relativePath || file.key || '').replace(/\\/g, '/');
+    return !existingByRelativePath.has(rel);
+  });
+
+  if (sameMembership && !extraDiskFiles.length) return {
     ...item,
-    downloadFiles: [...folderEntries, ...existingFiles],
-    downloadName: item.downloadName || existingFiles[0]?.name || null
+    downloadFiles: mergedOrderedEntries,
+    downloadName: item.downloadName || normalizeDownloadFiles({ downloadFiles: mergedOrderedEntries })[0]?.name || null
   };
+
+  const nextEntries = [...mergedOrderedEntries, ...extraDiskFiles];
+  const nextFiles = normalizeDownloadFiles({ downloadFiles: nextEntries });
   return {
     ...item,
-    downloadKey: diskFiles.length === 1 && !folderEntries.length ? diskFiles[0].key : null,
-    downloadName: diskFiles.length === 1 && !folderEntries.length
-      ? diskFiles[0].name
+    downloadKey: nextFiles.length === 1 && !normalizeDownloadFolderEntries({ downloadFiles: nextEntries }).length ? nextFiles[0].key : null,
+    downloadName: nextFiles.length === 1 && !normalizeDownloadFolderEntries({ downloadFiles: nextEntries }).length
+      ? nextFiles[0].name
       : `${sanitizeDownloadName(String(item.title || item.subtitle || 'download').replace(/\.zip$/i, ''), 'download')}.zip`,
-    downloadFiles: [...folderEntries, ...diskFiles]
+    downloadFiles: nextEntries
   };
 }
 
