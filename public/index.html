@@ -261,7 +261,7 @@ body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justif
 .card-author{font-size:.74rem;color:var(--muted);margin-bottom:.16rem;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card-author.empty{visibility:hidden;margin-bottom:0}
-.card-tags{display:flex;flex-wrap:nowrap;gap:.25rem;overflow:hidden;width:calc(100% + 16px);margin-left:-6px;margin-right:-10px}
+.card-tags{display:flex;align-items:center;flex-wrap:nowrap;gap:.25rem;overflow:visible;width:100%;margin:0;padding:1px 0}
 .card-tags .tag{flex:0 0 auto}
 .card-tags{margin-top:auto}
 .card-badge{display:inline-flex;align-items:center;justify-content:center;padding:.2rem .48rem;border:1px solid var(--border);border-radius:999px;font-size:.68rem;letter-spacing:.08em;color:var(--muted);background:var(--panel)}
@@ -273,7 +273,7 @@ body[data-collection-mode="image"] .card-body{min-height:36px;padding:.24rem .8r
 body[data-collection-mode="image"] .card-body{display:flex;flex-direction:column;justify-content:center;align-items:stretch}
 body[data-collection-mode="image"] .card-title{margin-bottom:0;min-height:1.4em}
 body[data-collection-mode="image"] .card-title.empty{visibility:hidden}
-.tag{display:inline-block;padding:.14rem .48rem;border:1px solid var(--border);border-radius:100px;font-size:.69rem;color:var(--muted)}
+.tag{display:inline-block;padding:.14rem .48rem;border:1px solid var(--border);border-radius:100px;font-size:.69rem;line-height:1.1;color:var(--muted);box-sizing:border-box}
 
 /* ── EMPTY ── */
 #empty{text-align:center;padding:5rem 1rem;color:var(--muted);display:none}
