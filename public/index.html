@@ -1883,6 +1883,7 @@ const S = {
   uploadTreeDropZone: '',
   editTreeDropZone: '',
   localThumbUrls: new Map(),
+  localMediaUrls: new Map(),
   delItemId: null,
   delKind: '',
   delTargetIdx: null,
@@ -3251,11 +3252,23 @@ function getCachedLocalThumbUrl(file) {
   const key = getLocalThumbCacheKey(file);
   return key ? (S.localThumbUrls.get(key) || '') : '';
 }
+function getCachedLocalMediaUrl(file) {
+  const key = getLocalThumbCacheKey(file);
+  return key ? (S.localMediaUrls.get(key) || '') : '';
+}
+function getOrCreateLocalMediaUrl(file) {
+  if (!file) return '';
+  const cacheKey = getLocalThumbCacheKey(file);
+  if (cacheKey && S.localMediaUrls.has(cacheKey)) return S.localMediaUrls.get(cacheKey) || '';
+  const objectUrl = URL.createObjectURL(file);
+  if (cacheKey) S.localMediaUrls.set(cacheKey, objectUrl);
+  return objectUrl;
+}
 async function createLocalThumbUrl(file, maxEdge = 400, quality = 0.8) {
   if (!file || !String(file.type || '').toLowerCase().startsWith('image/')) return '';
   const cacheKey = getLocalThumbCacheKey(file);
   if (cacheKey && S.localThumbUrls.has(cacheKey)) return S.localThumbUrls.get(cacheKey) || '';
-  const objectUrl = URL.createObjectURL(file);
+  const objectUrl = getOrCreateLocalMediaUrl(file);
   let keepOriginalObjectUrl = false;
   try {
     const img = await new Promise((resolve, reject) => {
@@ -3272,28 +3285,34 @@ async function createLocalThumbUrl(file, maxEdge = 400, quality = 0.8) {
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      keepOriginalObjectUrl = true;
       return objectUrl;
     }
     ctx.drawImage(img, 0, 0, width, height);
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', quality));
     if (!blob) {
-      keepOriginalObjectUrl = true;
       return objectUrl;
     }
     const thumbUrl = URL.createObjectURL(blob);
     if (cacheKey) S.localThumbUrls.set(cacheKey, thumbUrl);
     return thumbUrl;
   } catch {
-    keepOriginalObjectUrl = true;
     return objectUrl;
-  } finally {
-    if (!keepOriginalObjectUrl) URL.revokeObjectURL(objectUrl);
   }
 }
 async function ensureLocalThumbUrls(files = []) {
   const list = Array.isArray(files) ? files : [];
   await Promise.all(list.map(file => createLocalThumbUrl(file).catch(() => '')));
+}
+function ensureLocalThumbUrlsInBackground(files = [], onDone = null) {
+  const list = (Array.isArray(files) ? files : []).filter(file => {
+    if (!file) return false;
+    if (getMediaKindFromFile(file) !== 'image') return false;
+    return !getCachedLocalThumbUrl(file);
+  });
+  if (!list.length) return;
+  Promise.all(list.map(file => createLocalThumbUrl(file).catch(() => ''))).finally(() => {
+    if (typeof onDone === 'function') onDone();
+  });
 }
 function getExistingThumbSrc(key = '') {
   return key && canUseThumbForName(key) ? cUrl(thumbUrl(key)) : '';
@@ -3576,7 +3595,7 @@ function stopGalleryCoverCropDrag(event) {
 function renderPreviewThumbFromFile(file) {
   const name = file?.name || 'media';
   const kind = getMediaKindFromFile(file);
-  const src = getCachedLocalThumbUrl(file) || URL.createObjectURL(file);
+  const src = getCachedLocalThumbUrl(file) || getCachedLocalMediaUrl(file) || getOrCreateLocalMediaUrl(file);
   if (kind === 'video') return `<video class="pt" src="${esc(src)}" muted playsinline preload="metadata" title="${esc(name)}"></video>`;
   if (kind === 'audio') return `<div class="pt-audio" title="${esc(name)}">${icon('audio')}<span>${esc(name)}</span></div>`;
   return `<img class="pt" src="${esc(src)}" title="${esc(name)}">`;
@@ -7394,18 +7413,21 @@ async function dzD(e, type) {
 function onPrev(files) {
   if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
   if (!files?.length) return;
-  S.up.prevs = [...S.up.prevs, ...Array.from(files)];
+  const nextFiles = Array.from(files);
+  nextFiles.forEach(getOrCreateLocalMediaUrl);
+  S.up.prevs = [...S.up.prevs, ...nextFiles];
   renderPrevGrid();
+  ensureLocalThumbUrlsInBackground(nextFiles.filter(file => getMediaKindFromFile(file) === 'image'), () => renderPrevGrid());
 }
 async function renderUpPickPrevPanel() {
   const panel = document.getElementById('up-pick-prev-panel');
   if (!panel) return;
   const candidates = S.up.files.filter(f => isImageFile(f.name));
   if (!candidates.length) { toast('附件中沒有圖片檔案', ''); return; }
-  await ensureLocalThumbUrls(candidates);
+  ensureLocalThumbUrlsInBackground(candidates, () => renderUpPickPrevPanel());
   panel.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:.35rem;margin-top:.4rem;padding:.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
     ${candidates.map((f, i) => `<div style="cursor:pointer" onclick="pickUpPrev(${i})" title="${esc(f.name)}">
-      <img src="${esc(getCachedLocalThumbUrl(f) || URL.createObjectURL(f))}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
+      <img src="${esc(getCachedLocalThumbUrl(f) || getCachedLocalMediaUrl(f) || getOrCreateLocalMediaUrl(f))}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
       <div style="font-size:.62rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(f.name)}</div>
     </div>`).join('')}
   </div>`;
@@ -7436,13 +7458,14 @@ function onEditPrev(files) {
     kind: 'new',
     tempId: `new-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
     file,
-    src: URL.createObjectURL(file)
+    src: getOrCreateLocalMediaUrl(file)
   }));
-  Promise.all(items.map(async item => {
-    item.thumbSrc = await createLocalThumbUrl(item.file).catch(() => '');
-    return item;
-  })).finally(() => {
-    S.ePrevs = [...S.ePrevs, ...items];
+  S.ePrevs = [...S.ePrevs, ...items];
+  renderEditPrevGrid();
+  ensureLocalThumbUrlsInBackground(items.map(item => item.file), () => {
+    items.forEach(item => {
+      item.thumbSrc = getCachedLocalThumbUrl(item.file) || item.thumbSrc || '';
+    });
     renderEditPrevGrid();
   });
 }
@@ -7454,14 +7477,14 @@ async function renderEditPickPrevPanel() {
     return isImageFile(name);
   });
   if (!candidates.length) { toast('附件中沒有圖片檔案', ''); return; }
-  await ensureLocalThumbUrls(candidates.filter(entry => entry.kind === 'new').map(entry => entry.file));
+  ensureLocalThumbUrlsInBackground(candidates.filter(entry => entry.kind === 'new').map(entry => entry.file), () => renderEditPickPrevPanel());
   const usedKeys = new Set(S.ePrevs.map(item => getEditPrevKey(item)).filter(Boolean));
   panel.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:.35rem;margin-top:.4rem;padding:.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
     ${candidates.map((entry, i) => {
       const name = entry.kind === 'existing' ? (entry.originalName || entry.key) : entry.file?.name;
       const src  = entry.kind === 'existing'
         ? (getExistingThumbSrc(entry.key) || cUrl('/uploads/' + entry.key))
-        : (getCachedLocalThumbUrl(entry.file) || URL.createObjectURL(entry.file));
+        : (getCachedLocalThumbUrl(entry.file) || getCachedLocalMediaUrl(entry.file) || getOrCreateLocalMediaUrl(entry.file));
       const fullSrc = entry.kind === 'existing' ? cUrl('/uploads/' + entry.key) : '';
       const uid  = entry.kind === 'existing' ? `existing|key|${entry.key || ''}` : (entry.tempId || '');
       const used = usedKeys.has(uid);
