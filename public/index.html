@@ -182,7 +182,7 @@ select.fs:focus{border-color:var(--gold)}
 .pgsel{display:flex;align-items:center;gap:.38rem;color:var(--muted);font-size:.76rem;white-space:nowrap;flex-wrap:wrap}
 .pgsel select{min-width:56px}
 .ctrl-mobile-row{display:contents}
-.page-jump{position:relative;display:inline-flex;align-items:center;gap:.38rem;color:var(--muted);width:var(--page-jump-width,66px)}
+.page-jump{position:relative;display:inline-flex;align-items:center;gap:.38rem;color:var(--muted);width:var(--page-jump-width,56px)}
 .page-jump::after{content:'';position:absolute;right:.7rem;top:50%;width:.72rem;height:.72rem;transform:translateY(-50%);pointer-events:none;opacity:.8;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8a98' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:center;background-size:contain;transition:transform .18s}
 .page-jump.open::after{transform:translateY(-50%) rotate(180deg)}
 .page-jump input{width:100%;min-height:42px;padding:.5rem 1.8rem .5rem .72rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);color:var(--text);font-size:.83rem;font-family:inherit;outline:none;transition:border-color .2s;text-align:center}
@@ -1022,7 +1022,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   #pills{grid-area:tag}
   .tf{order:unset;min-width:0;width:auto;max-width:none}
   .pgsel{order:unset;width:auto;justify-content:flex-start;min-width:0;flex:1 1 auto}
-  .page-jump{width:var(--page-jump-width-mobile,68px)}
+  .page-jump{width:var(--page-jump-width-mobile,56px)}
   .theme-btn{top:calc((70px - 42px) / 2);right:4.5rem;width:42px;height:42px}
   .hbg{top:calc((70px - 42px) / 2);right:1rem;width:42px;height:42px}
   .tf-btn{width:100%;min-width:0}
@@ -4280,8 +4280,8 @@ function updatePageJump(totalPages, hasItems) {
   const panel = document.getElementById('page-jump-panel');
   if (!wrap || !input || !panel) return;
   const digits = Math.max(String(Math.max(totalPages, 1)).length, String(Math.max(S.F.page || 1, 1)).length, 2);
-  const desktopWidth = `${Math.max(66, Math.round(38 + digits * 12))}px`;
-  const mobileWidth = `${Math.max(68, Math.round(40 + digits * 14))}px`;
+  const desktopWidth = digits >= 3 ? '66px' : '56px';
+  const mobileWidth = digits >= 3 ? '68px' : '56px';
   wrap.style.setProperty('--page-jump-width', desktopWidth);
   wrap.style.setProperty('--page-jump-width-mobile', mobileWidth);
   input.dataset.totalPages = String(totalPages);
