@@ -898,22 +898,25 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .preview-card-share:hover{background:transparent}
 .preview-card-share .ico{transform:scale(.7)}
 .preview-tree{display:grid;gap:.45rem}
-.preview-tree-node{display:grid;gap:.35rem}
+.preview-tree-node{display:grid;gap:.35rem;min-width:0}
 .preview-entry{display:flex;align-items:center;gap:.5rem;width:100%;padding:.58rem .72rem;border:1px solid var(--border);border-radius:var(--r);
-  background:transparent;color:var(--text);font:inherit;text-decoration:none;text-align:left}
+  background:transparent;color:var(--text);font:inherit;text-decoration:none;text-align:left;min-width:0;max-width:100%}
 .preview-entry:hover{border-color:var(--gold);background:var(--gglow);color:var(--gold)}
 .preview-entry.folder{cursor:pointer}
 .preview-entry .meta{display:flex;align-items:center;gap:.45rem;min-width:0;flex:1}
 .preview-entry .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-name{display:inline-flex;align-items:baseline;gap:0;min-width:0;max-width:100%;overflow:hidden;white-space:nowrap}
+.file-name .name-base{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto}
+.file-name .name-ext,.file-name .name-size{flex:0 0 auto;white-space:nowrap}
 .preview-entry .arr{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;flex:0 0 auto;transition:transform .2s ease}
 .preview-entry.open .arr{transform:rotate(90deg)}
 .preview-entry .arr .ico,.preview-entry .folder-ico .ico{width:1rem;height:1rem}
 .preview-entry .folder-ico{display:inline-flex;align-items:center;justify-content:center;color:var(--gold)}
-.preview-entry-row{display:flex;align-items:stretch;gap:.45rem}
+.preview-entry-row{display:flex;align-items:stretch;gap:.45rem;min-width:0;max-width:100%}
 .preview-entry-main{flex:1}
 .preview-entry-share{flex:0 0 auto;align-self:center}
-.preview-children{display:grid;gap:.35rem;padding-left:1.15rem;border-left:1px solid var(--border);margin-left:.5rem}
-.preview-item{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);text-decoration:none;color:inherit;transition:transform .18s var(--ease),border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
+.preview-children{display:grid;gap:.35rem;padding-left:1.15rem;border-left:1px solid var(--border);margin-left:.5rem;min-width:0}
+.preview-item{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:var(--r);background:var(--card);text-decoration:none;color:inherit;transition:transform .18s var(--ease),border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease);min-width:0;max-width:100%}
 .preview-item:hover{transform:translateY(-1px);border-color:var(--gold);box-shadow:var(--toast-shadow);background:var(--bg2)}
 .preview-item-btn{width:100%;font-family:inherit;text-align:left;cursor:pointer}
 .preview-item .meta{display:flex;align-items:center;gap:.45rem;min-width:0;flex:1}
@@ -922,7 +925,7 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .preview-item .subact{display:inline-flex;align-items:center;justify-content:center;padding:.34rem .6rem;border:1px solid var(--border);border-radius:999px;background:var(--panel);color:var(--muted);font-size:.74rem;flex-shrink:0}
 .preview-item:hover .subact{border-color:var(--gold);color:var(--gold)}
 .attachment-tree .preview-item,
-.attachment-tree .preview-entry{background:transparent;color:var(--text);border-color:var(--border);box-shadow:none}
+.attachment-tree .preview-entry{background:transparent;color:var(--text);border-color:var(--border);box-shadow:none;min-width:0;max-width:100%}
 .attachment-tree .preview-item,
 .attachment-tree .attachment-folder-row{position:relative;transition:border-color .2s,transform .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
 .attachment-tree .preview-item{cursor:grab;transform:none;padding:.58rem .72rem}
@@ -933,12 +936,13 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .attachment-tree .preview-item .meta,
 .attachment-tree .preview-entry .meta{align-items:center}
 .attachment-tree .preview-item .name,
-.attachment-tree .preview-entry .name{font-family:var(--font-sans);font-size:.88rem;font-weight:500;color:inherit}
+.attachment-tree .preview-entry .name{font-family:var(--font-sans);font-size:.88rem;font-weight:400;color:inherit}
+.attachment-tree .preview-entry.folder .name{font-weight:600}
 .attachment-tree .preview-item .actions,
 .attachment-tree .attachment-folder-row .actions{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
 .attachment-tree .preview-item .grip,
 .attachment-tree .attachment-folder-row .grip{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);cursor:grab}
-.attachment-tree .attachment-folder-row{display:flex;align-items:stretch;gap:.45rem}
+.attachment-tree .attachment-folder-row{display:flex;align-items:stretch;gap:.45rem;min-width:0;max-width:100%}
 .attachment-tree .attachment-folder-row .preview-entry{flex:1}
 .attachment-tree .attachment-folder-row .preview-entry .meta{min-width:0}
 .attachment-tree .attachment-folder-row .folder-main{display:flex;align-items:center;gap:.5rem}
@@ -5140,17 +5144,34 @@ function renderPreviewListEntries(files, mode = 'preview') {
   const canCreatePreviewShare = canRolePermission('createPreviewShare');
   return list.map(file => {
     const label = file?.treeName || file?.name || '未命名附件';
+    const size = Number.isFinite(file?.size) ? file.size : 0;
+    const fullLabel = size ? `${label} (${fmtSz(size)})` : label;
     const iconHtml = `<span class="ico" aria-hidden="true">${icon(getPreviewTreeIconName(file))}</span>`;
+    const nameHtml = renderFileNameLabel(label, size);
     if (mode === 'download') {
       const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : 0;
-      return `<button class="preview-entry" type="button" onclick="downloadModalFile(${fileIndex})" title="${esc(label)}" aria-label="${esc(label)}"><span class="meta">${iconHtml}<span class="name" title="${esc(label)}">${esc(label)}</span></span><span class="subact">下載</span></button>`;
+      return `<button class="preview-entry" type="button" onclick="downloadModalFile(${fileIndex})" title="${esc(fullLabel)}" aria-label="${esc(fullLabel)}"><span class="meta">${iconHtml}${nameHtml}</span><span class="subact">下載</span></button>`;
     }
     const fileIndex = Number.isInteger(file?.treeIndex) ? file.treeIndex : 0;
     return `<div class="preview-entry-row">
-      <a class="preview-entry preview-entry-main" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}"><span class="meta">${iconHtml}<span class="name" title="${esc(label)}">${esc(label)}</span></span></a>
+      <a class="preview-entry preview-entry-main" href="${esc(getPreviewCardHref(file, mode))}" target="_blank" rel="noopener" title="${esc(fullLabel)}" aria-label="${esc(fullLabel)}"><span class="meta">${iconHtml}${nameHtml}</span></a>
       ${canCreatePreviewShare ? `<button class="ib preview-entry-share" type="button" onclick="sharePreviewFile(${fileIndex})" title="公開線上閱覽" aria-label="公開線上閱覽">${icon('share')}</button>` : ''}
     </div>`;
   }).join('');
+}
+function splitDisplayFileName(label) {
+  const safeLabel = String(label || '未命名附件');
+  const dotIndex = safeLabel.lastIndexOf('.');
+  if (dotIndex > 0 && dotIndex < safeLabel.length - 1) {
+    return { base: safeLabel.slice(0, dotIndex), ext: safeLabel.slice(dotIndex) };
+  }
+  return { base: safeLabel, ext: '' };
+}
+function renderFileNameLabel(label, size = 0) {
+  const safeLabel = String(label || '未命名附件');
+  const { base, ext } = splitDisplayFileName(safeLabel);
+  const sizeText = size ? ` (${fmtSz(size)})` : '';
+  return `<span class="name file-name" title="${esc(safeLabel)}"><span class="name-base">${esc(base)}</span>${ext ? `<span class="name-ext">${esc(ext)}</span>` : ''}${sizeText ? `<span class="name-size">${esc(sizeText)}</span>` : ''}</span>`;
 }
 function renderPreviewTreeNodes(node, mode = 'preview') {
   const folderHtml = Array.from(node.folders.values()).map(folder => {
@@ -8363,20 +8384,22 @@ function renderAttachmentFolderNode(folder, options = {}) {
 function renderUploadAttachmentFileNode(fileNode) {
   const file = fileNode.entry;
   const moved = S.fileJustMovedKey === makeUploadFileKey(file) ? ' moved' : '';
+  const size = Number.isFinite(file?.size) ? file.size : 0;
   return `<div class="preview-item attachment-file-row${moved}" draggable="true" data-tree-key="${esc(`file:${fileNode.treeIndex}`)}" data-file-index="${fileNode.treeIndex}"
     ondragstart="uploadFileDragStart(event,${fileNode.treeIndex})" ondragover="uploadFileDragOver(event)"
     ondrop="uploadFileDrop(event,${fileNode.treeIndex})" ondragend="uploadFileDragEnd(event)">
-    <div class="meta"><span class="grip" title="拖曳排序">${icon('grip')}</span><span class="ico" aria-hidden="true">${icon('file')}</span><span class="name">${esc(fileNode.treeName)}${file?.size ? ` (${fmtSz(file.size)})` : ''}</span></div>
+    <div class="meta"><span class="grip" title="拖曳排序">${icon('grip')}</span><span class="ico" aria-hidden="true">${icon('file')}</span>${renderFileNameLabel(fileNode.treeName, size)}</div>
     <div class="actions"><button class="ib" type="button" onclick="removeUploadFileAt(${fileNode.treeIndex})" title="刪除附件">${icon('trash')}</button></div>
   </div>`;
 }
 function renderEditAttachmentFileNode(fileNode) {
   const entry = fileNode.entry;
   const moved = S.eFileJustMovedKey === makeEditDownloadEntryKey(entry) ? ' moved' : '';
+  const size = Number.isFinite(entry?.size) ? entry.size : 0;
   return `<div class="preview-item attachment-file-row${moved}" draggable="true" data-tree-key="${esc(`file:${fileNode.treeIndex}`)}" data-entry-index="${fileNode.treeIndex}"
     ondragstart="editFileDragStart(event,${fileNode.treeIndex})" ondragover="editFileDragOver(event)"
     ondrop="editFileDrop(event,${fileNode.treeIndex})" ondragend="editFileDragEnd(event)">
-    <div class="meta"><span class="grip" title="拖曳排序">${icon('grip')}</span><span class="ico" aria-hidden="true">${icon('file')}</span><span class="name">${esc(fileNode.treeName)}${entry?.size ? ` (${fmtSz(entry.size)})` : ''}</span></div>
+    <div class="meta"><span class="grip" title="拖曳排序">${icon('grip')}</span><span class="ico" aria-hidden="true">${icon('file')}</span>${renderFileNameLabel(fileNode.treeName, size)}</div>
     <div class="actions"><button class="ib" type="button" onclick="removeEditFileAt(${fileNode.treeIndex})" title="刪除附件">${icon('trash')}</button></div>
   </div>`;
 }
