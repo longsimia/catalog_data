@@ -2853,6 +2853,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .toc-actions button{min-width:0;white-space:nowrap;flex:0 0 auto}
     .modal-actions.toc-actions button{padding:8px 10px !important;font-size:14px !important;line-height:1.2;flex:0 0 auto}
     .modal-actions.toc-actions #tocClearBtn,.modal-actions.toc-actions #tocRefreshBtn{width:76.8px;height:37.6px;box-sizing:border-box}
+    .modal-actions.toc-actions #tocAddBtn{width:132.8px;height:37.6px;box-sizing:border-box}
     .find-grid{display:grid;gap:12px;margin-top:18px}
     .find-grid label{display:grid;gap:6px;font-size:14px;color:var(--muted)}
     .find-grid input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);font:inherit;outline:none}
