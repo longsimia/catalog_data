@@ -3970,6 +3970,17 @@ function makeExistingPreviewEntry(srcKind, value) {
     thumbSrc: srcKind === 'key' ? getExistingThumbSrc(value) : ''
   };
 }
+function makeAttachmentPreviewEntry(entry) {
+  if (!entry?.file || !entry?.tempId) return null;
+  return {
+    kind: 'new',
+    source: 'attachment',
+    tempId: entry.tempId,
+    file: entry.file,
+    src: getCachedLocalMediaUrl(entry.file) || getOrCreateLocalMediaUrl(entry.file),
+    thumbSrc: getCachedLocalThumbUrl(entry.file) || ''
+  };
+}
 function getEditPreviewState(item) {
   const list = [];
   const seen = new Set();
@@ -7516,8 +7527,14 @@ function pickEditPrev(i) {
   if (!entry) return;
 
   if (entry.kind === 'new') {
-    // 新附件：立即上傳取 key，避免儲存時重複上傳
-    _pickEditPrevNew(entry, panel);
+    const dup = S.ePrevs.some(p => p.kind === 'new' && p.source === 'attachment' && p.tempId === entry.tempId);
+    if (!dup) {
+      const previewEntry = makeAttachmentPreviewEntry(entry);
+      if (previewEntry) S.ePrevs.push(previewEntry);
+      renderEditPrevGrid();
+    }
+    renderEditPickPrevPanel();
+    toast(dup ? '已在預覽清單中' : '已加入預覽', dup ? '' : 'ok');
     return;
   }
 
@@ -7530,57 +7547,6 @@ function pickEditPrev(i) {
   }
   renderEditPickPrevPanel();
   toast(dup ? '已在預覽清單中' : '已加入預覽', dup ? '' : 'ok');
-}
-
-async function _pickEditPrevNew(entry, panel) {
-  panel.innerHTML = '<p style="padding:.5rem;color:var(--muted);font-size:.8rem">上傳中…</p>';
-  try {
-    const existingKeys = S.eDownloadEntries.filter(e => e.kind === 'existing').map(e => e.key);
-    const fd = new FormData();
-    fd.append('files', entry.file);
-    fd.append('relativePaths[]', getEntryRelativeFilePath(entry) || entry.file?.name || 'file');
-    fd.append('keptKeys', JSON.stringify(existingKeys));
-    const resp = await fetch(uploadUrl(`/api/items/${S.eId}/file`), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${getToken()}` },
-      body: fd
-    });
-    const data = parseJsonText(await resp.text(), {});
-    if (!resp.ok) throw new Error(data.error || '上傳失敗');
-
-    const existingKeySet = new Set(existingKeys);
-    const dlFiles = getItemDownloadFiles(data.item || {});
-    const newFile = dlFiles.find(f => !existingKeySet.has(f.key));
-    if (!newFile?.key) throw new Error('無法取得檔案 key');
-    const newKey = newFile.key;
-
-    // 把 S.eDownloadEntries 裡的 new 轉成 existing
-    const idx = S.eDownloadEntries.findIndex(e => e.tempId === entry.tempId);
-    if (idx >= 0) {
-      S.eDownloadEntries[idx] = {
-        kind: 'existing',
-        key: newKey,
-        originalName: entry.file?.name || '',
-        size: entry.file?.size || 0,
-        relativePath: getEntryRelativeFilePath(entry) || entry.file?.name || ''
-      };
-    }
-    const localItem = S.cat.items.find(i => i.id === S.eId);
-    if (localItem) Object.assign(localItem, data.item || {});
-
-    const dup = S.ePrevs.some(p => p.kind === 'existing' && p.key === newKey);
-    if (!dup) {
-      const previewEntry = makeExistingPreviewEntry('key', newKey);
-      if (previewEntry) S.ePrevs.push(previewEntry);
-      renderEditPrevGrid();
-    }
-    panel.innerHTML = ''; panel._candidates = null;
-    renderEditPickPrevPanel();
-    toast(dup ? '已在預覽清單中' : '已加入預覽', dup ? '' : 'ok');
-  } catch(e) {
-    panel.innerHTML = ''; panel._candidates = null;
-    toast(e.message, 'err');
-  }
 }
 function onFile(files) {
   if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
@@ -10717,40 +10683,6 @@ async function saveEdit() {
     body.categories.forEach(ensureMasterCategory);
     await api('PUT', `/api/items/${S.eId}`, body);
     const currentPreviews = getEditPreviewState(item);
-    const previewsFd = new FormData();
-    const previewOrder = [];
-    let hasPreviewMutation = false;
-    let newPreviewCount = 0;
-    S.ePrevs.forEach(entry => {
-      if (entry.kind === 'existing') {
-        previewOrder.push({ type: entry.srcKind, value: entry.value });
-      } else {
-        previewOrder.push({ type: 'new', value: newPreviewCount });
-        previewsFd.append('previews', entry.file);
-        newPreviewCount += 1;
-        hasPreviewMutation = true;
-      }
-    });
-    if (previewOrder.length !== currentPreviews.length ||
-        previewOrder.some((entry, idx) => {
-          const prev = currentPreviews[idx];
-          return !prev || prev.kind !== 'existing' || prev.srcKind !== entry.type || prev.value !== entry.value;
-        })) {
-      hasPreviewMutation = true;
-    }
-    if (hasPreviewMutation) {
-      previewsFd.append('order', JSON.stringify(previewOrder));
-      const prevResp = await fetch(uploadUrl(`/api/items/${S.eId}/previews`), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
-        body: previewsFd
-      });
-      const prevText = await prevResp.text();
-      let prevData = {};
-      try { prevData = prevText ? JSON.parse(prevText) : {}; } catch {}
-      if (!prevResp.ok) throw new Error(prevData.error || readResponseErrorText(prevText, '預覽圖片更新失敗'));
-      Object.assign(item, prevData.item || {});
-    }
     const originalDownloadState = getItemDownloadFiles(item).map(file => ({
       key: `existing|${file.key}`,
       relativePath: normalizeEntryRelativePath(file.relativePath || file.name, file.name || 'download')
@@ -10763,6 +10695,7 @@ async function saveEdit() {
       originalDownloadState.length !== nextDownloadState.length ||
       originalDownloadState.some((entry, idx) => entry.key !== nextDownloadState[idx]?.key || entry.relativePath !== nextDownloadState[idx]?.relativePath) ||
       S.eDownloadEntries.some(entry => entry.kind === 'new');
+    let newKeyMap = new Map();
 
     if (downloadFilesChanged) {
       const newEntries = S.eDownloadEntries.filter(entry => entry.kind === 'new');
@@ -10774,12 +10707,12 @@ async function saveEdit() {
           pathGetter: entry => getEntryRelativeFilePath(entry) || entry.file?.name || 'download.bin',
           sizeGetter: entry => entry.file?.size || 0,
           includeKeptKeys: true,
-          keptKeys: existingKeys,
-          entryKeyGetter: entry => entry.tempId,
-          onProgress: (done, total) => showLdg(`儲存附檔… (${done}/${total})`)
-        });
+            keptKeys: existingKeys,
+            entryKeyGetter: entry => entry.tempId,
+            onProgress: (done, total) => showLdg(`儲存附檔… (${done}/${total})`)
+          });
         Object.assign(item, uploadResult?.item || {});
-        const newKeyMap = uploadResult?.uploadedKeyMap || new Map();
+        newKeyMap = uploadResult?.uploadedKeyMap || new Map();
         const finalOrderEntries = S.eDownloadEntries
           .map(entry => {
             const key = entry.kind === 'existing' ? entry.key : newKeyMap.get(entry.tempId);
@@ -10806,6 +10739,47 @@ async function saveEdit() {
         const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderEntries);
         Object.assign(item, reorderedItem || {});
       }
+    }
+    const previewsFd = new FormData();
+    const previewOrder = [];
+    let hasPreviewMutation = false;
+    let newPreviewCount = 0;
+    S.ePrevs.forEach(entry => {
+      if (entry.kind === 'existing') {
+        previewOrder.push({ type: entry.srcKind, value: entry.value });
+        return;
+      }
+      if (entry.source === 'attachment') {
+        const mappedKey = newKeyMap.get(entry.tempId);
+        if (mappedKey) {
+          previewOrder.push({ type: 'key', value: mappedKey });
+          return;
+        }
+      }
+      previewOrder.push({ type: 'new', value: newPreviewCount });
+      previewsFd.append('previews', entry.file);
+      newPreviewCount += 1;
+      hasPreviewMutation = true;
+    });
+    if (previewOrder.length !== currentPreviews.length ||
+        previewOrder.some((entry, idx) => {
+          const prev = currentPreviews[idx];
+          return !prev || prev.kind !== 'existing' || prev.srcKind !== entry.type || prev.value !== entry.value;
+        })) {
+      hasPreviewMutation = true;
+    }
+    if (hasPreviewMutation) {
+      previewsFd.append('order', JSON.stringify(previewOrder));
+      const prevResp = await fetch(uploadUrl(`/api/items/${S.eId}/previews`), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: previewsFd
+      });
+      const prevText = await prevResp.text();
+      let prevData = {};
+      try { prevData = prevText ? JSON.parse(prevText) : {}; } catch {}
+      if (!prevResp.ok) throw new Error(prevData.error || readResponseErrorText(prevText, '預覽圖片更新失敗'));
+      Object.assign(item, prevData.item || {});
     }
     Object.assign(item, body);
     syncItemCategoryFields(item);
