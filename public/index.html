@@ -306,6 +306,8 @@ body[data-collection-mode="image"] .card-title.empty{visibility:hidden}
 .lb-track{display:flex;height:100%;transition:transform .32s var(--ease)}
 .lb-slide{min-width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:3rem 4rem}
 .lb-slide img,.lb-slide video{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;border:1px solid var(--gdim);border-radius:4px;-webkit-user-drag:none;user-select:none}
+.lb-slide.focusable{cursor:zoom-in}
+.lb-slide.is-media-focus{cursor:zoom-out}
 .lb-slide audio{width:min(720px,100%);max-width:100%}
 .lb-slide-media-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.8rem;color:var(--muted);font-size:.92rem}
 .lb-slide-media-empty .ico{width:1.8rem;height:1.8rem;color:var(--gold)}
@@ -1033,6 +1035,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   .lb-tw{min-height:0}
   .lb-slide{padding:.9rem .9rem 2rem}
   .lb-slide img,.lb-slide video{border-radius:8px}
+  .lb-slide.focusable{padding:.9rem}
   .lb-nav{display:none !important}
   .lb-dots{bottom:.55rem}
   .lb-info{flex:1 0 auto;width:100%;max-width:100%;min-width:0;border-left:none;border-top:1px solid var(--border);padding:1rem 1rem 1.15rem;overflow:visible}
@@ -1043,6 +1046,13 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   .lb-x{transform:none;width:40px;height:40px;background:var(--card);outline-color:var(--border);color:var(--text);flex:0 0 40px}
   .lb-t{font-size:1.02rem}
   .lb-meta{margin-top:0}
+  .lb.mobile-media-focus .lb-inner{overflow:hidden}
+  .lb.mobile-media-focus .lb-vis{height:100dvh;min-height:100dvh;flex:1 1 auto;background:rgba(0,0,0,.96)}
+  .lb.mobile-media-focus .lb-tw{height:100%;overflow:hidden;touch-action:none}
+  .lb.mobile-media-focus .lb-slide{height:100dvh;padding:0}
+  .lb.mobile-media-focus .lb-slide img{max-width:100vw;max-height:100dvh;border:none;border-radius:0}
+  .lb.mobile-media-focus .lb-dots,
+  .lb.mobile-media-focus .lb-info{display:none}
   .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
   body[data-gallery-view="list"] .gallery-list-row{width:100%;padding:.72rem}
   body[data-gallery-view="list"] .gallery-list-row .mth{width:54px;height:54px}
@@ -1816,7 +1826,7 @@ const S = {
     { key:'image', label:'圖庫', mode:'image', permission:'public' }
   ],
   collection: localStorage.getItem('catalog-coll') || 'scenario',
-  lbImgs: [], lbSlide: 0, lbItemId: null,
+  lbImgs: [], lbSlide: 0, lbItemId: null, lbMediaFocus: false,
   F:      { q:'', cats:[], tags:[], page:1, pageSize:20 },
   MF:     { cats:[], tags:[] },
   up:     { prevs:[], files:[], tags:[], categories:[], mode:'up', attachmentPrevs: new Set() },
@@ -3578,7 +3588,7 @@ function renderLightboxMedia(entry) {
   const mediaContextAttrs = mediaLocked ? ' oncontextmenu="return false"' : '';
   if (entry.kind === 'video') return `<video src="${esc(entry.src)}" controls playsinline preload="metadata"${mediaLockAttrs}${mediaContextAttrs}></video>`;
   if (entry.kind === 'audio') return `<audio src="${esc(entry.src)}" controls preload="metadata"${mediaLockAttrs}></audio>`;
-  return `<img src="${esc(entry.src)}" alt=""${mediaContextAttrs}${mediaLocked ? ' draggable="false"' : ''}>`;
+  return `<img src="${esc(entry.src)}" alt=""${mediaContextAttrs}${mediaLocked ? ' draggable="false"' : ''} onclick="enterLightboxMediaFocus(event)">`;
 }
 function getItemDownloadFiles(item) {
   const files = Array.isArray(item?.downloadFiles) ? item.downloadFiles.filter(file => file?.key) : [];
@@ -4893,6 +4903,7 @@ async function openLb(id, options = {}) {
   if (!item) return;
   if (document.getElementById('lb')?.classList.contains('on') && S.lbItemId !== id) stopLightboxMediaPlayback();
   S.lbItemId = id;
+  setLightboxMediaFocus(false);
   syncLightboxItem(item, options);
   document.getElementById('lb').classList.add('on');
   document.body.style.overflow = 'hidden';
@@ -4908,6 +4919,7 @@ async function openLb(id, options = {}) {
       S._ty = touch.clientY;
     };
     touchArea.ontouchend = e => {
+      if (S.lbMediaFocus) return;
       const touch = e.changedTouches?.[0];
       if (!touch) return;
       const dx = touch.clientX - S._tx;
@@ -4942,9 +4954,10 @@ function syncLightboxItem(item, options = {}) {
   S.lbSlide = nextSlide;
 
   document.getElementById('lbt').innerHTML = mediaEntries.map(entry =>
-    `<div class="lb-slide">${renderLightboxMedia(entry)}</div>`
+    `<div class="lb-slide${entry.kind === 'image' ? ' focusable' : ''}" onclick="handleLightboxSlideClick(event)">${renderLightboxMedia(entry)}</div>`
   ).join('');
   document.getElementById('lbt').style.transform = '';
+  setLightboxMediaFocus(false);
 
   const multi = mediaEntries.length > 1;
   document.getElementById('lb-pv').style.display = multi ? 'flex' : 'none';
@@ -4969,6 +4982,32 @@ function syncLightboxItem(item, options = {}) {
     .join('');
   lbDesc.textContent = item.description || '';
   lbSync();
+}
+
+function isMobileLightboxViewport() {
+  return window.matchMedia('(max-width:700px)').matches;
+}
+
+function setLightboxMediaFocus(active) {
+  const focused = !!active && isMobileLightboxViewport();
+  S.lbMediaFocus = focused;
+  const lightbox = document.getElementById('lb');
+  if (lightbox) lightbox.classList.toggle('mobile-media-focus', focused);
+  document.querySelectorAll('#lbt .lb-slide.focusable').forEach(slide => {
+    slide.classList.toggle('is-media-focus', focused);
+  });
+}
+
+function enterLightboxMediaFocus(event) {
+  if (!isMobileLightboxViewport()) return;
+  event?.stopPropagation?.();
+  setLightboxMediaFocus(true);
+}
+
+function handleLightboxSlideClick(event) {
+  if (!S.lbMediaFocus || !isMobileLightboxViewport()) return;
+  if (event?.target?.closest('img,video,audio')) return;
+  setLightboxMediaFocus(false);
 }
 
 function syncLightboxDownload(item, downloadData, previewData) {
@@ -5320,6 +5359,7 @@ function stopLightboxMediaPlayback() {
   });
 }
 function closeLb() {
+  setLightboxMediaFocus(false);
   stopLightboxMediaPlayback();
   closePreviewModal();
   document.getElementById('lb').classList.remove('on');
@@ -5328,8 +5368,8 @@ function closeLb() {
   S.lbItemId = null;
   clearShareUrl();
 }
-function lbN(d)    { const n = S.lbImgs.length; if (n <= 1) return; S.lbSlide = (S.lbSlide + d + n) % n; lbSync(); }
-function lbTo(i)   { S.lbSlide = i; lbSync(); }
+function lbN(d)    { if (S.lbMediaFocus) return; const n = S.lbImgs.length; if (n <= 1) return; S.lbSlide = (S.lbSlide + d + n) % n; lbSync(); }
+function lbTo(i)   { if (S.lbMediaFocus) return; S.lbSlide = i; lbSync(); }
 function lbStepItem(d) {
   const items = filtered();
   if (!items.length || !S.lbItemId) return;
@@ -5376,7 +5416,10 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (document.getElementById('lb').classList.contains('on')) {
-    if (e.key === 'Escape')      closeLb();
+    if (e.key === 'Escape') {
+      if (S.lbMediaFocus) setLightboxMediaFocus(false);
+      else closeLb();
+    }
     if (e.key === 'ArrowRight')  lbN(1);
     if (e.key === 'ArrowLeft')   lbN(-1);
     if (e.key === 'ArrowDown')   lbStepItem(1);

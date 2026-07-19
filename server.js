@@ -1603,7 +1603,7 @@ function getDocxRunStyle(runXml) {
   const fontAscii = (rPr.match(/<w:rFonts\b[^>]*w:ascii="([^"]+)"/) || [])[1] || '';
   const fontEastAsia = (rPr.match(/<w:rFonts\b[^>]*w:eastAsia="([^"]+)"/) || [])[1] || '';
   const fontHintRaw = fontEastAsia || fontAscii;
-  const fontHint = fontHintRaw === '新細明體' ? 'Georgia' : fontHintRaw;
+  const fontHint = ['新細明體', '宋体'].includes(fontHintRaw) ? 'Georgia' : fontHintRaw;
   const sizeHalfPoints = Number((rPr.match(/<w:sz\b[^>]*w:val="(\d+)"/) || [])[1] || 0);
   const styles = [];
   if (isDocxTogglePropertyEnabled(rPr, 'b')) styles.push('font-weight:700');
