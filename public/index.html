@@ -7436,11 +7436,9 @@ async function renderUpPickPrevPanel() {
   const candidates = S.up.files.filter(f => isImageFile(f.name));
   if (!candidates.length) { toast('附件中沒有圖片檔案', ''); return; }
   ensureLocalThumbUrlsInBackground(candidates, () => renderUpPickPrevPanel());
+  const usedKeys = new Set(S.up.prevs.map(file => getUploadPrevKey(file)).filter(Boolean));
   panel.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:.35rem;margin-top:.4rem;padding:.5rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r)">
-    ${candidates.map((f, i) => `<div style="cursor:pointer" onclick="pickUpPrev(${i})" title="${esc(f.name)}">
-      <img src="${esc(getCachedLocalThumbUrl(f) || getCachedLocalMediaUrl(f) || getOrCreateLocalMediaUrl(f))}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
-      <div style="font-size:.62rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc(f.name)}</div>
-    </div>`).join('')}
+    ${candidates.map((f, i) => renderUpPickPrevTileHtml(f, i, usedKeys.has(getUploadPrevKey(f)))).join('')}
   </div>`;
   panel._candidates = candidates;
 }
@@ -7450,6 +7448,23 @@ function openUpPickPrev() {
   if (panel.innerHTML) { panel.innerHTML = ''; panel._candidates = null; return; }
   renderUpPickPrevPanel();
 }
+function renderUpPickPrevTileHtml(file, i, used = false) {
+  const key = getUploadPrevKey(file);
+  return `<div data-up-prev-key="${esc(key)}" style="cursor:pointer;opacity:${used ? .4 : 1}" onclick="pickUpPrev(${i})" title="${esc(file.name)}">
+      <img src="${esc(getCachedLocalThumbUrl(file) || getCachedLocalMediaUrl(file) || getOrCreateLocalMediaUrl(file))}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;border:1px solid var(--border)">
+      <div style="font-size:.62rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${used ? '✓ 已加入' : esc(file.name)}</div>
+    </div>`;
+}
+function syncUpPickPrevTileState(file) {
+  const panel = document.getElementById('up-pick-prev-panel');
+  const key = getUploadPrevKey(file);
+  if (!panel || !key) return;
+  const tile = panel.querySelector(`[data-up-prev-key="${CSS.escape(key)}"]`);
+  if (!tile) return;
+  tile.style.opacity = '.4';
+  const label = tile.querySelector('div:last-child');
+  if (label) label.textContent = '✓ 已加入';
+}
 function pickUpPrev(i) {
   const panel = document.getElementById('up-pick-prev-panel');
   const file = (panel?._candidates || [])[i];
@@ -7458,9 +7473,9 @@ function pickUpPrev(i) {
   if (!dup) {
     S.up.prevs.push(file);
     S.up.attachmentPrevs.add(file);
-    renderPrevGrid();
+    appendUploadPrevCard(file);
+    syncUpPickPrevTileState(file);
   }
-  renderUpPickPrevPanel();
   toast(dup ? '已在預覽清單中' : `已加入預覽：${file.name}`, dup ? '' : 'ok');
 }
 function onEditPrev(files) {
@@ -7930,15 +7945,7 @@ function renderEditDownloadFileRow(view) {
 function renderPrevGrid() {
   const wrap = document.getElementById('pg');
   if (!wrap) return;
-  wrap.innerHTML = S.up.prevs.map((file, i) => `
-    <div class="prev-card${S.prevDragOverIdx === i ? ' drop-card' : ''}${S.prevJustMovedKey === getUploadPrevKey(file) ? ' moved' : ''}" draggable="true" data-i="${i}"
-      ondragstart="prevDragStart(event,${i})" ondragover="prevDragOver(event)"
-      ondrop="prevDrop(event,${i})" ondragend="prevDragEnd(event)">
-      ${renderPreviewThumbFromFile(file)}
-      <span class="prev-grip" title="拖曳排序">${icon('grip')}</span>
-      <button class="prev-del" type="button" onclick="removePrevAt(${i});event.stopPropagation()" title="刪除此圖">${icon('trash')}</button>
-      <span class="prev-order">${i + 1}</span>
-    </div>`).join('');
+  wrap.innerHTML = S.up.prevs.map((file, i) => renderUploadPrevCardHtml(file, i)).join('');
 }
 function renderUploadFilePicked() {
   const box = document.getElementById('fi-picked');
@@ -8499,6 +8506,25 @@ function removeEditFileAt(i, count = 1) {
 }
 function getUploadPrevKey(file) {
   return file ? [file.name || '', file.size || 0, file.lastModified || 0].join('|') : '';
+}
+function renderUploadPrevCardHtml(file, i) {
+  return `
+    <div class="prev-card${S.prevDragOverIdx === i ? ' drop-card' : ''}${S.prevJustMovedKey === getUploadPrevKey(file) ? ' moved' : ''}" draggable="true" data-i="${i}"
+      ondragstart="prevDragStart(event,${i})" ondragover="prevDragOver(event)"
+      ondrop="prevDrop(event,${i})" ondragend="prevDragEnd(event)">
+      ${renderPreviewThumbFromFile(file)}
+      <span class="prev-grip" title="拖曳排序">${icon('grip')}</span>
+      <button class="prev-del" type="button" onclick="removePrevAt(${i});event.stopPropagation()" title="刪除此圖">${icon('trash')}</button>
+      <span class="prev-order">${i + 1}</span>
+    </div>`;
+}
+function appendUploadPrevCard(file) {
+  const wrap = document.getElementById('pg');
+  if (!wrap) {
+    renderPrevGrid();
+    return;
+  }
+  wrap.insertAdjacentHTML('beforeend', renderUploadPrevCardHtml(file, S.up.prevs.length - 1));
 }
 function getEditPrevKey(item) {
   if (!item) return '';
