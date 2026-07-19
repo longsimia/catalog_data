@@ -765,6 +765,18 @@ textarea.fc{min-height:144px;resize:none;overflow:hidden}
 .file-picked .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .file-picked .ib{flex-shrink:0}
 .file-picked .dh{margin-right:.05rem}
+.file-drop-zone{display:flex;align-items:center;justify-content:center;padding:.55rem .7rem;margin:0 0 .45rem;border:1px dashed var(--border);border-radius:var(--r);background:color-mix(in srgb,var(--bg2) 72%, transparent);font-size:.75rem;color:var(--muted);transition:border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
+.file-drop-zone.active{border-color:var(--gold);box-shadow:0 0 0 1px var(--gglow);background:color-mix(in srgb,var(--gglow) 18%, var(--bg2))}
+.edit-folder-group{margin-bottom:.55rem}
+.edit-folder-head{display:flex;align-items:center;justify-content:space-between;gap:.55rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);font-size:.77rem;color:var(--text);transition:border-color .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
+.edit-folder-head.active{border-color:var(--gold);box-shadow:0 0 0 1px var(--gglow);background:color-mix(in srgb,var(--gglow) 12%, var(--bg2))}
+.edit-folder-head .meta{display:flex;align-items:center;gap:.45rem;min-width:0;flex:1}
+.edit-folder-head .meta .ico{color:var(--gold);flex-shrink:0}
+.edit-folder-head .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.edit-folder-files{padding:.38rem 0 0 1rem}
+.file-picked.file-entry{margin-bottom:.35rem}
+.file-picked.file-entry .sub{display:block;font-size:.68rem;color:var(--muted);margin-top:.12rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-picked.file-entry .meta{align-items:flex-start}
 
 /* Mode toggle */
 .mb{display:flex;gap:.4rem;margin-bottom:.5rem}
@@ -3738,7 +3750,11 @@ async function appendFilesInBatches(itemId, entries, options = {}) {
 }
 async function reorderItemDownloadFiles(itemId, orderKeys = []) {
   const fd = new FormData();
-  fd.append('order', JSON.stringify(orderKeys.map(key => ({ type: 'key', value: key }))));
+  const normalizedOrder = (orderKeys || []).map(entry => {
+    if (typeof entry === 'string') return { type: 'key', value: entry };
+    return entry;
+  }).filter(entry => entry?.type === 'key' && typeof entry.value === 'string' && entry.value);
+  fd.append('order', JSON.stringify(normalizedOrder));
   const resp = await fetch(uploadUrl(`/api/items/${itemId}/file`), {
     method: 'POST',
     headers: { Authorization: `Bearer ${getToken()}` },
@@ -3798,6 +3814,58 @@ function makeEditDownloadEntryKey(entry) {
   return entry.kind === 'existing'
     ? `existing|${entry.key || ''}`
     : `new|${entry.tempId || ''}`;
+}
+function normalizeEntryRelativePath(relativePath = '', fallback = '') {
+  const normalized = String(relativePath || '').replace(/\\/g, '/').split('/').map(part => String(part || '').trim()).filter(Boolean).join('/');
+  return normalized || String(fallback || '').trim();
+}
+function getEntryPathParts(entry) {
+  const rel = normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry?.name || entry?.file?.name || 'download');
+  const parts = rel.split('/').filter(Boolean);
+  return { rel, parts };
+}
+function getEntryFolderName(entry) {
+  const { parts } = getEntryPathParts(entry);
+  return parts.length > 1 ? parts[0] : '';
+}
+function getEntryLeafName(entry) {
+  const { parts } = getEntryPathParts(entry);
+  return parts[parts.length - 1] || entry?.name || entry?.file?.name || 'download';
+}
+function composeEntryRelativePath(entry, folderName = '') {
+  const leaf = getEntryLeafName(entry);
+  const folder = String(folderName || '').trim().replace(/[\\/]+/g, '/').replace(/^\/+|\/+$/g, '');
+  return folder ? `${folder}/${leaf}` : leaf;
+}
+function setEditDownloadEntryPath(entry, relativePath = '') {
+  if (!entry) return entry;
+  const next = normalizeEntryRelativePath(relativePath, getEntryLeafName(entry));
+  if (entry.kind === 'existing') entry.relativePath = next;
+  else entry.relativePath = next;
+  return entry;
+}
+function buildEditDownloadLayout(entries = []) {
+  const rootFiles = [];
+  const folders = [];
+  const folderMap = new Map();
+  (entries || []).forEach((entry, index) => {
+    const rel = normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry?.name || entry?.file?.name || `file-${index + 1}`);
+    const parts = rel.split('/').filter(Boolean);
+    const leafName = parts[parts.length - 1] || `file-${index + 1}`;
+    const topFolder = parts.length > 1 ? parts[0] : '';
+    const view = { entry, index, relativePath: rel, leafName, topFolder };
+    if (!topFolder) {
+      rootFiles.push(view);
+      return;
+    }
+    if (!folderMap.has(topFolder)) {
+      const group = { name: topFolder, items: [] };
+      folderMap.set(topFolder, group);
+      folders.push(group);
+    }
+    folderMap.get(topFolder).items.push(view);
+  });
+  return { rootFiles, folders };
 }
 function buildEditDownloadEntries(item) {
   return getItemDownloadFiles(item).map(file => ({
@@ -7428,7 +7496,7 @@ function setFileDragIndicator(kind, idx, pos) {
     clearFileDragIndicator('edit');
     S.eFileDragOverIdx = idx;
     S.eFileDragOverPos = pos;
-    document.querySelectorAll(`#e-fi-picked .file-picked[data-i="${idx}"]`).forEach(el => el.classList.add(pos === 'after' ? 'drop-after' : 'drop-before'));
+    document.querySelectorAll(`#e-fi-picked .file-picked[data-entry-index="${idx}"]`).forEach(el => el.classList.add(pos === 'after' ? 'drop-after' : 'drop-before'));
   } else {
     if (S.fileDragOverIdx === idx && S.fileDragOverPos === pos) return;
     clearFileDragIndicator('upload');
@@ -7448,12 +7516,124 @@ function uploadFileDragOver(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   if (S.fileDragIdx === null) return;
-  setFileDragIndicator('upload', Number(e.currentTarget.dataset.i), getSimpleRowDropPos(e));
+  setFileDragIndicator('upload', Number(e.currentTarget.dataset.fileIndex), getSimpleRowDropPos(e));
+}
+function getUploadFilePathParts(file) {
+  const rel = normalizeEntryRelativePath(getRelativeFilePath(file), file?.name || 'download');
+  const parts = rel.split('/').filter(Boolean);
+  return { rel, parts };
+}
+function getUploadFileFolderName(file) {
+  const { parts } = getUploadFilePathParts(file);
+  return parts.length > 1 ? parts[0] : '';
+}
+function getUploadFileLeafName(file) {
+  const { parts } = getUploadFilePathParts(file);
+  return parts[parts.length - 1] || file?.name || 'download';
+}
+function composeUploadFileRelativePath(file, folderName = '') {
+  const leaf = getUploadFileLeafName(file);
+  const folder = String(folderName || '').trim().replace(/[\\/]+/g, '/').replace(/^\/+|\/+$/g, '');
+  return folder ? `${folder}/${leaf}` : leaf;
+}
+function setUploadFilePath(file, relativePath = '') {
+  if (!file) return file;
+  file.relativePath = normalizeEntryRelativePath(relativePath, getUploadFileLeafName(file));
+  return file;
+}
+function buildUploadFileLayout(files = []) {
+  const rootFiles = [];
+  const folders = [];
+  const folderMap = new Map();
+  (files || []).forEach((file, index) => {
+    const rel = normalizeEntryRelativePath(getRelativeFilePath(file), file?.name || `file-${index + 1}`);
+    const parts = rel.split('/').filter(Boolean);
+    const leafName = parts[parts.length - 1] || `file-${index + 1}`;
+    const topFolder = parts.length > 1 ? parts[0] : '';
+    const view = { file, index, relativePath: rel, leafName, topFolder };
+    if (!topFolder) {
+      rootFiles.push(view);
+      return;
+    }
+    if (!folderMap.has(topFolder)) {
+      const group = { name: topFolder, items: [] };
+      folderMap.set(topFolder, group);
+      folders.push(group);
+    }
+    folderMap.get(topFolder).items.push(view);
+  });
+  return { rootFiles, folders };
+}
+function getUploadDropInsertIndex(targetIdx, pos) {
+  let insertIdx = Number(targetIdx);
+  if (S.fileDragIdx !== null && S.fileDragIdx < insertIdx) insertIdx -= 1;
+  if (pos === 'after') insertIdx += 1;
+  return Math.max(0, Math.min(S.up.files.length, insertIdx));
+}
+function moveUploadFileAt(sourceIdx, insertIdx, targetFolder = '') {
+  if (!Number.isInteger(sourceIdx) || sourceIdx < 0 || sourceIdx >= S.up.files.length) return null;
+  const [moved] = S.up.files.splice(sourceIdx, 1);
+  if (!moved) return null;
+  setUploadFilePath(moved, composeUploadFileRelativePath(moved, targetFolder));
+  const finalIdx = Math.max(0, Math.min(S.up.files.length, insertIdx));
+  S.up.files.splice(finalIdx, 0, moved);
+  return moved;
+}
+function setUploadFolderDropIndicator(folderName = '') {
+  document.querySelectorAll('#fi-picked .file-drop-zone.active,#fi-picked .edit-folder-head.active').forEach(el => el.classList.remove('active'));
+  if (!folderName) {
+    document.querySelector('#fi-picked .file-drop-zone')?.classList.add('active');
+    return;
+  }
+  document.querySelectorAll('#fi-picked .edit-folder-head').forEach(el => {
+    if ((el.dataset.folder || '') === String(folderName)) el.classList.add('active');
+  });
+}
+function uploadFileBucketDragOver(e, folderName = '') {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (S.fileDragIdx === null) return;
+  clearFileDragIndicator('upload');
+  setUploadFolderDropIndicator(folderName);
+}
+function findUploadFolderInsertIndex(folderName = '') {
+  const folder = String(folderName || '').trim();
+  if (!folder) {
+    let lastRootIdx = -1;
+    for (let idx = 0; idx < S.up.files.length; idx += 1) {
+      if (!getUploadFileFolderName(S.up.files[idx])) lastRootIdx = idx;
+    }
+    return lastRootIdx + 1;
+  }
+  let insertIdx = S.up.files.length;
+  for (let idx = 0; idx < S.up.files.length; idx += 1) {
+    if (getUploadFileFolderName(S.up.files[idx]) === folder) insertIdx = idx + 1;
+  }
+  return insertIdx;
+}
+function uploadFileBucketDrop(e, folderName = '') {
+  e.preventDefault();
+  if (S.fileDragIdx === null) return;
+  const insertIdx = getUploadDropInsertIndex(findUploadFolderInsertIndex(folderName), 'before');
+  const moved = moveUploadFileAt(S.fileDragIdx, insertIdx, folderName);
+  clearFileDragIndicator('upload');
+  S.fileDragIdx = null;
+  if (!moved) {
+    renderUploadFilePicked();
+    return;
+  }
+  S.fileJustMovedKey = makeUploadFileKey(moved);
+  renderUploadFilePicked();
+  setTimeout(() => {
+    if (S.fileJustMovedKey === makeUploadFileKey(moved)) {
+      S.fileJustMovedKey = null;
+      renderUploadFilePicked();
+    }
+  }, 1200);
 }
 function uploadFileDrop(e, targetIdx) {
   e.preventDefault();
   if (S.fileDragIdx === null) return;
-  const groups = getGroupedUploadItems(S.up.files, getRelativeFilePath, makeUploadFileKey);
   const pos = S.fileDragOverIdx === targetIdx ? S.fileDragOverPos : getSimpleRowDropPos(e);
   if (S.fileDragIdx === targetIdx) {
     clearFileDragIndicator('upload');
@@ -7461,7 +7641,8 @@ function uploadFileDrop(e, targetIdx) {
     renderUploadFilePicked();
     return;
   }
-  const moved = moveGroupedFileSlice(S.up.files, groups, S.fileDragIdx, targetIdx, pos);
+  const targetFolder = getUploadFileFolderName(S.up.files[targetIdx]);
+  const moved = moveUploadFileAt(S.fileDragIdx, getUploadDropInsertIndex(targetIdx, pos), targetFolder);
   if (!moved) {
     clearFileDragIndicator('upload');
     S.fileDragIdx = null;
@@ -7496,12 +7677,78 @@ function editFileDragOver(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   if (S.eFileDragIdx === null) return;
-  setFileDragIndicator('edit', Number(e.currentTarget.dataset.i), getSimpleRowDropPos(e));
+  setFileDragIndicator('edit', Number(e.currentTarget.dataset.entryIndex), getSimpleRowDropPos(e));
+}
+function getEditDropInsertIndex(targetIdx, pos) {
+  let insertIdx = Number(targetIdx);
+  if (S.eFileDragIdx !== null && S.eFileDragIdx < insertIdx) insertIdx -= 1;
+  if (pos === 'after') insertIdx += 1;
+  return Math.max(0, Math.min(S.eDownloadEntries.length, insertIdx));
+}
+function moveEditEntryAt(sourceIdx, insertIdx, targetFolder = '') {
+  if (!Number.isInteger(sourceIdx) || sourceIdx < 0 || sourceIdx >= S.eDownloadEntries.length) return null;
+  const [moved] = S.eDownloadEntries.splice(sourceIdx, 1);
+  if (!moved) return null;
+  setEditDownloadEntryPath(moved, composeEntryRelativePath(moved, targetFolder));
+  const finalIdx = Math.max(0, Math.min(S.eDownloadEntries.length, insertIdx));
+  S.eDownloadEntries.splice(finalIdx, 0, moved);
+  return moved;
+}
+function setEditFolderDropIndicator(folderName = '') {
+  document.querySelectorAll('#e-fi-picked .file-drop-zone.active,#e-fi-picked .edit-folder-head.active').forEach(el => el.classList.remove('active'));
+  if (!folderName) {
+    document.querySelector('#e-fi-picked .file-drop-zone')?.classList.add('active');
+    return;
+  }
+  document.querySelectorAll('#e-fi-picked .edit-folder-head').forEach(el => {
+    if ((el.dataset.folder || '') === String(folderName)) el.classList.add('active');
+  });
+}
+function editFileBucketDragOver(e, folderName = '') {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (S.eFileDragIdx === null) return;
+  clearFileDragIndicator('edit');
+  setEditFolderDropIndicator(folderName);
+}
+function findEditFolderInsertIndex(folderName = '') {
+  const folder = String(folderName || '').trim();
+  if (!folder) {
+    let lastRootIdx = -1;
+    for (let idx = 0; idx < S.eDownloadEntries.length; idx += 1) {
+      if (!getEntryFolderName(S.eDownloadEntries[idx])) lastRootIdx = idx;
+    }
+    return lastRootIdx + 1;
+  }
+  let insertIdx = S.eDownloadEntries.length;
+  for (let idx = 0; idx < S.eDownloadEntries.length; idx += 1) {
+    if (getEntryFolderName(S.eDownloadEntries[idx]) === folder) insertIdx = idx + 1;
+  }
+  return insertIdx;
+}
+function editFileBucketDrop(e, folderName = '') {
+  e.preventDefault();
+  if (S.eFileDragIdx === null) return;
+  const insertIdx = getEditDropInsertIndex(findEditFolderInsertIndex(folderName), 'before');
+  const moved = moveEditEntryAt(S.eFileDragIdx, insertIdx, folderName);
+  clearFileDragIndicator('edit');
+  S.eFileDragIdx = null;
+  if (!moved) {
+    renderEditFilePicked();
+    return;
+  }
+  S.eFileJustMovedKey = makeEditDownloadEntryKey(moved);
+  renderEditFilePicked();
+  setTimeout(() => {
+    if (S.eFileJustMovedKey === makeEditDownloadEntryKey(moved)) {
+      S.eFileJustMovedKey = null;
+      renderEditFilePicked();
+    }
+  }, 1200);
 }
 function editFileDrop(e, targetIdx) {
   e.preventDefault();
   if (S.eFileDragIdx === null) return;
-  const groups = getGroupedUploadItems(S.eDownloadEntries, getEntryRelativeFilePath, makeEditDownloadEntryKey);
   const pos = S.eFileDragOverIdx === targetIdx ? S.eFileDragOverPos : getSimpleRowDropPos(e);
   if (S.eFileDragIdx === targetIdx) {
     clearFileDragIndicator('edit');
@@ -7509,7 +7756,8 @@ function editFileDrop(e, targetIdx) {
     renderEditFilePicked();
     return;
   }
-  const moved = moveGroupedFileSlice(S.eDownloadEntries, groups, S.eFileDragIdx, targetIdx, pos);
+  const targetFolder = getEntryFolderName(S.eDownloadEntries[targetIdx]);
+  const moved = moveEditEntryAt(S.eFileDragIdx, getEditDropInsertIndex(targetIdx, pos), targetFolder);
   if (!moved) {
     clearFileDragIndicator('edit');
     S.eFileDragIdx = null;
@@ -7532,6 +7780,21 @@ function editFileDragEnd(e) {
   S.eFileDragIdx = null;
   clearFileDragIndicator('edit');
   renderEditFilePicked();
+}
+function renderEditDownloadFileRow(view) {
+  const classes = [
+    'file-picked',
+    'file-entry',
+    S.eFileJustMovedKey === makeEditDownloadEntryKey(view.entry) ? 'moved' : '',
+    S.eFileDragOverIdx === view.index && S.eFileDragOverPos === 'before' ? 'drop-before' : '',
+    S.eFileDragOverIdx === view.index && S.eFileDragOverPos === 'after' ? 'drop-after' : ''
+  ].filter(Boolean).join(' ');
+  return `<div class="${classes}" draggable="true" data-entry-index="${view.index}"
+    ondragstart="editFileDragStart(event,${view.index})" ondragover="editFileDragOver(event)"
+    ondrop="editFileDrop(event,${view.index})" ondragend="editFileDragEnd(event)">
+    <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon('file')}<span class="name">${esc(view.leafName)}${view.entry?.size ? ` (${fmtSz(view.entry.size)})` : ''}<span class="sub">${esc(view.relativePath)}</span></span></div>
+    <button class="ib del" type="button" onclick="removeEditFileAt(${view.index})" title="刪除附件">${icon('trash')}</button>
+  </div>`;
 }
 function renderPrevGrid() {
   const wrap = document.getElementById('pg');
@@ -7567,6 +7830,47 @@ function renderUploadFilePicked() {
     ? '資料夾會保留資料夾結構上傳，並依目前順序打包成 ZIP。'
     : (S.up.files.length > 1 ? '多個檔案會依目前順序打包成 ZIP。' : '');
 }
+function renderUploadFileRow(view) {
+  const classes = [
+    'file-picked',
+    'file-entry',
+    S.fileJustMovedKey === makeUploadFileKey(view.file) ? 'moved' : '',
+    S.fileDragOverIdx === view.index && S.fileDragOverPos === 'before' ? 'drop-before' : '',
+    S.fileDragOverIdx === view.index && S.fileDragOverPos === 'after' ? 'drop-after' : ''
+  ].filter(Boolean).join(' ');
+  return `<div class="${classes}" draggable="true" data-file-index="${view.index}"
+    ondragstart="uploadFileDragStart(event,${view.index})" ondragover="uploadFileDragOver(event)"
+    ondrop="uploadFileDrop(event,${view.index})" ondragend="uploadFileDragEnd(event)">
+    <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon('file')}<span class="name">${esc(view.leafName)}${view.file?.size ? ` (${fmtSz(view.file.size)})` : ''}<span class="sub">${esc(view.relativePath)}</span></span></div>
+    <button class="ib del" type="button" onclick="removeUploadFileAt(${view.index})" title="刪除附件">${icon('trash')}</button>
+  </div>`;
+}
+function renderUploadFilePicked() {
+  const box = document.getElementById('fi-picked');
+  const info = document.getElementById('fi-info');
+  if (!box || !info) return;
+  if (!S.up.files.length) {
+    box.innerHTML = '';
+    info.textContent = '';
+    return;
+  }
+  const layout = buildUploadFileLayout(S.up.files);
+  const rootHtml = layout.rootFiles.map(renderUploadFileRow).join('');
+  const folderHtml = layout.folders.map(group => {
+    const rows = group.items.map(renderUploadFileRow).join('');
+    return `<section class="edit-folder-group">
+      <div class="edit-folder-head" data-folder="${esc(group.name)}" ondragover="uploadFileBucketDragOver(event,'${escJsSingle(group.name)}')" ondrop="uploadFileBucketDrop(event,'${escJsSingle(group.name)}')">
+        <div class="meta">${icon('folder')}<span class="name">${esc(group.name)}/ ・ ${group.items.length} 個檔案</span></div>
+      </div>
+      <div class="edit-folder-files">${rows}</div>
+    </section>`;
+  }).join('');
+  box.innerHTML = `<div class="file-drop-zone" ondragover="uploadFileBucketDragOver(event,'')" ondrop="uploadFileBucketDrop(event,'')">拖到這裡可移出資料夾，變成獨立附件</div>${rootHtml}${folderHtml}`;
+  const hasFolder = layout.folders.length > 0;
+  info.textContent = hasFolder
+    ? '可拖曳單一檔案改順序，也可丟到其他資料夾或上方區域變成獨立附件。'
+    : (S.up.files.length > 1 ? '多個檔案會依目前順序打包成 ZIP。' : '');
+}
 function renderEditFilePicked() {
   const box = document.getElementById('e-fi-picked');
   const info = document.getElementById('e-fi-info');
@@ -7589,6 +7893,47 @@ function renderEditFilePicked() {
   info.textContent = hasFolder
     ? '儲存後會保留資料夾結構，並依目前順序重新產生 ZIP。'
     : (S.eDownloadEntries.length > 1 ? '儲存後會依目前順序重新產生 ZIP。' : '儲存後會更新附件內容。');
+}
+function renderEditDownloadFileRow(view) {
+  const classes = [
+    'file-picked',
+    'file-entry',
+    S.eFileJustMovedKey === makeEditDownloadEntryKey(view.entry) ? 'moved' : '',
+    S.eFileDragOverIdx === view.index && S.eFileDragOverPos === 'before' ? 'drop-before' : '',
+    S.eFileDragOverIdx === view.index && S.eFileDragOverPos === 'after' ? 'drop-after' : ''
+  ].filter(Boolean).join(' ');
+  return `<div class="${classes}" draggable="true" data-entry-index="${view.index}"
+    ondragstart="editFileDragStart(event,${view.index})" ondragover="editFileDragOver(event)"
+    ondrop="editFileDrop(event,${view.index})" ondragend="editFileDragEnd(event)">
+    <div class="meta"><span class="dh" title="拖曳排序">${icon('grip')}</span>${icon('file')}<span class="name">${esc(view.leafName)}${view.entry?.size ? ` (${fmtSz(view.entry.size)})` : ''}<span class="sub">${esc(view.relativePath)}</span></span></div>
+    <button class="ib del" type="button" onclick="removeEditFileAt(${view.index})" title="刪除附件">${icon('trash')}</button>
+  </div>`;
+}
+function renderEditFilePicked() {
+  const box = document.getElementById('e-fi-picked');
+  const info = document.getElementById('e-fi-info');
+  if (!box || !info) return;
+  if (!S.eDownloadEntries.length) {
+    box.innerHTML = '';
+    info.textContent = '目前沒有附件。';
+    return;
+  }
+  const layout = buildEditDownloadLayout(S.eDownloadEntries);
+  const rootHtml = layout.rootFiles.map(renderEditDownloadFileRow).join('');
+  const folderHtml = layout.folders.map(group => {
+    const rows = group.items.map(renderEditDownloadFileRow).join('');
+    return `<section class="edit-folder-group">
+      <div class="edit-folder-head" data-folder="${esc(group.name)}" ondragover="editFileBucketDragOver(event,'${escJsSingle(group.name)}')" ondrop="editFileBucketDrop(event,'${escJsSingle(group.name)}')">
+        <div class="meta">${icon('folder')}<span class="name">${esc(group.name)}/ ・ ${group.items.length} 個檔案</span></div>
+      </div>
+      <div class="edit-folder-files">${rows}</div>
+    </section>`;
+  }).join('');
+  box.innerHTML = `<div class="file-drop-zone" ondragover="editFileBucketDragOver(event,'')" ondrop="editFileBucketDrop(event,'')">拖到這裡可移出資料夾，變成獨立附件</div>${rootHtml}${folderHtml}`;
+  const hasFolder = layout.folders.length > 0;
+  info.textContent = hasFolder
+    ? '可拖曳單一檔案改順序，也可丟到其他資料夾或上方區域變成獨立附件。'
+    : (S.eDownloadEntries.length > 1 ? '可拖曳附件改順序；多檔案下載時會依目前順序重新產生 ZIP。' : '儲存後會更新附件內容。');
 }
 function removeUploadFileAt(i, count = 1) {
   if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
@@ -9819,11 +10164,17 @@ async function saveEdit() {
       if (!prevResp.ok) throw new Error(prevData.error || readResponseErrorText(prevText, '預覽圖片更新失敗'));
       Object.assign(item, prevData.item || {});
     }
-    const originalDownloadOrder = getItemDownloadFiles(item).map(file => `existing|${file.key}`);
-    const nextDownloadOrder = S.eDownloadEntries.map(entry => entry.kind === 'existing' ? `existing|${entry.key}` : `new|${entry.tempId}`);
+    const originalDownloadState = getItemDownloadFiles(item).map(file => ({
+      key: `existing|${file.key}`,
+      relativePath: normalizeEntryRelativePath(file.relativePath || file.name, file.name || 'download')
+    }));
+    const nextDownloadState = S.eDownloadEntries.map(entry => ({
+      key: entry.kind === 'existing' ? `existing|${entry.key}` : `new|${entry.tempId}`,
+      relativePath: normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry.name || entry.file?.name || 'download')
+    }));
     const downloadFilesChanged =
-      originalDownloadOrder.length !== nextDownloadOrder.length ||
-      originalDownloadOrder.some((key, idx) => key !== nextDownloadOrder[idx]) ||
+      originalDownloadState.length !== nextDownloadState.length ||
+      originalDownloadState.some((entry, idx) => entry.key !== nextDownloadState[idx]?.key || entry.relativePath !== nextDownloadState[idx]?.relativePath) ||
       S.eDownloadEntries.some(entry => entry.kind === 'new');
 
     if (downloadFilesChanged) {
@@ -9842,16 +10193,30 @@ async function saveEdit() {
         });
         Object.assign(item, uploadResult?.item || {});
         const newKeyMap = uploadResult?.uploadedKeyMap || new Map();
-        const finalOrderKeys = S.eDownloadEntries
-          .map(entry => entry.kind === 'existing' ? entry.key : newKeyMap.get(entry.tempId))
+        const finalOrderEntries = S.eDownloadEntries
+          .map(entry => {
+            const key = entry.kind === 'existing' ? entry.key : newKeyMap.get(entry.tempId);
+            if (!key) return null;
+            return {
+              type: 'key',
+              value: key,
+              relativePath: normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry.name || entry.file?.name || 'download')
+            };
+          })
           .filter(Boolean);
-        const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderKeys);
+        const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderEntries);
         Object.assign(item, reorderedItem || {});
       } else {
-        const finalOrderKeys = S.eDownloadEntries
-          .map(entry => entry.kind === 'existing' ? entry.key : null)
+        const finalOrderEntries = S.eDownloadEntries
+          .map(entry => entry.kind === 'existing'
+            ? {
+                type: 'key',
+                value: entry.key,
+                relativePath: normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry.name || entry.file?.name || 'download')
+              }
+            : null)
           .filter(Boolean);
-        const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderKeys);
+        const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderEntries);
         Object.assign(item, reorderedItem || {});
       }
     }
@@ -9880,6 +10245,9 @@ async function saveEdit() {
 // ════════════════════════════════════════════════════
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function escJsSingle(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 function fmtSz(b) {
   if (b < 1024) return b + 'B';

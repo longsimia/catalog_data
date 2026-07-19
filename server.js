@@ -3725,6 +3725,7 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
     const finalKey = buildStoredKey(collection, itemId, relativePath);
     const finalPath = resolveUploadTargetPath(dir, relativePath);
     let currentPath = file.path || (file.key ? path.join(UPLOADS, file.key) : finalPath);
+    const previousKey = typeof file.key === 'string' ? file.key : '';
     if (file.path) {
       fs.mkdirSync(path.dirname(finalPath), { recursive: true });
       if (path.resolve(currentPath) !== finalPath) {
@@ -3732,6 +3733,10 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
         fs.renameSync(currentPath, finalPath);
       }
       currentPath = finalPath;
+      if (previousKey && previousKey !== finalKey) {
+        const prevThumb = getThumbAbsPath(previousKey);
+        if (prevThumb && fs.existsSync(prevThumb)) fs.rmSync(prevThumb, { force: true });
+      }
     }
     return {
       key: file.path ? finalKey : (file.key || finalKey),
@@ -5539,7 +5544,13 @@ app.post('/api/items/:id/file', auth, upload.fields([
           const file = existingMap.get(entry.value);
           if (!file || usedExisting.has(file.key)) return null;
           usedExisting.add(file.key);
-          return file;
+          const nextRelativePath = typeof entry.relativePath === 'string' && entry.relativePath.trim()
+            ? normalizeRelativePath(entry.relativePath, file.name || path.basename(file.key))
+            : (file.relativePath || file.name || path.basename(file.key));
+          const shouldMove = String(nextRelativePath).replace(/\\/g, '/') !== String(file.relativePath || file.name || '').replace(/\\/g, '/');
+          return shouldMove
+            ? { ...file, relativePath: nextRelativePath, path: path.join(UPLOADS, file.key) }
+            : file;
         }
         if (entry?.type === 'new' && Number.isInteger(entry.value) && entry.value >= 0 && entry.value < uploadFiles.length) {
           if (usedUploads.has(entry.value)) return null;
