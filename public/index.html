@@ -858,7 +858,8 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .confirm-box p{font-size:.84rem;color:var(--text);line-height:1.7}
 .confirm-actions{display:flex;gap:.55rem;margin-top:1.15rem}
 .confirm-actions .btn{flex:1}
-.txt-create-btn{width:100%;margin-top:.5rem;margin-bottom:1.45rem}
+.txt-create-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem;margin-top:.5rem;margin-bottom:1.45rem}
+.txt-create-btn{width:100%;margin:0}
 .txt-create-modal-box{width:min(520px,calc(100vw - 2rem));max-height:calc(var(--vvh,100vh) - 2rem);overflow-y:auto}
 .txt-create-modal-box h3{margin-bottom:.45rem}
 .txt-create-modal-field{margin-top:.9rem}
@@ -869,7 +870,7 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .txt-modal-actions{display:flex;justify-content:flex-end;gap:.55rem;margin-top:1.15rem}
 .txt-modal-actions .btn{flex:0 0 auto;min-width:110px}
 @media (max-width: 640px){
-  .txt-create-btn{margin-bottom:1.2rem}
+  .txt-create-actions{grid-template-columns:1fr;margin-bottom:1.2rem}
   .confirm-modal{align-items:flex-start;padding:max(.85rem,env(safe-area-inset-top)) .85rem max(1rem,env(safe-area-inset-bottom))}
   .txt-create-modal-box{margin-top:max(.5rem,env(safe-area-inset-top));margin-bottom:max(.5rem,env(safe-area-inset-bottom))}
   .txt-modal-actions{flex-direction:column-reverse}
@@ -1422,7 +1423,10 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
           <p id="u-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
         </div>
         <input type="file" id="fi-f" multiple style="display:none" onchange="onFile(this.files)">
-        <button type="button" class="btn btn-out txt-create-btn" id="btn-create-upload-txt" onclick="createUploadTxtFile()">建立 TXT 文件</button>
+        <div class="txt-create-actions">
+          <button type="button" class="btn btn-out txt-create-btn" id="btn-create-upload-txt" onclick="createUploadTxtFile()">建立 TXT 文件</button>
+          <button type="button" class="btn btn-out txt-create-btn" id="btn-create-upload-folder" onclick="createUploadFolder()">建立資料夾</button>
+        </div>
         <div id="fi-picked"></div>
         <div id="fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
       </div>
@@ -1663,7 +1667,10 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
         <p id="e-file-hint"><span>點擊</span>或拖曳上傳檔案<br>（檔案數量 ≧ 2 會自動打包成 ZIP）</p>
       </div>
       <input type="file" id="e-fi-f" multiple style="display:none" onchange="onEditFile(this.files)">
-      <button type="button" class="btn btn-out txt-create-btn" id="btn-create-edit-txt" onclick="createEditTxtFile()">建立 TXT 文件</button>
+      <div class="txt-create-actions">
+        <button type="button" class="btn btn-out txt-create-btn" id="btn-create-edit-txt" onclick="createEditTxtFile()">建立 TXT 文件</button>
+        <button type="button" class="btn btn-out txt-create-btn" id="btn-create-edit-folder" onclick="createEditFolder()">建立資料夾</button>
+      </div>
       <div id="e-fi-picked"></div>
       <div id="e-fi-info" style="font-size:.78rem;color:var(--muted);margin-bottom:.4rem"></div>
     </div>
@@ -1718,7 +1725,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
 <div class="confirm-modal" id="txt-create-modal" onclick="onTxtCreateModalBackdrop(event)">
   <div class="confirm-box txt-create-modal-box" role="dialog" aria-modal="true" aria-labelledby="txt-create-title">
     <h3 id="txt-create-title">建立 TXT 文件</h3>
-    <p class="txt-modal-help">請輸入 TXT 檔名。</p>
+    <p class="txt-modal-help" id="txt-create-help">請輸入 TXT 檔名。</p>
     <div class="txt-create-modal-field">
       <input class="txt-modal-input" id="txt-create-input" type="text" spellcheck="false" autocomplete="off" placeholder="新文字文件.txt" onkeydown="onTxtCreateInputKeydown(event)">
     </div>
@@ -2486,6 +2493,8 @@ function decorateStaticIcons() {
   setLabeled('#lb-preview', 'file', '線上閱覽');
   setLabeled('#btn-create-upload-txt', 'file', '建立 TXT 文件');
   setLabeled('#btn-create-edit-txt', 'file', '建立 TXT 文件');
+  setLabeled('#btn-create-upload-folder', 'folder', '建立資料夾');
+  setLabeled('#btn-create-edit-folder', 'folder', '建立資料夾');
   setHtml('#lb-preview-share', icon('share'));
   setHtml('.si', icon('search'));
   setHtml('#gallery-view-btn', icon('layoutList'));
@@ -3644,11 +3653,48 @@ function getItemDownloadFiles(item) {
   }
   return [];
 }
+function getItemDownloadEntries(item) {
+  const raw = Array.isArray(item?.downloadFiles) ? item.downloadFiles : [];
+  if (raw.length) {
+    return raw.flatMap((entry, index) => {
+      if (!entry) return [];
+      if ((entry.kind === 'folder' || (!entry.key && typeof entry.relativePath === 'string')) && entry.relativePath) {
+        return [{
+          kind: 'folder',
+          tempId: `existing-folder-${index}-${String(entry.relativePath).replace(/[^a-z0-9/_-]+/gi, '-')}`,
+          relativePath: normalizeEntryRelativePath(entry.relativePath, '')
+        }];
+      }
+      if (entry.key) {
+        return [{
+          kind: 'existing',
+          key: entry.key,
+          name: entry.name || (entry.key ? entry.key.split('/').pop() : 'download'),
+          size: entry.size || null,
+          relativePath: entry.relativePath || entry.name || (entry.key ? entry.key.split('/').pop() : 'download')
+        }];
+      }
+      return [];
+    });
+  }
+  return getItemDownloadFiles(item).map(file => ({
+    kind: 'existing',
+    key: file.key,
+    name: file.name,
+    size: file.size || null,
+    relativePath: file.relativePath || file.name
+  }));
+}
+function isAttachmentFolderEntry(entry) {
+  return !!entry && (entry.kind === 'folder' || (entry.type === 'folder' && typeof entry.relativePath === 'string'));
+}
 function getRelativeFilePath(file) {
+  if (isAttachmentFolderEntry(file)) return String(file.relativePath || '').replace(/\\/g, '/');
   return (file?.webkitRelativePath || file?.relativePath || file?.name || '').replace(/\\/g, '/');
 }
 function getEntryRelativeFilePath(entry) {
   if (!entry) return '';
+  if (entry.kind === 'folder') return String(entry.relativePath || '').replace(/\\/g, '/');
   if (entry.kind === 'existing') return (entry.relativePath || entry.name || '').replace(/\\/g, '/');
   return getRelativeFilePath(entry.file || entry);
 }
@@ -3670,6 +3716,37 @@ function buildNextTxtFilename(existingNames = []) {
     if (!used.has(candidate.toLowerCase())) return candidate;
     index += 1;
   }
+}
+function normalizeFolderName(name = '') {
+  return String(name || '')
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .split('/')
+    .map(part => String(part || '').trim())
+    .filter(Boolean)
+    .join('/');
+}
+function buildNextFolderName(existingNames = []) {
+  const used = new Set(
+    (existingNames || [])
+      .map(name => String(name || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  let index = 1;
+  while (true) {
+    const candidate = index === 1 ? '新資料夾' : `新資料夾 ${index}`;
+    if (!used.has(candidate.toLowerCase())) return candidate;
+    index += 1;
+  }
+}
+function promptFolderName(existingNames = []) {
+  return promptCreateNameModal({
+    kind: 'folder',
+    title: '建立資料夾',
+    help: '請輸入資料夾名稱。',
+    placeholder: '新資料夾',
+    suggested: buildNextFolderName(existingNames),
+    normalizer: normalizeFolderName
+  });
 }
 function getViewportHeight() {
   const vv = window.visualViewport;
@@ -3697,9 +3774,14 @@ function hasFilenameConflict(existingNames = [], candidate = '') {
 function closeTxtCreateModal(result = '') {
   const modal = document.getElementById('txt-create-modal');
   const input = document.getElementById('txt-create-input');
+  const title = document.getElementById('txt-create-title');
+  const help = document.getElementById('txt-create-help');
   const state = S.txtCreateState;
   if (modal) modal.classList.remove('on');
   if (input) input.value = '';
+  if (input) input.placeholder = '新文字文件.txt';
+  if (title) title.textContent = '建立 TXT 文件';
+  if (help) help.textContent = '請輸入 TXT 檔名。';
   syncViewportHeightVar();
   S.txtCreateState = null;
   if (state?.resolve) state.resolve(result);
@@ -3723,25 +3805,46 @@ function onTxtCreateInputKeydown(event) {
 }
 function confirmTxtCreateModal() {
   const input = document.getElementById('txt-create-input');
-  closeTxtCreateModal(normalizeTxtFilename(input?.value || ''));
+  const state = S.txtCreateState || {};
+  const normalizer = typeof state.normalizer === 'function' ? state.normalizer : normalizeTxtFilename;
+  closeTxtCreateModal(normalizer(input?.value || ''));
 }
-function promptTxtFilename(existingNames = []) {
+function promptCreateNameModal(options = {}) {
   const modal = document.getElementById('txt-create-modal');
   const input = document.getElementById('txt-create-input');
+  const title = document.getElementById('txt-create-title');
+  const help = document.getElementById('txt-create-help');
   if (!modal || !input) return Promise.resolve('');
   if (S.txtCreateState?.resolve) S.txtCreateState.resolve('');
-  const suggested = buildNextTxtFilename(existingNames);
+  const suggested = String(options.suggested || '').trim();
+  if (title) title.textContent = String(options.title || '建立 TXT 文件');
+  if (help) help.textContent = String(options.help || '請輸入名稱。');
+  input.placeholder = String(options.placeholder || '');
   input.value = suggested;
   modal.classList.add('on');
   keepTxtCreateModalVisible();
   S.txtCreateState = {};
   return new Promise(resolve => {
-    S.txtCreateState = { resolve };
+    S.txtCreateState = {
+      resolve,
+      kind: String(options.kind || 'txt'),
+      normalizer: typeof options.normalizer === 'function' ? options.normalizer : normalizeTxtFilename
+    };
     setTimeout(() => {
       input.focus();
       input.select();
       keepTxtCreateModalVisible();
     }, 0);
+  });
+}
+function promptTxtFilename(existingNames = []) {
+  return promptCreateNameModal({
+    kind: 'txt',
+    title: '建立 TXT 文件',
+    help: '請輸入 TXT 檔名。',
+    placeholder: '新文字文件.txt',
+    suggested: buildNextTxtFilename(existingNames),
+    normalizer: normalizeTxtFilename
   });
 }
 document.getElementById('txt-create-input')?.addEventListener('focus', keepTxtCreateModalVisible);
@@ -3755,6 +3858,14 @@ function createBlankTxtFile(filename = '新文字文件.txt') {
     });
   } catch {}
   return file;
+}
+function createAttachmentFolderEntry(relativePath = '新資料夾') {
+  const normalized = normalizeEntryRelativePath(relativePath, '新資料夾');
+  return {
+    kind: 'folder',
+    tempId: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    relativePath: normalized
+  };
 }
 function parseJsonText(text, fallback = {}) {
   try {
@@ -3836,8 +3947,12 @@ async function reorderItemDownloadFiles(itemId, orderKeys = []) {
   const fd = new FormData();
   const normalizedOrder = (orderKeys || []).map(entry => {
     if (typeof entry === 'string') return { type: 'key', value: entry };
+    if (entry?.type === 'folder' && entry.value) return { type: 'folder', value: normalizeEntryRelativePath(entry.value, '') };
     return entry;
-  }).filter(entry => entry?.type === 'key' && typeof entry.value === 'string' && entry.value);
+  }).filter(entry => (
+    (entry?.type === 'key' && typeof entry.value === 'string' && entry.value) ||
+    (entry?.type === 'folder' && typeof entry.value === 'string' && entry.value)
+  ));
   fd.append('order', JSON.stringify(normalizedOrder));
   const resp = await fetch(uploadUrl(`/api/items/${itemId}/file`), {
     method: 'POST',
@@ -3848,6 +3963,21 @@ async function reorderItemDownloadFiles(itemId, orderKeys = []) {
   const data = parseJsonText(text, {});
   if (!resp.ok) throw new Error(data.error || readResponseErrorText(text, '附檔排序更新失敗'));
   return data.item || null;
+}
+function buildAttachmentOrderEntries(list = [], keyResolver = null) {
+  return (list || []).map(entry => {
+    if (isAttachmentFolderEntry(entry)) {
+      const relativePath = normalizeEntryRelativePath(getEntryRelativeFilePath(entry), '');
+      return relativePath ? { type: 'folder', value: relativePath } : null;
+    }
+    const key = typeof keyResolver === 'function' ? keyResolver(entry) : '';
+    if (!key) return null;
+    return {
+      type: 'key',
+      value: key,
+      relativePath: normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry.name || entry.file?.name || 'download')
+    };
+  }).filter(Boolean);
 }
 function getGroupedUploadItems(list, relGetter, keyGetter) {
   const groups = [];
@@ -3952,13 +4082,7 @@ function buildEditDownloadLayout(entries = []) {
   return { rootFiles, folders };
 }
 function buildEditDownloadEntries(item) {
-  return getItemDownloadFiles(item).map(file => ({
-    kind: 'existing',
-    key: file.key,
-    name: file.name,
-    size: file.size || null,
-    relativePath: file.relativePath || file.name
-  }));
+  return getItemDownloadEntries(item);
 }
 function makeExistingPreviewEntry(srcKind, value) {
   if (!srcKind || !value) return null;
@@ -5189,10 +5313,7 @@ function buildPreviewFileTree(files) {
 }
 function buildAttachmentTree(list, relGetter) {
   const root = { folders: new Map(), files: [], path: '', name: '' };
-  (Array.isArray(list) ? list : []).forEach((entry, index) => {
-    const rel = normalizeEntryRelativePath(relGetter(entry), entry?.name || entry?.file?.name || `file-${index + 1}`);
-    const parts = rel.split('/').filter(Boolean);
-    const name = parts.pop() || (entry?.name || entry?.file?.name || `file-${index + 1}`);
+  const ensureFolderNode = (parts = []) => {
     let node = root;
     let currentPath = '';
     parts.forEach(part => {
@@ -5200,6 +5321,18 @@ function buildAttachmentTree(list, relGetter) {
       if (!node.folders.has(part)) node.folders.set(part, { folders: new Map(), files: [], path: currentPath, name: part });
       node = node.folders.get(part);
     });
+    return node;
+  };
+  (Array.isArray(list) ? list : []).forEach((entry, index) => {
+    const rel = normalizeEntryRelativePath(relGetter(entry), entry?.name || entry?.file?.name || `file-${index + 1}`);
+    if (!rel) return;
+    const parts = rel.split('/').filter(Boolean);
+    if (isAttachmentFolderEntry(entry)) {
+      ensureFolderNode(parts);
+      return;
+    }
+    const name = parts.pop() || (entry?.name || entry?.file?.name || `file-${index + 1}`);
+    const node = ensureFolderNode(parts);
     node.files.push({ entry, treeName: name, treePath: rel, treeIndex: index });
   });
   return root;
@@ -7085,8 +7218,10 @@ function applyRolePermissionUI() {
   ['u-t','u-a','u-alt','u-url','u-ti','u-ci','u-d','u-perm','fi-p'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canUpload));
   document.getElementById('fi-f')?.toggleAttribute('disabled', !canUpload || !canEditAttachments);
   document.getElementById('btn-create-upload-txt')?.toggleAttribute('disabled', !canUpload || !canEditAttachments);
+  document.getElementById('btn-create-upload-folder')?.toggleAttribute('disabled', !canUpload || !canEditAttachments);
   document.getElementById('e-fi-f')?.toggleAttribute('disabled', !canEditAttachments);
   document.getElementById('btn-create-edit-txt')?.toggleAttribute('disabled', !canEditAttachments);
+  document.getElementById('btn-create-edit-folder')?.toggleAttribute('disabled', !canEditAttachments);
   ['c-t','c-s','c-f'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
   ['cfg-google-client-id','cfg-upload-origin'].forEach(id => document.getElementById(id)?.toggleAttribute('disabled', !canEditSite));
   document.getElementById('btn-save-site')?.toggleAttribute('disabled', !canEditSite);
@@ -7583,6 +7718,17 @@ async function createUploadTxtFile() {
   renderUploadFilePicked();
   toast(`已新增空白 TXT：${filename}`, 'ok');
 }
+async function createUploadFolder() {
+  if (!canRolePermission('uploadItems')) { toast('你沒有權限使用上傳功能', 'err'); return; }
+  if (!canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
+  const existingNames = S.up.files.map(file => getRelativeFilePath(file) || file.name);
+  const folderName = await promptFolderName(existingNames);
+  if (!folderName) return;
+  if (hasFilenameConflict(existingNames, folderName)) { toast('已存在同名附件或資料夾，請改用其他名稱', 'err'); return; }
+  S.up.files = [...S.up.files, createAttachmentFolderEntry(folderName)];
+  renderUploadFilePicked();
+  toast(`已新增資料夾：${folderName}`, 'ok');
+}
 function onEditFile(files) {
   if (!canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
   if (!files?.length) return;
@@ -7611,6 +7757,16 @@ async function createEditTxtFile() {
   document.getElementById('e-fi-f').value = '';
   renderEditFilePicked();
   toast(`已新增空白 TXT：${filename}`, 'ok');
+}
+async function createEditFolder() {
+  if (!canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
+  const existingNames = S.eDownloadEntries.map(entry => getEntryRelativeFilePath(entry) || entry.name || entry.file?.name);
+  const folderName = await promptFolderName(existingNames);
+  if (!folderName) return;
+  if (hasFilenameConflict(existingNames, folderName)) { toast('已存在同名附件或資料夾，請改用其他名稱', 'err'); return; }
+  S.eDownloadEntries = [...S.eDownloadEntries, createAttachmentFolderEntry(folderName)];
+  renderEditFilePicked();
+  toast(`已新增資料夾：${folderName}`, 'ok');
 }
 function clearFileDragIndicator(kind='upload') {
   if (kind === 'edit') {
@@ -8958,14 +9114,17 @@ async function doUp() {
       if (xhr.status >= 200 && xhr.status < 300) {
         setConnState('online', true);
         let createdItem = parseJsonText(xhr.responseText, {}).item || null;
-        if (S.up.files.length) {
+        let uploadKeyMap = new Map();
+        const uploadFileEntries = S.up.files.filter(file => !isAttachmentFolderEntry(file));
+        if (uploadFileEntries.length) {
           setStat('附檔上傳中…');
-          const uploadResult = await appendFilesInBatches(id, S.up.files, {
+          const uploadResult = await appendFilesInBatches(id, uploadFileEntries, {
             fileGetter: file => file,
             pathGetter: file => getRelativeFilePath(file) || file.name,
             sizeGetter: file => file?.size || 0,
             includeKeptKeys: true,
             keptKeys: getItemDownloadFiles(createdItem).map(file => file.key),
+            entryKeyGetter: file => makeUploadFileKey(file),
             onProgress: (done, total) => {
               const progress = 92 + Math.round((done / Math.max(total, 1)) * 8);
               setProgress(Math.min(progress, 100));
@@ -8973,6 +9132,16 @@ async function doUp() {
             }
           });
           createdItem = uploadResult?.item || createdItem;
+          uploadKeyMap = uploadResult?.uploadedKeyMap || new Map();
+        }
+        if (createdItem && S.up.files.length) {
+          const finalOrderEntries = buildAttachmentOrderEntries(S.up.files, entry => (
+            isAttachmentFolderEntry(entry) ? '' : uploadKeyMap.get(makeUploadFileKey(entry))
+          ));
+          if (finalOrderEntries.length) {
+            const reorderedItem = await reorderItemDownloadFiles(id, finalOrderEntries);
+            if (reorderedItem) createdItem = reorderedItem;
+          }
         }
         // Phase 3：把附件來源的預覽以 key 參照設定，不重複上傳
         if (S.up.attachmentPrevs.size && createdItem) {
@@ -10709,12 +10878,12 @@ async function saveEdit() {
     body.categories.forEach(ensureMasterCategory);
     await api('PUT', `/api/items/${S.eId}`, body);
     const currentPreviews = getEditPreviewState(item);
-    const originalDownloadState = getItemDownloadFiles(item).map(file => ({
-      key: `existing|${file.key}`,
-      relativePath: normalizeEntryRelativePath(file.relativePath || file.name, file.name || 'download')
+    const originalDownloadState = getItemDownloadEntries(item).map(entry => ({
+      key: entry.kind === 'folder' ? `folder|${entry.relativePath}` : `existing|${entry.key}`,
+      relativePath: normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry.name || entry.file?.name || 'download')
     }));
     const nextDownloadState = S.eDownloadEntries.map(entry => ({
-      key: entry.kind === 'existing' ? `existing|${entry.key}` : `new|${entry.tempId}`,
+      key: entry.kind === 'existing' ? `existing|${entry.key}` : (entry.kind === 'folder' ? `folder|${entry.relativePath}` : `new|${entry.tempId}`),
       relativePath: normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry.name || entry.file?.name || 'download')
     }));
     const downloadFilesChanged =
@@ -10739,29 +10908,15 @@ async function saveEdit() {
           });
         Object.assign(item, uploadResult?.item || {});
         newKeyMap = uploadResult?.uploadedKeyMap || new Map();
-        const finalOrderEntries = S.eDownloadEntries
-          .map(entry => {
-            const key = entry.kind === 'existing' ? entry.key : newKeyMap.get(entry.tempId);
-            if (!key) return null;
-            return {
-              type: 'key',
-              value: key,
-              relativePath: normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry.name || entry.file?.name || 'download')
-            };
-          })
-          .filter(Boolean);
+        const finalOrderEntries = buildAttachmentOrderEntries(S.eDownloadEntries, entry => (
+          entry.kind === 'existing' ? entry.key : newKeyMap.get(entry.tempId)
+        ));
         const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderEntries);
         Object.assign(item, reorderedItem || {});
       } else {
-        const finalOrderEntries = S.eDownloadEntries
-          .map(entry => entry.kind === 'existing'
-            ? {
-                type: 'key',
-                value: entry.key,
-                relativePath: normalizeEntryRelativePath(getEntryRelativeFilePath(entry), entry.name || entry.file?.name || 'download')
-              }
-            : null)
-          .filter(Boolean);
+        const finalOrderEntries = buildAttachmentOrderEntries(S.eDownloadEntries, entry => (
+          entry.kind === 'existing' ? entry.key : ''
+        ));
         const reorderedItem = await reorderItemDownloadFiles(S.eId, finalOrderEntries);
         Object.assign(item, reorderedItem || {});
       }

@@ -274,6 +274,55 @@ function normalizeDownloadFiles(item) {
   return normalized;
 }
 
+function normalizeDownloadFolderEntries(item) {
+  const list = Array.isArray(item?.downloadFiles) ? item.downloadFiles : [];
+  const normalized = [];
+  const seen = new Set();
+  list.forEach(entry => {
+    if (!entry) return;
+    const isFolder = entry.kind === 'folder' || (!entry.key && typeof entry.relativePath === 'string');
+    if (!isFolder) return;
+    const relativePath = normalizeRelativePath(entry.relativePath || entry.name || '', '');
+    if (!relativePath || seen.has(relativePath)) return;
+    seen.add(relativePath);
+    normalized.push({
+      kind: 'folder',
+      name: path.posix.basename(relativePath),
+      relativePath
+    });
+  });
+  return normalized;
+}
+
+function normalizeDownloadEntries(item) {
+  const fileMap = new Map(normalizeDownloadFiles(item).map(file => [`key:${file.key}`, file]));
+  const folderMap = new Map(normalizeDownloadFolderEntries(item).map(folder => [`folder:${folder.relativePath}`, folder]));
+  const ordered = [];
+  const pushOrdered = (entry) => {
+    if (!entry) return;
+    const key = entry.kind === 'folder' ? `folder:${entry.relativePath}` : `key:${entry.key}`;
+    if (ordered.some(current => (current.kind === 'folder' ? `folder:${current.relativePath}` : `key:${current.key}`) === key)) return;
+    ordered.push(entry);
+  };
+
+  if (Array.isArray(item?.downloadFiles)) {
+    item.downloadFiles.forEach(entry => {
+      if (!entry) return;
+      if (entry.kind === 'folder' || (!entry.key && typeof entry.relativePath === 'string')) {
+        pushOrdered(folderMap.get(`folder:${normalizeRelativePath(entry.relativePath || entry.name || '', '')}`));
+        return;
+      }
+      if (typeof entry.key === 'string' && entry.key.trim()) {
+        pushOrdered(fileMap.get(`key:${entry.key}`));
+      }
+    });
+  }
+
+  normalizeDownloadFolderEntries(item).forEach(pushOrdered);
+  normalizeDownloadFiles(item).forEach(pushOrdered);
+  return ordered;
+}
+
 function listStoredScenarioFiles(collection = 'scenario', itemId = '') {
   const dir = collUploadDir(collection, itemId);
   if (!itemId || !fs.existsSync(dir)) return [];
@@ -319,7 +368,17 @@ function listStoredScenarioFiles(collection = 'scenario', itemId = '') {
 function syncScenarioDownloadFiles(item, collection = 'scenario', mode = 'scenario') {
   if (!item || mode !== 'scenario' || !item.id) return item;
   const diskFiles = listStoredScenarioFiles(collection, item.id);
-  if (!diskFiles.length) return item;
+  const folderEntries = normalizeDownloadFolderEntries(item);
+  const existingEntries = normalizeDownloadEntries(item);
+  if (!diskFiles.length) {
+    return existingEntries.length
+      ? {
+          ...item,
+          downloadFiles: existingEntries,
+          downloadName: item.downloadName || null
+        }
+      : item;
+  }
   const existingFiles = normalizeDownloadFiles(item);
   const existingSignature = existingFiles
     .map(file => `${file.relativePath || file.key}|${file.size || ''}`)
@@ -329,16 +388,16 @@ function syncScenarioDownloadFiles(item, collection = 'scenario', mode = 'scenar
     .join('\n');
   if (existingSignature === diskSignature) return {
     ...item,
-    downloadFiles: existingFiles,
+    downloadFiles: [...folderEntries, ...existingFiles],
     downloadName: item.downloadName || existingFiles[0]?.name || null
   };
   return {
     ...item,
-    downloadKey: diskFiles.length === 1 ? diskFiles[0].key : null,
-    downloadName: diskFiles.length === 1
+    downloadKey: diskFiles.length === 1 && !folderEntries.length ? diskFiles[0].key : null,
+    downloadName: diskFiles.length === 1 && !folderEntries.length
       ? diskFiles[0].name
       : `${sanitizeDownloadName(String(item.title || item.subtitle || 'download').replace(/\.zip$/i, ''), 'download')}.zip`,
-    downloadFiles: diskFiles
+    downloadFiles: [...folderEntries, ...diskFiles]
   };
 }
 
@@ -392,6 +451,10 @@ function getDownloadableFilesForItem(item = {}, mode = 'scenario') {
       abs: path.join(UPLOADS, file.key)
     }))
     .filter(file => fs.existsSync(file.abs));
+}
+
+function getDownloadFolderPaths(item = {}) {
+  return normalizeDownloadFolderEntries(item).map(entry => entry.relativePath).filter(Boolean);
 }
 
 function normalizeItemCategories(item) {
@@ -3648,9 +3711,14 @@ function buildZipBuffer(entries) {
   let offset = 0;
 
   entries.forEach(entry => {
-    const nameBuf = Buffer.from(entry.name.replace(/\\/g, '/'), 'utf8');
-    const data = fs.readFileSync(entry.path);
-    const stat = fs.statSync(entry.path);
+    const isDirectory = !!entry?.isDirectory;
+    const zipName = String(entry.name || '').replace(/\\/g, '/');
+    const finalName = isDirectory && !zipName.endsWith('/') ? `${zipName}/` : zipName;
+    const nameBuf = Buffer.from(finalName, 'utf8');
+    const data = isDirectory ? Buffer.alloc(0) : fs.readFileSync(entry.path);
+    const stat = isDirectory
+      ? { mtime: new Date() }
+      : fs.statSync(entry.path);
     const { dosTime, dosDate } = toDosDateTime(stat.mtime);
     const crc = crc32(data);
 
@@ -3684,7 +3752,7 @@ function buildZipBuffer(entries) {
     central.writeUInt16LE(0, 32);
     central.writeUInt16LE(0, 34);
     central.writeUInt16LE(0, 36);
-    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(isDirectory ? 0x10 : 0, 38);
     central.writeUInt32LE(offset, 42);
     centralParts.push(central, nameBuf);
 
@@ -3705,8 +3773,9 @@ function buildZipBuffer(entries) {
   return Buffer.concat([...localParts, ...centralParts, end]);
 }
 
-function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'scenario') {
-  if (!files?.length) return { downloadKey: null, downloadName: null, downloadFiles: [] };
+function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'scenario', options = {}) {
+  const orderEntries = Array.isArray(options.orderEntries) ? options.orderEntries : [];
+  if (!files?.length && !orderEntries.length) return { downloadKey: null, downloadName: null, downloadFiles: [] };
 
   const dir = collUploadDir(collection, itemId);
   const legacyZipPath = path.join(dir, 'dl.zip');
@@ -3747,13 +3816,54 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
     };
   });
 
-  if (normalizedFiles.length === 1) {
+  const normalizedMeta = [];
+  const fileQueue = [...normalizedFiles];
+  const seenFolders = new Set();
+  const pushFolder = (relativePath = '') => {
+    const normalizedPath = normalizeRelativePath(relativePath, '');
+    if (!normalizedPath || seenFolders.has(normalizedPath)) return;
+    seenFolders.add(normalizedPath);
+    normalizedMeta.push({
+      kind: 'folder',
+      name: path.posix.basename(normalizedPath),
+      relativePath: normalizedPath
+    });
+  };
+
+  if (orderEntries.length) {
+    orderEntries.forEach(entry => {
+      if (entry?.type === 'folder') {
+        pushFolder(entry.value || entry.relativePath || '');
+        return;
+      }
+      const file = fileQueue.shift();
+      if (!file) return;
+      normalizedMeta.push({
+        key: file.key,
+        name: file.name,
+        size: file.size,
+        relativePath: file.relativePath
+      });
+    });
+  }
+
+  normalizedFiles.forEach(file => {
+    if (normalizedMeta.some(entry => entry?.key === file.key)) return;
+    normalizedMeta.push({
+      key: file.key,
+      name: file.name,
+      size: file.size,
+      relativePath: file.relativePath
+    });
+  });
+
+  if (normalizedFiles.length === 1 && !normalizedMeta.some(entry => entry?.kind === 'folder')) {
     if (fs.existsSync(legacyZipPath)) fs.rmSync(legacyZipPath, { force: true });
     const file = normalizedFiles[0];
     return {
       downloadKey: file.key,
       downloadName: file.name,
-      downloadFiles: normalizedFiles.map(({ key, name, size, relativePath }) => ({ key, name, size, relativePath }))
+      downloadFiles: normalizedMeta
     };
   }
 
@@ -3761,8 +3871,8 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
   if (fs.existsSync(legacyZipPath)) fs.rmSync(legacyZipPath, { force: true });
   return {
     downloadKey: null,
-    downloadName: `${zipBase}.zip`,
-    downloadFiles: normalizedFiles.map(({ key, name, size, relativePath }) => ({ key, name, size, relativePath }))
+    downloadName: normalizedMeta.length ? `${zipBase}.zip` : null,
+    downloadFiles: normalizedMeta
   };
 }
 
@@ -4037,9 +4147,10 @@ app.get('/api/items/:id/download', auth, (req, res) => {
   const item = (cat.items || []).find(i => i.id === req.params.id);
   if (!item) return res.status(404).json({ error: '找不到項目。' });
   if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+  const folderPaths = getDownloadFolderPaths(item);
   if (collCfg.mode === 'image' && getImageBundleFiles(item).length) return res.json({ url: withCollection(`/api/download/${item.id}`, collection) });
   if (item.downloadUrl) return res.json({ url: item.downloadUrl });
-  if (getDownloadableFilesForItem(item, collCfg.mode).length) return res.json({ url: withCollection(`/api/download/${item.id}`, collection) });
+  if (getDownloadableFilesForItem(item, collCfg.mode).length || folderPaths.length) return res.json({ url: withCollection(`/api/download/${item.id}`, collection) });
   if (item.downloadKey) return res.json({ url: withCollection(`/api/download/${item.id}`, collection) });
   return res.json({ url: '' });
 });
@@ -4064,10 +4175,19 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
     mediaUrl: file.key ? withCollection(`/uploads/${file.key}`, collection) : '',
     thumbUrl: file.key && isThumbEligibleImageKey(file.key) ? getThumbUrl(file.key) : ''
   }));
+  const folderPaths = getDownloadFolderPaths(item);
 
   if (files.length) {
     return res.json({
       files,
+      allUrl: withCollection(`/api/download/${item.id}`, collection),
+      allName: item.downloadName || `${sanitizeDownloadName(String(item.title || item.subtitle || 'download')).replace(/\.zip$/i, '')}.zip`
+    });
+  }
+
+  if (folderPaths.length) {
+    return res.json({
+      files: [],
       allUrl: withCollection(`/api/download/${item.id}`, collection),
       allName: item.downloadName || `${sanitizeDownloadName(String(item.title || item.subtitle || 'download')).replace(/\.zip$/i, '')}.zip`
     });
@@ -4215,14 +4335,22 @@ app.get('/api/download/:id', auth, (req, res) => {
     return res.end(zipBuffer);
   }
   const files = getDownloadableFilesForItem(item, collCfg.mode);
-  if (files.length) {
-    if (files.length === 1) {
+  const folderPaths = getDownloadFolderPaths(item);
+  if (files.length || folderPaths.length) {
+    if (files.length === 1 && !folderPaths.length) {
       setDownloadHeaders(res, files[0].name);
       return res.sendFile(files[0].abs);
     }
     const zipBase = sanitizeDownloadName(String(item.downloadName || item.title || item.subtitle || 'download').replace(/\.zip$/i, ''), 'download');
     const entryNames = makeUniqueZipEntryNames(files.map(file => ({ relativePath: file.relativePath || file.name })));
-    const zipBuffer = buildZipBuffer(files.map((file, idx) => ({ path: file.abs, name: entryNames[idx] })));
+    const zipEntries = [
+      ...folderPaths
+        .map(relativePath => normalizeRelativePath(relativePath, ''))
+        .filter(Boolean)
+        .map(relativePath => ({ name: `${relativePath.replace(/\\/g, '/').replace(/\/+$/g, '')}/`, isDirectory: true })),
+      ...files.map((file, idx) => ({ path: file.abs, name: entryNames[idx] }))
+    ];
+    const zipBuffer = buildZipBuffer(zipEntries);
     setDownloadHeaders(res, `${zipBase}.zip`);
     return res.end(zipBuffer);
   }
@@ -4804,8 +4932,9 @@ function renameTxtPreviewFile(collection, item, file, requestedName = '') {
   if (fs.existsSync(nextAbs)) throw new Error('已存在同名 TXT 檔案，請改用其他檔名。');
   fs.renameSync(file.abs, nextAbs);
 
-  const downloadFiles = normalizeDownloadFiles(item);
-  item.downloadFiles = downloadFiles.map(entry => {
+  const downloadEntries = normalizeDownloadEntries(item);
+  item.downloadFiles = downloadEntries.map(entry => {
+    if (entry?.kind === 'folder') return entry;
     if (entry.key !== file.key) return entry;
     const currentRel = typeof entry.relativePath === 'string' && entry.relativePath.trim()
       ? entry.relativePath.trim().replace(/\\/g, '/')
@@ -5535,11 +5664,19 @@ app.post('/api/items/:id/file', auth, upload.fields([
     }));
     const existingMap = new Map(existingFiles.map(file => [file.key, file]));
     let nextFiles = [];
+    const normalizedOrder = order.map(entry => {
+      if (!entry || typeof entry !== 'object') return null;
+      if (entry.type === 'folder') {
+        const relativePath = normalizeRelativePath(entry.value || entry.relativePath || '', '');
+        return relativePath ? { type: 'folder', value: relativePath } : null;
+      }
+      return entry;
+    }).filter(Boolean);
 
-    if (order.length) {
+    if (normalizedOrder.length) {
       const usedExisting = new Set();
       const usedUploads = new Set();
-      nextFiles = order.map(entry => {
+      nextFiles = normalizedOrder.map(entry => {
         if (entry?.type === 'key' && typeof entry.value === 'string') {
           const file = existingMap.get(entry.value);
           if (!file || usedExisting.has(file.key)) return null;
@@ -5552,6 +5689,7 @@ app.post('/api/items/:id/file', auth, upload.fields([
             ? { ...file, relativePath: nextRelativePath, path: path.join(UPLOADS, file.key) }
             : file;
         }
+        if (entry?.type === 'folder') return null;
         if (entry?.type === 'new' && Number.isInteger(entry.value) && entry.value >= 0 && entry.value < uploadFiles.length) {
           if (usedUploads.has(entry.value)) return null;
           usedUploads.add(entry.value);
@@ -5575,7 +5713,13 @@ app.post('/api/items/:id/file', auth, upload.fields([
       removeStoredFile(it.downloadKey);
     }
 
-    const download = persistDownloadFiles(req.params.id, nextFiles, it.subtitle || it.translatedTitle || it.title || 'download', collection);
+    const download = persistDownloadFiles(
+      req.params.id,
+      nextFiles,
+      it.subtitle || it.translatedTitle || it.title || 'download',
+      collection,
+      { orderEntries: normalizedOrder }
+    );
     it.downloadKey = download.downloadKey;
     it.downloadName = download.downloadName;
     it.downloadFiles = download.downloadFiles;
