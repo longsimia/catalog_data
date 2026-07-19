@@ -921,13 +921,42 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .preview-item .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-serif);font-size:1rem;font-weight:400;line-height:1.45;color:var(--text)}
 .preview-item .subact{display:inline-flex;align-items:center;justify-content:center;padding:.34rem .6rem;border:1px solid var(--border);border-radius:999px;background:var(--panel);color:var(--muted);font-size:.74rem;flex-shrink:0}
 .preview-item:hover .subact{border-color:var(--gold);color:var(--gold)}
-.attachment-tree .preview-item{cursor:grab}
-.attachment-tree .preview-item.drag{opacity:.42}
-.attachment-tree .preview-item .meta{align-items:flex-start}
-.attachment-tree .preview-item .name{font-family:var(--font-sans);font-size:.88rem;font-weight:500}
-.attachment-tree .preview-item .path{display:block;font-size:.7rem;color:var(--muted);margin-top:.12rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400}
-.attachment-tree .preview-item .actions{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
-.attachment-tree .preview-item .grip{display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
+.attachment-tree .preview-item,
+.attachment-tree .preview-entry{background:transparent;color:var(--text);border-color:var(--border);box-shadow:none}
+.attachment-tree .preview-item,
+.attachment-tree .attachment-folder-row{position:relative;transition:border-color .2s,transform .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
+.attachment-tree .preview-item{cursor:grab;transform:none;padding:.58rem .72rem}
+.attachment-tree .preview-item:hover,
+.attachment-tree .preview-entry:hover{border-color:var(--gdim);background:transparent;color:var(--text);box-shadow:none}
+.attachment-tree .preview-item.drag,
+.attachment-tree .attachment-folder-row.drag{opacity:.38;transform:scale(.985)}
+.attachment-tree .preview-item .meta,
+.attachment-tree .preview-entry .meta{align-items:center}
+.attachment-tree .preview-item .name,
+.attachment-tree .preview-entry .name{font-family:var(--font-sans);font-size:.88rem;font-weight:500;color:inherit}
+.attachment-tree .preview-item .actions,
+.attachment-tree .attachment-folder-row .actions{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
+.attachment-tree .preview-item .grip,
+.attachment-tree .attachment-folder-row .grip{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);cursor:grab}
+.attachment-tree .attachment-folder-row{display:flex;align-items:stretch;gap:.45rem}
+.attachment-tree .attachment-folder-row .preview-entry{flex:1}
+.attachment-tree .attachment-folder-row .preview-entry .meta{min-width:0}
+.attachment-tree .attachment-folder-row .folder-main{display:flex;align-items:center;gap:.5rem}
+.attachment-tree .attachment-folder-row .actions .ib,
+.attachment-tree .preview-item .actions .ib{flex-shrink:0}
+.attachment-tree .preview-item::before,
+.attachment-tree .preview-item::after,
+.attachment-tree .attachment-folder-row::before,
+.attachment-tree .attachment-folder-row::after{content:'';position:absolute;left:10px;right:10px;height:3px;border-radius:999px;background:var(--gold);box-shadow:0 0 0 1px var(--gglow),0 0 14px var(--gglow);opacity:0;transform:scaleX(.35);transition:opacity .14s ease,transform .14s ease;pointer-events:none}
+.attachment-tree .preview-item::before,
+.attachment-tree .attachment-folder-row::before{top:-7px}
+.attachment-tree .preview-item::after,
+.attachment-tree .attachment-folder-row::after{bottom:-7px}
+.attachment-tree .drop-before::before,
+.attachment-tree .drop-after::after{opacity:1;transform:scaleX(1)}
+.attachment-tree .drop-before,
+.attachment-tree .drop-after{border-color:var(--gold);box-shadow:0 0 0 1px var(--gglow)}
+.attachment-tree .drop-inside{border-color:var(--gold);box-shadow:0 0 0 1px var(--gglow);background:color-mix(in srgb, var(--gglow) 65%, var(--bg2))}
 
 /* ── OVERLAY ── */
 #ovbg{display:none;position:fixed;inset:0;z-index:590;background:var(--overlay-bg);cursor:pointer}
@@ -1826,6 +1855,12 @@ const S = {
   fileDragIdx: null, eFileDragIdx: null, fileDragOverIdx: null, eFileDragOverIdx: null,
   fileDragOverPos: null, eFileDragOverPos: null,
   fileJustMovedKey: null, eFileJustMovedKey: null,
+  uploadFolderDragPath: '',
+  editFolderDragPath: '',
+  uploadTreeDropKey: '',
+  editTreeDropKey: '',
+  uploadTreeDropZone: '',
+  editTreeDropZone: '',
   localThumbUrls: new Map(),
   delItemId: null,
   delKind: '',
@@ -8057,6 +8092,338 @@ function renderEditFilePicked() {
   const hasFolder = tree.folders.size > 0;
   info.textContent = hasFolder
     ? '點擊資料夾可展開檔案；展開後可直接拖曳單一檔案排序或移動到其他已展開資料夾。'
+    : (S.eDownloadEntries.length > 1 ? '可拖曳附件改順序；多檔案下載時會依目前順序重新產生 ZIP。' : '儲存後會更新附件內容。');
+}
+function clearAttachmentTreeDropState(mode = 'upload') {
+  const rootSel = mode === 'upload' ? '#fi-picked' : '#e-fi-picked';
+  document.querySelectorAll(`${rootSel} .drop-before,${rootSel} .drop-after,${rootSel} .drop-inside,${rootSel} .drag`).forEach(el => {
+    el.classList.remove('drop-before', 'drop-after', 'drop-inside', 'drag');
+  });
+  if (mode === 'upload') {
+    S.uploadTreeDropKey = '';
+    S.uploadTreeDropZone = '';
+  } else {
+    S.editTreeDropKey = '';
+    S.editTreeDropZone = '';
+  }
+}
+function setAttachmentTreeDropState(mode, key, zone) {
+  const rootSel = mode === 'upload' ? '#fi-picked' : '#e-fi-picked';
+  clearAttachmentTreeDropState(mode);
+  if (!key || !zone) return;
+  const safeKey = CSS.escape(String(key));
+  document.querySelector(`${rootSel} [data-tree-key="${safeKey}"]`)?.classList.add(`drop-${zone}`);
+  if (mode === 'upload') {
+    S.uploadTreeDropKey = key;
+    S.uploadTreeDropZone = zone;
+  } else {
+    S.editTreeDropKey = key;
+    S.editTreeDropZone = zone;
+  }
+}
+function getAttachmentTreeDropZone(event, allowInside = false) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const ratio = (event.clientY - rect.top) / Math.max(rect.height, 1);
+  if (allowInside && ratio > 0.34 && ratio < 0.66) return 'inside';
+  return ratio >= 0.5 ? 'after' : 'before';
+}
+function getFolderDescendantIndexes(list, relGetter, folderPath = '') {
+  const prefix = `${folderPath}/`;
+  return list.reduce((acc, entry, index) => {
+    const rel = normalizeEntryRelativePath(relGetter(entry), '');
+    if (rel && (rel === folderPath || rel.startsWith(prefix))) acc.push(index);
+    return acc;
+  }, []);
+}
+function getFolderBounds(list, relGetter, folderPath = '') {
+  const indexes = getFolderDescendantIndexes(list, relGetter, folderPath);
+  if (!indexes.length) return null;
+  return { first: indexes[0], last: indexes[indexes.length - 1] };
+}
+function getParentFolderPath(folderPath = '') {
+  const rel = String(folderPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  const idx = rel.lastIndexOf('/');
+  return idx >= 0 ? rel.slice(0, idx) : '';
+}
+function moveFolderEntries(list, relGetter, setPath, sourcePath, target = {}) {
+  const sourceIndexes = getFolderDescendantIndexes(list, relGetter, sourcePath);
+  if (!sourceIndexes.length) return false;
+  const sourceItems = sourceIndexes.map(index => list[index]);
+  const sourceBase = sourcePath.split('/').filter(Boolean).pop() || sourcePath;
+  const targetType = target.type || 'folder';
+  const targetPath = String(target.path || '');
+  const zone = target.zone || 'inside';
+  if (targetType === 'folder' && (targetPath === sourcePath || targetPath.startsWith(`${sourcePath}/`))) return false;
+  const remaining = list.filter((_, index) => !sourceIndexes.includes(index));
+  const destinationPath = targetType === 'folder'
+    ? (zone === 'inside'
+        ? (targetPath ? `${targetPath}/${sourceBase}` : sourceBase)
+        : ((getParentFolderPath(targetPath) ? `${getParentFolderPath(targetPath)}/${sourceBase}` : sourceBase)))
+    : ((getParentFolderPath(targetPath) ? `${getParentFolderPath(targetPath)}/${sourceBase}` : sourceBase));
+  sourceItems.forEach(entry => {
+    const oldRel = normalizeEntryRelativePath(relGetter(entry), '');
+    const suffix = oldRel.startsWith(`${sourcePath}/`) ? oldRel.slice(sourcePath.length) : '';
+    setPath(entry, `${destinationPath}${suffix}`);
+  });
+  let insertIdx = remaining.length;
+  if (targetType === 'folder') {
+    const bounds = getFolderBounds(remaining, relGetter, targetPath);
+    if (bounds) insertIdx = zone === 'before' ? bounds.first : bounds.last + 1;
+  } else if (targetType === 'file') {
+    const targetIdx = remaining.indexOf(target.entry);
+    if (targetIdx >= 0) insertIdx = zone === 'before' ? targetIdx : targetIdx + 1;
+  }
+  remaining.splice(insertIdx, 0, ...sourceItems);
+  list.splice(0, list.length, ...remaining);
+  return sourceItems[0] || true;
+}
+function moveSingleAttachmentEntry(list, relGetter, setPath, sourceIdx, target = {}) {
+  if (!Number.isInteger(sourceIdx) || sourceIdx < 0 || sourceIdx >= list.length) return null;
+  const [entry] = list.splice(sourceIdx, 1);
+  if (!entry) return null;
+  const targetType = target.type || 'file';
+  const targetPath = String(target.path || '');
+  const zone = target.zone || 'after';
+  const leaf = normalizeEntryRelativePath(relGetter(entry), '').split('/').filter(Boolean).pop() || entry?.name || entry?.file?.name || 'download';
+  let parentPath = '';
+  if (targetType === 'folder') parentPath = zone === 'inside' ? targetPath : getParentFolderPath(targetPath);
+  else if (targetType === 'file') parentPath = getParentFolderPath(normalizeEntryRelativePath(relGetter(target.entry), ''));
+  setPath(entry, parentPath ? `${parentPath}/${leaf}` : leaf);
+  let insertIdx = list.length;
+  if (targetType === 'folder') {
+    const bounds = getFolderBounds(list, relGetter, targetPath);
+    if (bounds) insertIdx = zone === 'before' ? bounds.first : bounds.last + 1;
+  } else if (targetType === 'file') {
+    const targetIdx = list.indexOf(target.entry);
+    if (targetIdx >= 0) insertIdx = zone === 'before' ? targetIdx : targetIdx + 1;
+  }
+  list.splice(insertIdx, 0, entry);
+  return entry;
+}
+function removeFolderEntries(list, relGetter, folderPath) {
+  const prefix = `${folderPath}/`;
+  const next = list.filter(entry => {
+    const rel = normalizeEntryRelativePath(relGetter(entry), '');
+    return !(rel && (rel === folderPath || rel.startsWith(prefix)));
+  });
+  if (next.length === list.length) return false;
+  list.splice(0, list.length, ...next);
+  return true;
+}
+function uploadFolderDragStart(event, folderPath) {
+  S.uploadFolderDragPath = folderPath;
+  S.fileJustMovedKey = null;
+  clearAttachmentTreeDropState('upload');
+  event.currentTarget.classList.add('drag');
+  event.dataTransfer.effectAllowed = 'move';
+}
+function editFolderDragStart(event, folderPath) {
+  S.editFolderDragPath = folderPath;
+  S.eFileJustMovedKey = null;
+  clearAttachmentTreeDropState('edit');
+  event.currentTarget.classList.add('drag');
+  event.dataTransfer.effectAllowed = 'move';
+}
+function uploadFolderDragOver(event, folderPath) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  if (S.fileDragIdx === null && !S.uploadFolderDragPath) return;
+  setAttachmentTreeDropState('upload', `folder:${folderPath}`, getAttachmentTreeDropZone(event, true));
+}
+function editFolderDragOver(event, folderPath) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  if (S.eFileDragIdx === null && !S.editFolderDragPath) return;
+  setAttachmentTreeDropState('edit', `folder:${folderPath}`, getAttachmentTreeDropZone(event, true));
+}
+function uploadFolderDrop(event, folderPath) {
+  event.preventDefault();
+  const zone = S.uploadTreeDropKey === `folder:${folderPath}` && S.uploadTreeDropZone ? S.uploadTreeDropZone : getAttachmentTreeDropZone(event, true);
+  let moved = null;
+  if (S.uploadFolderDragPath) {
+    moved = moveFolderEntries(S.up.files, file => getRelativeFilePath(file), setUploadFilePath, S.uploadFolderDragPath, { type: 'folder', path: folderPath, zone });
+    S.uploadFolderDragPath = '';
+  } else if (S.fileDragIdx !== null) {
+    moved = moveSingleAttachmentEntry(S.up.files, file => getRelativeFilePath(file), setUploadFilePath, S.fileDragIdx, { type: 'folder', path: folderPath, zone });
+    S.fileDragIdx = null;
+  }
+  clearAttachmentTreeDropState('upload');
+  if (moved) renderUploadFilePicked();
+}
+function editFolderDrop(event, folderPath) {
+  event.preventDefault();
+  const zone = S.editTreeDropKey === `folder:${folderPath}` && S.editTreeDropZone ? S.editTreeDropZone : getAttachmentTreeDropZone(event, true);
+  let moved = null;
+  if (S.editFolderDragPath) {
+    moved = moveFolderEntries(S.eDownloadEntries, entry => getEntryRelativeFilePath(entry), setEditDownloadEntryPath, S.editFolderDragPath, { type: 'folder', path: folderPath, zone });
+    S.editFolderDragPath = '';
+  } else if (S.eFileDragIdx !== null) {
+    moved = moveSingleAttachmentEntry(S.eDownloadEntries, entry => getEntryRelativeFilePath(entry), setEditDownloadEntryPath, S.eFileDragIdx, { type: 'folder', path: folderPath, zone });
+    S.eFileDragIdx = null;
+  }
+  clearAttachmentTreeDropState('edit');
+  if (moved) renderEditFilePicked();
+}
+function uploadFolderDragEnd(event) {
+  event.currentTarget.classList.remove('drag');
+  S.uploadFolderDragPath = '';
+  clearAttachmentTreeDropState('upload');
+  renderUploadFilePicked();
+}
+function editFolderDragEnd(event) {
+  event.currentTarget.classList.remove('drag');
+  S.editFolderDragPath = '';
+  clearAttachmentTreeDropState('edit');
+  renderEditFilePicked();
+}
+function removeUploadFolder(path) {
+  if (removeFolderEntries(S.up.files, file => getRelativeFilePath(file), path)) renderUploadFilePicked();
+}
+function removeEditFolder(path) {
+  if (removeFolderEntries(S.eDownloadEntries, entry => getEntryRelativeFilePath(entry), path)) renderEditFilePicked();
+}
+function uploadFileDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (S.fileDragIdx === null && !S.uploadFolderDragPath) return;
+  setAttachmentTreeDropState('upload', `file:${e.currentTarget.dataset.fileIndex}`, getAttachmentTreeDropZone(e, false));
+}
+function editFileDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  if (S.eFileDragIdx === null && !S.editFolderDragPath) return;
+  setAttachmentTreeDropState('edit', `file:${e.currentTarget.dataset.entryIndex}`, getAttachmentTreeDropZone(e, false));
+}
+function uploadFileDrop(e, targetIdx) {
+  e.preventDefault();
+  const targetFile = S.up.files[Number(targetIdx)];
+  if (!targetFile) return;
+  const zone = S.uploadTreeDropKey === `file:${targetIdx}` && S.uploadTreeDropZone ? S.uploadTreeDropZone : getAttachmentTreeDropZone(e, false);
+  let moved = null;
+  if (S.uploadFolderDragPath) {
+    moved = moveFolderEntries(S.up.files, file => getRelativeFilePath(file), setUploadFilePath, S.uploadFolderDragPath, { type: 'file', path: getRelativeFilePath(targetFile), entry: targetFile, zone });
+    S.uploadFolderDragPath = '';
+  } else if (S.fileDragIdx !== null) {
+    moved = moveSingleAttachmentEntry(S.up.files, file => getRelativeFilePath(file), setUploadFilePath, S.fileDragIdx, { type: 'file', entry: targetFile, zone });
+    S.fileDragIdx = null;
+  }
+  clearAttachmentTreeDropState('upload');
+  if (moved) renderUploadFilePicked();
+}
+function editFileDrop(e, targetIdx) {
+  e.preventDefault();
+  const targetEntry = S.eDownloadEntries[Number(targetIdx)];
+  if (!targetEntry) return;
+  const zone = S.editTreeDropKey === `file:${targetIdx}` && S.editTreeDropZone ? S.editTreeDropZone : getAttachmentTreeDropZone(e, false);
+  let moved = null;
+  if (S.editFolderDragPath) {
+    moved = moveFolderEntries(S.eDownloadEntries, entry => getEntryRelativeFilePath(entry), setEditDownloadEntryPath, S.editFolderDragPath, { type: 'file', path: getEntryRelativeFilePath(targetEntry), entry: targetEntry, zone });
+    S.editFolderDragPath = '';
+  } else if (S.eFileDragIdx !== null) {
+    moved = moveSingleAttachmentEntry(S.eDownloadEntries, entry => getEntryRelativeFilePath(entry), setEditDownloadEntryPath, S.eFileDragIdx, { type: 'file', entry: targetEntry, zone });
+    S.eFileDragIdx = null;
+  }
+  clearAttachmentTreeDropState('edit');
+  if (moved) renderEditFilePicked();
+}
+function uploadFileDragEnd(e) {
+  e.currentTarget.classList.remove('drag');
+  S.fileDragIdx = null;
+  clearAttachmentTreeDropState('upload');
+  renderUploadFilePicked();
+}
+function editFileDragEnd(e) {
+  e.currentTarget.classList.remove('drag');
+  S.eFileDragIdx = null;
+  clearAttachmentTreeDropState('edit');
+  renderEditFilePicked();
+}
+function renderAttachmentFolderNode(folder, options = {}) {
+  const isUpload = options.mode === 'upload';
+  const isOpen = !!options.openState[folder.path];
+  const treeKey = `folder:${folder.path}`;
+  const dragStart = isUpload ? `uploadFolderDragStart(event,'${escJsSingle(folder.path)}')` : `editFolderDragStart(event,'${escJsSingle(folder.path)}')`;
+  const dragOver = isUpload ? `uploadFolderDragOver(event,'${escJsSingle(folder.path)}')` : `editFolderDragOver(event,'${escJsSingle(folder.path)}')`;
+  const drop = isUpload ? `uploadFolderDrop(event,'${escJsSingle(folder.path)}')` : `editFolderDrop(event,'${escJsSingle(folder.path)}')`;
+  const dragEnd = isUpload ? 'uploadFolderDragEnd(event)' : 'editFolderDragEnd(event)';
+  const toggle = isUpload ? 'toggleUploadFileTreeFolder' : 'toggleEditFileTreeFolder';
+  const remove = isUpload ? `removeUploadFolder('${escJsSingle(folder.path)}')` : `removeEditFolder('${escJsSingle(folder.path)}')`;
+  return `<div class="preview-tree-node">
+    <div class="attachment-folder-row" draggable="true" data-tree-key="${esc(treeKey)}"
+      ondragstart="${dragStart}" ondragover="${dragOver}" ondrop="${drop}" ondragend="${dragEnd}">
+      <button class="preview-entry folder preview-entry-main${isOpen ? ' open' : ''}" type="button" onclick="${toggle}('${encodeURIComponent(folder.path)}')" title="${esc(folder.name)}" aria-label="${esc(folder.name)}">
+        <span class="folder-main"><span class="grip" title="拖曳排序">${icon('grip')}</span><span class="arr" aria-hidden="true">${icon(isOpen ? 'chevronDown' : 'chevronRight')}</span></span>
+        <span class="meta"><span class="folder-ico" aria-hidden="true">${icon('folder')}</span><span class="name" title="${esc(folder.name)}">${esc(folder.name)}</span></span>
+      </button>
+      <div class="actions"><button class="ib" type="button" onclick="${remove}" title="刪除資料夾">${icon('trash')}</button></div>
+    </div>
+    ${isOpen ? `<div class="preview-children">${options.childrenHtml}</div>` : ''}
+  </div>`;
+}
+function renderUploadAttachmentFileNode(fileNode) {
+  const file = fileNode.entry;
+  const moved = S.fileJustMovedKey === makeUploadFileKey(file) ? ' moved' : '';
+  return `<div class="preview-item attachment-file-row${moved}" draggable="true" data-tree-key="${esc(`file:${fileNode.treeIndex}`)}" data-file-index="${fileNode.treeIndex}"
+    ondragstart="uploadFileDragStart(event,${fileNode.treeIndex})" ondragover="uploadFileDragOver(event)"
+    ondrop="uploadFileDrop(event,${fileNode.treeIndex})" ondragend="uploadFileDragEnd(event)">
+    <div class="meta"><span class="grip" title="拖曳排序">${icon('grip')}</span><span class="ico" aria-hidden="true">${icon('file')}</span><span class="name">${esc(fileNode.treeName)}${file?.size ? ` (${fmtSz(file.size)})` : ''}</span></div>
+    <div class="actions"><button class="ib" type="button" onclick="removeUploadFileAt(${fileNode.treeIndex})" title="刪除附件">${icon('trash')}</button></div>
+  </div>`;
+}
+function renderEditAttachmentFileNode(fileNode) {
+  const entry = fileNode.entry;
+  const moved = S.eFileJustMovedKey === makeEditDownloadEntryKey(entry) ? ' moved' : '';
+  return `<div class="preview-item attachment-file-row${moved}" draggable="true" data-tree-key="${esc(`file:${fileNode.treeIndex}`)}" data-entry-index="${fileNode.treeIndex}"
+    ondragstart="editFileDragStart(event,${fileNode.treeIndex})" ondragover="editFileDragOver(event)"
+    ondrop="editFileDrop(event,${fileNode.treeIndex})" ondragend="editFileDragEnd(event)">
+    <div class="meta"><span class="grip" title="拖曳排序">${icon('grip')}</span><span class="ico" aria-hidden="true">${icon('file')}</span><span class="name">${esc(fileNode.treeName)}${entry?.size ? ` (${fmtSz(entry.size)})` : ''}</span></div>
+    <div class="actions"><button class="ib" type="button" onclick="removeEditFileAt(${fileNode.treeIndex})" title="刪除附件">${icon('trash')}</button></div>
+  </div>`;
+}
+function renderUploadAttachmentTreeNodes(node) {
+  const folderHtml = Array.from(node.folders.values()).map(folder => {
+    const childHtml = renderUploadAttachmentTreeNodes(folder);
+    return renderAttachmentFolderNode(folder, { mode: 'upload', openState: S.uploadFileTreeOpen, childrenHtml: childHtml });
+  }).join('');
+  const fileHtml = (node.files || []).map(renderUploadAttachmentFileNode).join('');
+  return `${folderHtml}${fileHtml}`;
+}
+function renderEditAttachmentTreeNodes(node) {
+  const folderHtml = Array.from(node.folders.values()).map(folder => {
+    const childHtml = renderEditAttachmentTreeNodes(folder);
+    return renderAttachmentFolderNode(folder, { mode: 'edit', openState: S.editFileTreeOpen, childrenHtml: childHtml });
+  }).join('');
+  const fileHtml = (node.files || []).map(renderEditAttachmentFileNode).join('');
+  return `${folderHtml}${fileHtml}`;
+}
+function renderUploadFilePicked() {
+  const box = document.getElementById('fi-picked');
+  const info = document.getElementById('fi-info');
+  if (!box || !info) return;
+  if (!S.up.files.length) {
+    box.innerHTML = '';
+    info.textContent = '';
+    return;
+  }
+  const tree = buildAttachmentTree(S.up.files, file => getRelativeFilePath(file));
+  box.innerHTML = `<div class="preview-tree attachment-tree">${renderUploadAttachmentTreeNodes(tree)}</div>`;
+  info.textContent = tree.folders.size
+    ? '點擊資料夾展開內容；資料夾與檔案都可拖曳排序、刪除，資料夾也可拖進其他資料夾。'
+    : (S.up.files.length > 1 ? '多個檔案會依目前順序打包成 ZIP。' : '');
+}
+function renderEditFilePicked() {
+  const box = document.getElementById('e-fi-picked');
+  const info = document.getElementById('e-fi-info');
+  if (!box || !info) return;
+  if (!S.eDownloadEntries.length) {
+    box.innerHTML = '';
+    info.textContent = '目前沒有附件。';
+    return;
+  }
+  const tree = buildAttachmentTree(S.eDownloadEntries, entry => getEntryRelativeFilePath(entry));
+  box.innerHTML = `<div class="preview-tree attachment-tree">${renderEditAttachmentTreeNodes(tree)}</div>`;
+  info.textContent = tree.folders.size
+    ? '點擊資料夾展開內容；資料夾與檔案都可拖曳排序、刪除，資料夾也可拖進其他資料夾。'
     : (S.eDownloadEntries.length > 1 ? '可拖曳附件改順序；多檔案下載時會依目前順序重新產生 ZIP。' : '儲存後會更新附件內容。');
 }
 function removeUploadFileAt(i, count = 1) {
