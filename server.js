@@ -2825,7 +2825,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .window-body{padding:14px 16px 16px}
     .format-modal-card{width:min(88vw,260px)}
     .format-grid{display:grid;grid-template-columns:max-content;gap:10px;margin-top:6px;justify-content:start}
-    .toc-window{width:min(88vw,335px)}
+    .toc-window{width:min(88vw,340px)}
     .toc-list{display:grid;gap:6px;max-height:min(62dvh,520px);overflow:auto;padding-right:2px}
     .toc-entry{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;border:none;background:transparent;color:var(--text);text-align:left;padding:2px 0;cursor:grab;transition:color .18s ease,opacity .18s ease}
     .toc-entry:hover .toc-entry-title,.toc-entry.is-active .toc-entry-title{color:var(--link)}
