@@ -274,6 +274,74 @@ function normalizeDownloadFiles(item) {
   return normalized;
 }
 
+function listStoredScenarioFiles(collection = 'scenario', itemId = '') {
+  const dir = collUploadDir(collection, itemId);
+  if (!itemId || !fs.existsSync(dir)) return [];
+  const results = [];
+  const walk = (currentDir, relativeBase = '') => {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'))
+      .forEach(entry => {
+        if (!entry?.name || entry.name === '.thumbs') return;
+        const nextRelative = relativeBase ? `${relativeBase}/${entry.name}` : entry.name;
+        const nextPath = path.join(currentDir, entry.name);
+        if (entry.isDirectory()) {
+          walk(nextPath, nextRelative);
+          return;
+        }
+        if (!entry.isFile()) return;
+        const normalizedRelative = normalizeRelativePath(nextRelative, entry.name);
+        const storedKey = buildStoredKey(collection, itemId, normalizedRelative);
+        let size;
+        try {
+          size = fs.statSync(nextPath).size;
+        } catch {
+          size = undefined;
+        }
+        results.push({
+          key: storedKey,
+          name: sanitizeDownloadName(decodeUploadFilename(path.posix.basename(normalizedRelative)), path.basename(normalizedRelative)),
+          size,
+          relativePath: normalizedRelative
+        });
+      });
+  };
+  walk(dir);
+  return results;
+}
+
+function syncScenarioDownloadFiles(item, collection = 'scenario', mode = 'scenario') {
+  if (!item || mode !== 'scenario' || !item.id) return item;
+  const diskFiles = listStoredScenarioFiles(collection, item.id);
+  if (!diskFiles.length) return item;
+  const existingFiles = normalizeDownloadFiles(item);
+  const existingSignature = existingFiles
+    .map(file => `${file.relativePath || file.key}|${file.size || ''}`)
+    .join('\n');
+  const diskSignature = diskFiles
+    .map(file => `${file.relativePath || file.key}|${file.size || ''}`)
+    .join('\n');
+  if (existingSignature === diskSignature) return {
+    ...item,
+    downloadFiles: existingFiles,
+    downloadName: item.downloadName || existingFiles[0]?.name || null
+  };
+  return {
+    ...item,
+    downloadKey: diskFiles.length === 1 ? diskFiles[0].key : null,
+    downloadName: diskFiles.length === 1
+      ? diskFiles[0].name
+      : `${sanitizeDownloadName(String(item.title || item.subtitle || 'download').replace(/\.zip$/i, ''), 'download')}.zip`,
+    downloadFiles: diskFiles
+  };
+}
+
 function getImageDownloadFiles(item = {}) {
   const downloadFileMap = new Map(normalizeDownloadFiles(item).map(file => [file.key, file]));
   const previewKeys = Array.isArray(item.previewKeys) ? item.previewKeys.filter(Boolean) : [];
@@ -715,15 +783,17 @@ const readCat = (collection = 'scenario') => {
   const cfg = getCollectionConfig(collection);
   const cat = readJSON(collFile(cfg.key), getDefaultCatalog(cfg.key));
   cat.items = (cat.items || []).map(item => {
-    const downloadFiles = normalizeDownloadFiles(item);
+    const syncedItem = syncScenarioDownloadFiles(item, cfg.key, cfg.mode);
+    const downloadFiles = normalizeDownloadFiles(syncedItem);
     const categories = normalizeItemCategories(item);
     return {
-      ...normalizeItemSharedFields(item),
-      permission: normalizeItemPermission(item.permission),
+      ...normalizeItemSharedFields(syncedItem),
+      permission: normalizeItemPermission(syncedItem.permission),
       categories,
       category: categories[0] || '',
       downloadFiles,
-      downloadName: item.downloadName || downloadFiles[0]?.name || null,
+      downloadKey: syncedItem.downloadKey || null,
+      downloadName: syncedItem.downloadName || downloadFiles[0]?.name || null,
       collection: cfg.key
     };
   });
