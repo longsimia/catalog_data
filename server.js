@@ -2850,8 +2850,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .find-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex-wrap:nowrap}
     .find-actions button{min-width:0;padding:8px 10px;font-size:14px;white-space:nowrap}
     .toc-actions{display:flex;justify-content:flex-start;gap:8px;flex-wrap:wrap}
-    .toc-actions button{min-width:0;padding:8px 10px;font-size:14px;white-space:nowrap;flex:0 0 auto}
-    .modal-actions.toc-actions button{padding:8px 10px}
+    .toc-actions button{min-width:0;white-space:nowrap;flex:0 0 auto}
+    .modal-actions.toc-actions button{padding:8px 10px !important;font-size:14px !important;line-height:1.2;flex:0 0 auto}
     .find-grid{display:grid;gap:12px;margin-top:18px}
     .find-grid label{display:grid;gap:6px;font-size:14px;color:var(--muted)}
     .find-grid input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);font:inherit;outline:none}
