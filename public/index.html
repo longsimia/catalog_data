@@ -921,6 +921,13 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .preview-item .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-serif);font-size:1rem;font-weight:400;line-height:1.45;color:var(--text)}
 .preview-item .subact{display:inline-flex;align-items:center;justify-content:center;padding:.34rem .6rem;border:1px solid var(--border);border-radius:999px;background:var(--panel);color:var(--muted);font-size:.74rem;flex-shrink:0}
 .preview-item:hover .subact{border-color:var(--gold);color:var(--gold)}
+.attachment-tree .preview-item{cursor:grab}
+.attachment-tree .preview-item.drag{opacity:.42}
+.attachment-tree .preview-item .meta{align-items:flex-start}
+.attachment-tree .preview-item .name{font-family:var(--font-sans);font-size:.88rem;font-weight:500}
+.attachment-tree .preview-item .path{display:block;font-size:.7rem;color:var(--muted);margin-top:.12rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400}
+.attachment-tree .preview-item .actions{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
+.attachment-tree .preview-item .grip{display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
 
 /* ── OVERLAY ── */
 #ovbg{display:none;position:fixed;inset:0;z-index:590;background:var(--overlay-bg);cursor:pointer}
@@ -1803,6 +1810,8 @@ const S = {
   previewModalState: null,
   txtCreateState: null,
   previewTreeOpen: {},
+  uploadFileTreeOpen: {},
+  editFileTreeOpen: {},
   downloadDataCache: new Map(),
   previewDataCache: new Map(),
   downloadDataPending: new Map(),
@@ -5063,6 +5072,23 @@ function buildPreviewFileTree(files) {
   });
   return root;
 }
+function buildAttachmentTree(list, relGetter) {
+  const root = { folders: new Map(), files: [], path: '', name: '' };
+  (Array.isArray(list) ? list : []).forEach((entry, index) => {
+    const rel = normalizeEntryRelativePath(relGetter(entry), entry?.name || entry?.file?.name || `file-${index + 1}`);
+    const parts = rel.split('/').filter(Boolean);
+    const name = parts.pop() || (entry?.name || entry?.file?.name || `file-${index + 1}`);
+    let node = root;
+    let currentPath = '';
+    parts.forEach(part => {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      if (!node.folders.has(part)) node.folders.set(part, { folders: new Map(), files: [], path: currentPath, name: part });
+      node = node.folders.get(part);
+    });
+    node.files.push({ entry, treeName: name, treePath: rel, treeIndex: index });
+  });
+  return root;
+}
 function getPreviewTreeIconName(file) {
   const kind = getMediaKindFromName(file?.name || file?.url || '');
   if (kind === 'audio') return 'audio';
@@ -5160,6 +5186,16 @@ function togglePreviewTreeFolder(path) {
   if (!state) return;
   if (state.type === 'download') renderDownloadModalContent(state.item, state.data);
   else renderPreviewModalContent(state.data);
+}
+function toggleUploadFileTreeFolder(path = '') {
+  const key = decodeURIComponent(path || '');
+  S.uploadFileTreeOpen[key] = !S.uploadFileTreeOpen[key];
+  renderUploadFilePicked();
+}
+function toggleEditFileTreeFolder(path = '') {
+  const key = decodeURIComponent(path || '');
+  S.editFileTreeOpen[key] = !S.editFileTreeOpen[key];
+  renderEditFilePicked();
 }
 function renderPreviewModalContent(data) {
   const title = document.getElementById('preview-title');
@@ -7933,6 +7969,94 @@ function renderEditFilePicked() {
   const hasFolder = layout.folders.length > 0;
   info.textContent = hasFolder
     ? '可拖曳單一檔案改順序，也可丟到其他資料夾或上方區域變成獨立附件。'
+    : (S.eDownloadEntries.length > 1 ? '可拖曳附件改順序；多檔案下載時會依目前順序重新產生 ZIP。' : '儲存後會更新附件內容。');
+}
+function renderAttachmentFolderNode(folder, toggleFnName, openStateKey, childrenHtml) {
+  const isOpen = !!openStateKey[folder.path];
+  return `<div class="preview-tree-node">
+    <button class="preview-entry folder${isOpen ? ' open' : ''}" type="button" onclick="${toggleFnName}('${encodeURIComponent(folder.path)}')" title="${esc(folder.name)}" aria-label="${esc(folder.name)}">
+      <span class="arr" aria-hidden="true">${icon(isOpen ? 'chevronDown' : 'chevronRight')}</span>
+      <span class="meta"><span class="folder-ico" aria-hidden="true">${icon('folder')}</span><span class="name" title="${esc(folder.name)}">${esc(folder.name)}</span></span>
+    </button>
+    ${isOpen ? `<div class="preview-children">${childrenHtml}</div>` : ''}
+  </div>`;
+}
+function renderUploadAttachmentFileNode(fileNode) {
+  const file = fileNode.entry;
+  const classes = ['preview-item', 'drag', S.fileJustMovedKey === makeUploadFileKey(file) ? 'moved' : ''].filter(Boolean);
+  const before = S.fileDragOverIdx === fileNode.treeIndex && S.fileDragOverPos === 'before' ? ' drop-before' : '';
+  const after = S.fileDragOverIdx === fileNode.treeIndex && S.fileDragOverPos === 'after' ? ' drop-after' : '';
+  return `<div class="attachment-tree">
+    <div class="${classes.join(' ')}${before}${after}" draggable="true" data-file-index="${fileNode.treeIndex}"
+      ondragstart="uploadFileDragStart(event,${fileNode.treeIndex})" ondragover="uploadFileDragOver(event)"
+      ondrop="uploadFileDrop(event,${fileNode.treeIndex})" ondragend="uploadFileDragEnd(event)">
+      <div class="meta"><span class="grip" title="拖曳排序">${icon('grip')}</span><span class="ico" aria-hidden="true">${icon('file')}</span><span class="name">${esc(fileNode.treeName)}${file?.size ? ` (${fmtSz(file.size)})` : ''}<span class="path">${esc(fileNode.treePath)}</span></span></div>
+      <div class="actions"><button class="ib del" type="button" onclick="removeUploadFileAt(${fileNode.treeIndex})" title="刪除附件">${icon('trash')}</button></div>
+    </div>
+  </div>`;
+}
+function renderEditAttachmentFileNode(fileNode) {
+  const entry = fileNode.entry;
+  const classes = ['preview-item', 'drag', S.eFileJustMovedKey === makeEditDownloadEntryKey(entry) ? 'moved' : ''].filter(Boolean);
+  const before = S.eFileDragOverIdx === fileNode.treeIndex && S.eFileDragOverPos === 'before' ? ' drop-before' : '';
+  const after = S.eFileDragOverIdx === fileNode.treeIndex && S.eFileDragOverPos === 'after' ? ' drop-after' : '';
+  return `<div class="attachment-tree">
+    <div class="${classes.join(' ')}${before}${after}" draggable="true" data-entry-index="${fileNode.treeIndex}"
+      ondragstart="editFileDragStart(event,${fileNode.treeIndex})" ondragover="editFileDragOver(event)"
+      ondrop="editFileDrop(event,${fileNode.treeIndex})" ondragend="editFileDragEnd(event)">
+      <div class="meta"><span class="grip" title="拖曳排序">${icon('grip')}</span><span class="ico" aria-hidden="true">${icon('file')}</span><span class="name">${esc(fileNode.treeName)}${entry?.size ? ` (${fmtSz(entry.size)})` : ''}<span class="path">${esc(fileNode.treePath)}</span></span></div>
+      <div class="actions"><button class="ib del" type="button" onclick="removeEditFileAt(${fileNode.treeIndex})" title="刪除附件">${icon('trash')}</button></div>
+    </div>
+  </div>`;
+}
+function renderUploadAttachmentTreeNodes(node) {
+  const folderHtml = Array.from(node.folders.values()).map(folder => {
+    const childHtml = renderUploadAttachmentTreeNodes(folder);
+    return renderAttachmentFolderNode(folder, 'toggleUploadFileTreeFolder', S.uploadFileTreeOpen, childHtml);
+  }).join('');
+  const fileHtml = (node.files || []).map(renderUploadAttachmentFileNode).join('');
+  return `${folderHtml}${fileHtml}`;
+}
+function renderEditAttachmentTreeNodes(node) {
+  const folderHtml = Array.from(node.folders.values()).map(folder => {
+    const childHtml = renderEditAttachmentTreeNodes(folder);
+    return renderAttachmentFolderNode(folder, 'toggleEditFileTreeFolder', S.editFileTreeOpen, childHtml);
+  }).join('');
+  const fileHtml = (node.files || []).map(renderEditAttachmentFileNode).join('');
+  return `${folderHtml}${fileHtml}`;
+}
+function renderUploadFilePicked() {
+  const box = document.getElementById('fi-picked');
+  const info = document.getElementById('fi-info');
+  if (!box || !info) return;
+  if (!S.up.files.length) {
+    box.innerHTML = '';
+    info.textContent = '';
+    return;
+  }
+  const tree = buildAttachmentTree(S.up.files, file => getRelativeFilePath(file));
+  const html = renderUploadAttachmentTreeNodes(tree);
+  box.innerHTML = `<div class="preview-tree attachment-tree">${html}</div>`;
+  const hasFolder = tree.folders.size > 0;
+  info.textContent = hasFolder
+    ? '點擊資料夾可展開檔案；展開後可直接拖曳單一檔案排序或移動到其他已展開資料夾。'
+    : (S.up.files.length > 1 ? '多個檔案會依目前順序打包成 ZIP。' : '');
+}
+function renderEditFilePicked() {
+  const box = document.getElementById('e-fi-picked');
+  const info = document.getElementById('e-fi-info');
+  if (!box || !info) return;
+  if (!S.eDownloadEntries.length) {
+    box.innerHTML = '';
+    info.textContent = '目前沒有附件。';
+    return;
+  }
+  const tree = buildAttachmentTree(S.eDownloadEntries, entry => getEntryRelativeFilePath(entry));
+  const html = renderEditAttachmentTreeNodes(tree);
+  box.innerHTML = `<div class="preview-tree attachment-tree">${html}</div>`;
+  const hasFolder = tree.folders.size > 0;
+  info.textContent = hasFolder
+    ? '點擊資料夾可展開檔案；展開後可直接拖曳單一檔案排序或移動到其他已展開資料夾。'
     : (S.eDownloadEntries.length > 1 ? '可拖曳附件改順序；多檔案下載時會依目前順序重新產生 ZIP。' : '儲存後會更新附件內容。');
 }
 function removeUploadFileAt(i, count = 1) {
