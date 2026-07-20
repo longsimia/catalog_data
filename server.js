@@ -2953,6 +2953,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     const themeIcon = kind => kind === 'moon'
       ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>'
       : '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6M18.7 18.7l-1.6-1.6M6.9 6.9 5.3 5.3"/></svg>';
+    function escapeHtml(value){return String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
     function applyTheme(theme){const mode=theme==='light'?'light':'dark';document.documentElement.dataset.theme=mode;document.body.dataset.theme=mode;localStorage.setItem('theme-mode',mode);const btn=document.getElementById('theme-btn');if(btn)btn.innerHTML=mode==='light'?themeIcon('moon'):themeIcon('sun');}
     function toggleTheme(){const next=(document.body.dataset.theme||'dark')==='light'?'dark':'light';applyTheme(next);}
     document.getElementById('theme-btn')?.addEventListener('click',toggleTheme);
@@ -3014,7 +3015,6 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     function openHistoryClearConfirm(){if(!historyClearConfirmModal)return Promise.resolve(false);openModal(historyClearConfirmModal);setTimeout(()=>historyClearCancelBtn?.focus(),0);return new Promise(resolve=>{historyClearConfirmResolve=resolve;});}
     async function openHistoryModal(){await loadHistoryVersions();if(!historyVersions.length)return;openModal(historyModal);historyCloseBtn?.focus();}
     function renderHistoryButton(){if(!historySlot)return;if(!historyVersions.length){historySlot.innerHTML='';return;}historySlot.innerHTML='<button type="button" class="action-btn" id="historyBtn" title="編輯記錄">編輯記錄</button>';document.getElementById('historyBtn')?.addEventListener('click',openHistoryModal);}
-    function escapeHtml(value){return String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
     function formatHistoryMode(mode){return mode==='auto'?'自動儲存':'手動儲存';}
     function getHistorySavedAtLabel(version){return String(version?.savedAtLabel||version?.savedAt||'');}
     function countMatches(text,needle){if(!needle)return 0;let count=0,start=0;while(true){const idx=String(text||'').indexOf(needle,start);if(idx<0)break;count+=1;start=idx+Math.max(needle.length,1);}return count;}
