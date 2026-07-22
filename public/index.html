@@ -4403,8 +4403,10 @@ function buildCatalogRequestUrl(options = {}) {
 }
 
 const PUBLIC_CATALOG_PAGE_CACHE_KEY = 'catalog-public-page-cache-v1';
-const CATALOG_PAGE_CACHE_TTL_MS = 5 * 60 * 1000;
-const CATALOG_PAGE_CACHE_MAX_ENTRIES = 30;
+const CATALOG_MEMORY_CACHE_TTL_MS = 30 * 60 * 1000;
+const CATALOG_MEMORY_CACHE_MAX_ENTRIES = 100;
+const PUBLIC_CATALOG_SESSION_CACHE_TTL_MS = 10 * 60 * 1000;
+const PUBLIC_CATALOG_SESSION_CACHE_MAX_ENTRIES = 30;
 const catalogPageMemoryCache = new Map();
 function getCatalogPageCacheSignature(pageUrl, collection = S.collection) {
   const key = String(collection || 'scenario').trim().toLowerCase() || 'scenario';
@@ -4437,13 +4439,13 @@ function clearCatalogPageCacheForCollection(collection = S.collection) {
 function readCachedCatalogPage(signature) {
   const now = Date.now();
   const memoryCached = catalogPageMemoryCache.get(signature);
-  if (memoryCached?.catalog && now - Number(memoryCached.savedAt || 0) <= CATALOG_PAGE_CACHE_TTL_MS) {
+  if (memoryCached?.catalog && now - Number(memoryCached.savedAt || 0) <= CATALOG_MEMORY_CACHE_TTL_MS) {
     return memoryCached.catalog;
   }
   if (memoryCached) catalogPageMemoryCache.delete(signature);
   if (getToken()) return null;
   const cached = readPublicCatalogPageCacheEntries().find(entry => entry?.signature === signature && entry?.catalog);
-  if (!cached || now - Number(cached.savedAt || 0) > CATALOG_PAGE_CACHE_TTL_MS) return null;
+  if (!cached || now - Number(cached.savedAt || 0) > PUBLIC_CATALOG_SESSION_CACHE_TTL_MS) return null;
   catalogPageMemoryCache.set(signature, { savedAt: Number(cached.savedAt) || now, catalog: cached.catalog });
   return cached.catalog;
 }
@@ -4452,15 +4454,15 @@ function writeCachedCatalogPage(signature, catalog) {
   const savedAt = Date.now();
   catalogPageMemoryCache.delete(signature);
   catalogPageMemoryCache.set(signature, { savedAt, catalog });
-  while (catalogPageMemoryCache.size > CATALOG_PAGE_CACHE_MAX_ENTRIES) {
+  while (catalogPageMemoryCache.size > CATALOG_MEMORY_CACHE_MAX_ENTRIES) {
     catalogPageMemoryCache.delete(catalogPageMemoryCache.keys().next().value);
   }
   if (getToken()) return;
   try {
     const entries = readPublicCatalogPageCacheEntries()
-      .filter(entry => entry?.signature !== signature && savedAt - Number(entry?.savedAt || 0) <= CATALOG_PAGE_CACHE_TTL_MS);
+      .filter(entry => entry?.signature !== signature && savedAt - Number(entry?.savedAt || 0) <= PUBLIC_CATALOG_SESSION_CACHE_TTL_MS);
     entries.unshift({ signature, savedAt, catalog });
-    sessionStorage.setItem(PUBLIC_CATALOG_PAGE_CACHE_KEY, JSON.stringify({ entries: entries.slice(0, CATALOG_PAGE_CACHE_MAX_ENTRIES) }));
+    sessionStorage.setItem(PUBLIC_CATALOG_PAGE_CACHE_KEY, JSON.stringify({ entries: entries.slice(0, PUBLIC_CATALOG_SESSION_CACHE_MAX_ENTRIES) }));
   } catch {}
 }
 function applyCatalogPayload(pageCatalog, fullCatalog = null, options = {}) {
