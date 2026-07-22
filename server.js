@@ -871,11 +871,13 @@ function getDefaultCatalog(collection = 'scenario') {
   };
 }
 
-const readCat = (collection = 'scenario') => {
+const readCat = (collection = 'scenario', options = {}) => {
   const cfg = getCollectionConfig(collection);
   const cat = readJSON(collFile(cfg.key), getDefaultCatalog(cfg.key));
   cat.items = (cat.items || []).map(item => {
-    const syncedItem = syncScenarioDownloadFiles(item, cfg.key, cfg.mode);
+    const syncedItem = options.syncFiles === false
+      ? item
+      : syncScenarioDownloadFiles(item, cfg.key, cfg.mode);
     const downloadFiles = normalizeDownloadFiles(syncedItem);
     const categories = normalizeItemCategories(item);
     return {
@@ -4076,7 +4078,7 @@ app.get('/api/catalog', (req, res) => {
   const role = getViewerRole(req);
   const cfg = readCfg();
   if (!canAccessCollectionByRole(collection, role, cfg)) return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
-  const cat = readCat(collection);
+  const cat = readCat(collection, { syncFiles: false });
   const visibleCatalog = filterCatalogForViewer(cat, role);
   if (req.query?.all === '1' && role !== 'public') return res.json(visibleCatalog);
   res.json(paginateCatalogForRequest(visibleCatalog, req.query || {}));

@@ -216,7 +216,8 @@ select.fs:focus{border-color:var(--gold)}
 
 /* ── GALLERY ── */
 main{max-width:1340px;margin:0 auto;padding:2.2rem 1.3rem}
-.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1rem}
+.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1rem;transition:opacity .16s ease}
+.grid.page-loading{opacity:.48;pointer-events:none}
 body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justify-items:center}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
   overflow:hidden;cursor:pointer;position:relative;top:0;
@@ -2036,9 +2037,11 @@ function isCollectionScopedUrl(url = '') {
   return !/^\/api\/(?:login|logout|auth-users|ping)\b/.test(url);
 }
 
-function cUrl(url = '') {
+function cUrl(url = '', collectionOverride = '') {
   if (!isCollectionScopedUrl(url)) return url;
-  const collection = sanitizeCollectionKey(S.collection);
+  const collection = collectionOverride
+    ? (String(collectionOverride).trim().toLowerCase() || 'scenario')
+    : sanitizeCollectionKey(S.collection);
   return `${url}${url.includes('?') ? '&' : '?'}c=${encodeURIComponent(collection)}`;
 }
 
@@ -3140,8 +3143,8 @@ function toggleGalleryView() {
   renderGallery();
 }
 
-async function api(method, url, body) {
-  const finalUrl = cUrl(url);
+async function api(method, url, body, options = {}) {
+  const finalUrl = cUrl(url, options.collection);
   const opts = { method, headers: {} };
   const token = getToken();
   if (token) opts.headers['Authorization'] = `Bearer ${token}`;
@@ -4274,8 +4277,12 @@ async function loadCatalog(showLoading = true, options = {}) {
   const shouldLoadAll = !!options.loadAll || (!options.pageOnly && S.manPageOpen && S.adminCatalogLoaded);
   if (showLoading) showLdg(`載入中…`);
   try {
+    const pageUrl = buildCatalogRequestUrl(options);
+    const pageRequest = options.pageCatalogPromise
+      ? Promise.resolve(options.pageCatalogPromise).then(catalog => catalog || api('GET', pageUrl))
+      : api('GET', pageUrl);
     const [pageCatalog, fullCatalog] = await Promise.all([
-      api('GET', buildCatalogRequestUrl(options)),
+      pageRequest,
       shouldLoadAll ? api('GET', '/api/catalog?all=1') : Promise.resolve(null)
     ]);
     if (requestSeq !== S.catalogRequestSeq) return false;
@@ -4383,6 +4390,13 @@ async function init() {
   syncMobileCtrlHeight();
   mobileCtrlLastY = Math.max(window.scrollY || window.pageYOffset || 0, 0);
   updateMobileCtrlVisibility();
+  showLdg('載入中…');
+  const initialCollection = String(S.collection || 'scenario').trim().toLowerCase() || 'scenario';
+  const initialStoredView = getCatalogViewStateMap()[initialCollection];
+  if (initialStoredView?.page) S.F.page = Math.max(1, Number(initialStoredView.page) || 1);
+  const initialFocusItem = getShareUrlState().itemId;
+  const initialPageUrl = buildCatalogRequestUrl({ focusItem: initialFocusItem });
+  const prefetchedInitialCatalog = api('GET', initialPageUrl, undefined, { collection: initialCollection }).catch(() => null);
   const [cfgPublic] = await Promise.all([
     api('GET', '/api/cfg-public').catch(() => ({})),
     loadCollections()
@@ -4419,8 +4433,11 @@ window.addEventListener('offline', () => setConnState('offline'));
       releaseManagePageLock(true).catch(() => {});
     }
   });
-  initGoogleSignIn();
-  const initialCatalogRequest = loadCatalog(true, { focusItem: getShareUrlState().itemId });
+  initGoogleSignIn(cfgPublic);
+  const initialCatalogRequest = loadCatalog(true, {
+    focusItem: initialFocusItem,
+    pageCatalogPromise: S.collection === initialCollection ? prefetchedInitialCatalog : null
+  });
   if (getToken()) void loadRoleConfig();
   await initialCatalogRequest;
   await openSharedLightboxFromUrl();
@@ -4783,10 +4800,19 @@ function scheduleUploadPanelToTop() {
     requestAnimationFrame(() => scrollUploadPanelToTop('auto'));
   });
 }
+async function loadCatalogPageWithFeedback(options = {}) {
+  const grid = document.getElementById('grid');
+  grid?.classList.add('page-loading');
+  try {
+    return await loadCatalogPage(false, options);
+  } finally {
+    grid?.classList.remove('page-loading');
+  }
+}
 async function goPage(page) {
   S.F.page = Math.max(1, Number(page) || 1);
   saveCatalogViewState({ page: S.F.page, scrollY: 0 });
-  const loaded = await loadCatalogPage(true);
+  const loaded = await loadCatalogPageWithFeedback();
   if (loaded) window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function submitPageJump(value) {
@@ -4974,7 +5000,7 @@ async function downloadFromUrl(url, fallbackName) {
 function setPageSize(v) {
   S.F.pageSize = Number(v) || 20;
   resetLoaded();
-  void loadCatalogPage(true);
+  void loadCatalogPageWithFeedback();
 }
 let catalogSearchTimer = 0;
 function doQ(v) {
@@ -5766,8 +5792,11 @@ async function doLogin() {
   }
 }
 
-function initGoogleSignIn() {
-  api('GET', '/api/cfg-public').then(d => {
+function initGoogleSignIn(cfgPublic = null) {
+  const cfgRequest = cfgPublic && typeof cfgPublic === 'object'
+    ? Promise.resolve(cfgPublic)
+    : api('GET', '/api/cfg-public');
+  cfgRequest.then(d => {
     const clientId = d?.googleClientId;
     const btn = document.getElementById('g-signin-btn');
     const divider = document.getElementById('g-divider');
