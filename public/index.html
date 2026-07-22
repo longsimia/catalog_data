@@ -2293,11 +2293,33 @@ function getPermissionChoices() {
   });
   return choices;
 }
+function getItemPermissionChoices(selectedValue = 'public', preserveUnavailable = false) {
+  const current = normalizePermissionValue(selectedValue || 'public');
+  const visibleRoles = new Set(getVisibleRoleKeysForCollection());
+  const allChoices = getPermissionChoices();
+  const choices = allChoices.filter(choice => {
+    if (!choice.value.startsWith('role:')) return true;
+    return visibleRoles.has(choice.value.slice(5));
+  });
+  if (preserveUnavailable && current.startsWith('role:') && !choices.some(choice => choice.value === current)) {
+    const role = current.slice(5);
+    choices.push({
+      value: current,
+      label: `僅${getRoleLabel('owner')}及${getRoleLabel(role)}可見（目前無此頁籤權限）`,
+      disabled: true
+    });
+  }
+  return choices;
+}
 function renderPermissionSelectOptions(selectId, selectedValue = 'public') {
   const select = document.getElementById(selectId);
   if (!select) return;
   const current = normalizePermissionValue(selectedValue || select.value || 'public');
-  select.innerHTML = getPermissionChoices().map(choice => `<option value="${esc(choice.value)}"${choice.value === current ? ' selected' : ''}>${esc(choice.label)}</option>`).join('');
+  const isItemPermission = selectId === 'u-perm' || selectId === 'e-perm';
+  const choices = isItemPermission
+    ? getItemPermissionChoices(current, selectId === 'e-perm')
+    : getPermissionChoices();
+  select.innerHTML = choices.map(choice => `<option value="${esc(choice.value)}"${choice.value === current ? ' selected' : ''}${choice.disabled ? ' disabled' : ''}>${esc(choice.label)}</option>`).join('');
 }
 function getPermissionOptionsHtml(selectedValue = 'public') {
   const current = normalizePermissionValue(selectedValue || 'public');
@@ -4953,7 +4975,7 @@ async function loadCatalogPageWithFeedback(options = {}) {
   if (countLabel) countLabel.textContent = `正在載入第 ${S.F.page} 頁…`;
   renderPager(Math.max(0, Number(S.catalogPage.totalItems) || 0));
   try {
-    loaded = await loadCatalogPage(false, options);
+    loaded = await loadCatalogPage(true, options);
     return loaded;
   } finally {
     grid?.classList.remove('page-loading', 'page-swap');
@@ -5164,7 +5186,7 @@ function doQ(v) {
   if (catalogSearchTimer) window.clearTimeout(catalogSearchTimer);
   catalogSearchTimer = window.setTimeout(() => {
     catalogSearchTimer = 0;
-    void loadCatalogPage(false);
+    void loadCatalogPage(true);
   }, 250);
 }
 function toggleCategoryFilter(ev) {
@@ -5183,7 +5205,7 @@ async function togCategory(cat) {
   if (i >= 0) S.F.cats.splice(i, 1); else S.F.cats.push(cat);
   resetLoaded();
   renderCategoryFilter();
-  await loadCatalogPage(false);
+  await loadCatalogPage(true);
   restoreCategoryFilterState(keepOpen, scrollTop);
 }
 async function clearCategoryFilter() {
@@ -5195,7 +5217,7 @@ async function clearCategoryFilter() {
   S.F.cats = [];
   resetLoaded();
   renderCategoryFilter();
-  await loadCatalogPage(false);
+  await loadCatalogPage(true);
   restoreCategoryFilterState(keepOpen, scrollTop);
 }
 function toggleManCategoryFilter(ev) {
@@ -5250,7 +5272,7 @@ async function clearTagFilter() {
   S.F.tags = [];
   resetLoaded();
   renderPills();
-  await loadCatalogPage(false);
+  await loadCatalogPage(true);
   restoreTagFilterState(keepOpen, scrollTop);
 }
 function clearManTagFilter() {
@@ -5273,7 +5295,7 @@ async function togTag(t) {
   if (i >= 0) S.F.tags.splice(i, 1); else S.F.tags.push(t);
   resetLoaded();
   renderPills();
-  await loadCatalogPage(false);
+  await loadCatalogPage(true);
   restoreTagFilterState(keepOpen, scrollTop);
 }
 function togManTag(t) {
