@@ -3077,15 +3077,7 @@ function initTextareaTabIndent() {
 }
 
 function autoGrowEditTextarea(el) {
-  if (!el) return;
-  if (el.dataset.isComposing === '1') return;
-  const imeCooldownUntil = Number(el.dataset.imeCooldownUntil || 0);
-  const suppressScroll = imeCooldownUntil > Date.now();
-  rememberDescriptionTextareaScroll(el);
-  el.style.height = 'auto';
-  el.style.height = `${el.scrollHeight}px`;
-  scheduleDescriptionTextareaScrollRestore(el, !suppressScroll);
-  if (suppressScroll) return;
+  autoGrowUploadTextarea(el);
 }
 
 function autoGrowEditTextareaAfterPaint(el) {
