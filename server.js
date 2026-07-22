@@ -871,9 +871,27 @@ function getDefaultCatalog(collection = 'scenario') {
   };
 }
 
+const catalogSnapshotCache = new Map();
+function getFileSnapshotVersion(file) {
+  try {
+    const stat = fs.statSync(file);
+    return `${stat.mtimeMs}:${stat.size}`;
+  } catch {
+    return 'missing';
+  }
+}
+
 const readCat = (collection = 'scenario', options = {}) => {
   const cfg = getCollectionConfig(collection);
-  const cat = readJSON(collFile(cfg.key), getDefaultCatalog(cfg.key));
+  const catalogFile = collFile(cfg.key);
+  const useSnapshot = options.syncFiles === false;
+  const snapshotVersion = useSnapshot
+    ? `${getFileSnapshotVersion(catalogFile)}|${getFileSnapshotVersion(CFG_FILE)}`
+    : '';
+  const cached = useSnapshot ? catalogSnapshotCache.get(cfg.key) : null;
+  if (cached?.version === snapshotVersion) return cached.catalog;
+
+  const cat = readJSON(catalogFile, getDefaultCatalog(cfg.key));
   cat.items = (cat.items || []).map(item => {
     const syncedItem = options.syncFiles === false
       ? item
@@ -897,9 +915,14 @@ const readCat = (collection = 'scenario', options = {}) => {
     ...cfg.defaultSite,
     ...(cat.sc && typeof cat.sc === 'object' ? cat.sc : {})
   };
+  if (useSnapshot) catalogSnapshotCache.set(cfg.key, { version: snapshotVersion, catalog: cat });
   return cat;
 };
-const saveCat = (d, collection = 'scenario') => writeJSON(collFile(collection), d);
+const saveCat = (d, collection = 'scenario') => {
+  const key = sanitizeCollectionKey(collection);
+  writeJSON(collFile(key), d);
+  catalogSnapshotCache.delete(key);
+};
 function normalizeUserUiPrefs(rawPrefs = {}) {
   const source = rawPrefs && typeof rawPrefs === 'object' ? rawPrefs : {};
   const normalized = {};
