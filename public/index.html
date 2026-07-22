@@ -217,7 +217,8 @@ select.fs:focus{border-color:var(--gold)}
 /* ── GALLERY ── */
 main{max-width:1340px;margin:0 auto;padding:2.2rem 1.3rem}
 .grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1rem;transition:opacity .16s ease}
-.grid.page-loading{opacity:.48;pointer-events:none}
+.grid.page-loading{opacity:.72;pointer-events:none;cursor:progress}
+.grid.page-swap .card{animation:none}
 body[data-gallery-view="list"] .grid{grid-template-columns:1fr;gap:.45rem;justify-items:center}
 .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);
   overflow:hidden;cursor:pointer;position:relative;top:0;
@@ -1840,6 +1841,7 @@ const S = {
   pageItems: [],
   catalogPage: { page:1, pageSize:20, totalItems:0, totalPages:1, filterTags:[], filterCategories:[], hasPrivateItems:false },
   catalogRequestSeq: 0,
+  catalogPayloadFingerprint: '',
   adminCatalogLoaded: false,
   collections: [
     { key:'scenario', label:'資料庫', mode:'scenario', permission:'public' },
@@ -4269,7 +4271,85 @@ function buildCatalogRequestUrl(options = {}) {
   (S.F.tags || []).forEach(tag => params.append('tags', tag));
   const focusItem = String(options.focusItem || '').trim();
   if (focusItem) params.set('focusItem', focusItem);
-  return `/api/catalog?${params.toString()}`;
+  const endpoint = getToken() ? '/api/catalog' : '/api/catalog-page.js';
+  return `${endpoint}?${params.toString()}`;
+}
+
+const PUBLIC_CATALOG_PAGE_CACHE_KEY = 'catalog-public-page-cache-v1';
+const PUBLIC_CATALOG_PAGE_CACHE_TTL_MS = 2 * 60 * 1000;
+function getCatalogPageCacheSignature(pageUrl, collection = S.collection) {
+  const key = String(collection || 'scenario').trim().toLowerCase() || 'scenario';
+  return `${key}|${pageUrl}`;
+}
+function readCachedPublicCatalogPage(signature) {
+  if (getToken()) return null;
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(PUBLIC_CATALOG_PAGE_CACHE_KEY) || 'null');
+    if (!cached || cached.signature !== signature || !cached.catalog) return null;
+    if (Date.now() - Number(cached.savedAt || 0) > PUBLIC_CATALOG_PAGE_CACHE_TTL_MS) return null;
+    return cached.catalog;
+  } catch {
+    return null;
+  }
+}
+function writeCachedPublicCatalogPage(signature, catalog) {
+  if (getToken() || !catalog) return;
+  try {
+    sessionStorage.setItem(PUBLIC_CATALOG_PAGE_CACHE_KEY, JSON.stringify({ signature, savedAt: Date.now(), catalog }));
+  } catch {}
+}
+function applyCatalogPayload(pageCatalog, fullCatalog = null, options = {}) {
+  const pagination = pageCatalog?.pagination || {};
+  const filterOptions = pageCatalog?.filterOptions || {};
+  S.F.page = Math.max(1, Number(pagination.page) || 1);
+  S.F.pageSize = Math.max(1, Number(pagination.pageSize) || S.F.pageSize || 20);
+  S.pageItems = Array.isArray(pageCatalog?.items) ? pageCatalog.items : [];
+  S.catalogPage = {
+    page: S.F.page,
+    pageSize: S.F.pageSize,
+    totalItems: Math.max(0, Number(pagination.totalItems) || 0),
+    totalPages: Math.max(1, Number(pagination.totalPages) || 1),
+    filterTags: Array.isArray(filterOptions.tags) ? filterOptions.tags : (pageCatalog?.tags || []),
+    filterCategories: Array.isArray(filterOptions.categories) ? filterOptions.categories : (pageCatalog?.categories || []),
+    hasPrivateItems: !!filterOptions.hasPrivateItems
+  };
+
+  if (fullCatalog) {
+    S.cat = fullCatalog;
+    S.adminCatalogLoaded = true;
+    const fullItemMap = new Map((S.cat.items || []).map(item => [item.id, item]));
+    S.pageItems = S.pageItems.map(item => fullItemMap.get(item.id) || item);
+  } else if (S.adminCatalogLoaded && options.pageOnly) {
+    S.cat = {
+      ...S.cat,
+      tags: Array.isArray(pageCatalog?.tags) ? pageCatalog.tags : S.cat.tags,
+      categories: Array.isArray(pageCatalog?.categories) ? pageCatalog.categories : S.cat.categories,
+      sc: pageCatalog?.sc || S.cat.sc
+    };
+    const fullItemMap = new Map((S.cat.items || []).map(item => [item.id, item]));
+    S.pageItems = S.pageItems.map(item => fullItemMap.get(item.id) || item);
+  } else {
+    S.cat = { ...pageCatalog, items: S.pageItems };
+    S.adminCatalogLoaded = false;
+  }
+
+  if (!S.cat.items) S.cat.items = [];
+  if (!S.cat.sc) S.cat.sc = {};
+  normalizeCat();
+  if (fullCatalog || !options.pageOnly) refreshManageSnapshots();
+  S.catalogPayloadFingerprint = options.fingerprint || JSON.stringify(pageCatalog || {});
+  applyUI();
+  renderGallery(); renderPills(); updateCatSel();
+  restoreCatalogViewState();
+  if (document.getElementById('adm-body')?.style.display === 'flex' && S.adminCatalogLoaded) {
+    loadCfgForm();
+    renderMan();
+    renderCategoryManager();
+    renderTagManager();
+    renderChips('u');
+    renderCategoryChips('u');
+    updCatDl();
+  }
 }
 
 async function loadCatalog(showLoading = true, options = {}) {
@@ -4286,57 +4366,10 @@ async function loadCatalog(showLoading = true, options = {}) {
       shouldLoadAll ? api('GET', '/api/catalog?all=1') : Promise.resolve(null)
     ]);
     if (requestSeq !== S.catalogRequestSeq) return false;
-
-    const pagination = pageCatalog?.pagination || {};
-    const filterOptions = pageCatalog?.filterOptions || {};
-    S.F.page = Math.max(1, Number(pagination.page) || 1);
-    S.F.pageSize = Math.max(1, Number(pagination.pageSize) || S.F.pageSize || 20);
-    S.pageItems = Array.isArray(pageCatalog?.items) ? pageCatalog.items : [];
-    S.catalogPage = {
-      page: S.F.page,
-      pageSize: S.F.pageSize,
-      totalItems: Math.max(0, Number(pagination.totalItems) || 0),
-      totalPages: Math.max(1, Number(pagination.totalPages) || 1),
-      filterTags: Array.isArray(filterOptions.tags) ? filterOptions.tags : (pageCatalog?.tags || []),
-      filterCategories: Array.isArray(filterOptions.categories) ? filterOptions.categories : (pageCatalog?.categories || []),
-      hasPrivateItems: !!filterOptions.hasPrivateItems
-    };
-
-    if (fullCatalog) {
-      S.cat = fullCatalog;
-      S.adminCatalogLoaded = true;
-      const fullItemMap = new Map((S.cat.items || []).map(item => [item.id, item]));
-      S.pageItems = S.pageItems.map(item => fullItemMap.get(item.id) || item);
-    } else if (S.adminCatalogLoaded && options.pageOnly) {
-      S.cat = {
-        ...S.cat,
-        tags: Array.isArray(pageCatalog?.tags) ? pageCatalog.tags : S.cat.tags,
-        categories: Array.isArray(pageCatalog?.categories) ? pageCatalog.categories : S.cat.categories,
-        sc: pageCatalog?.sc || S.cat.sc
-      };
-      const fullItemMap = new Map((S.cat.items || []).map(item => [item.id, item]));
-      S.pageItems = S.pageItems.map(item => fullItemMap.get(item.id) || item);
-    } else {
-      S.cat = { ...pageCatalog, items: S.pageItems };
-      S.adminCatalogLoaded = false;
-    }
-
-    if (!S.cat.items) S.cat.items = [];
-    if (!S.cat.sc) S.cat.sc = {};
-    normalizeCat();
-    if (fullCatalog || !options.pageOnly) refreshManageSnapshots();
-    applyUI();
-    renderGallery(); renderPills(); updateCatSel();
-    restoreCatalogViewState();
-    if (document.getElementById('adm-body')?.style.display === 'flex' && S.adminCatalogLoaded) {
-      loadCfgForm();
-      renderMan();
-      renderCategoryManager();
-      renderTagManager();
-      renderChips('u');
-      renderCategoryChips('u');
-      updCatDl();
-    }
+    const fingerprint = JSON.stringify(pageCatalog || {});
+    const unchanged = !fullCatalog && options.skipIfUnchanged && fingerprint === S.catalogPayloadFingerprint;
+    if (!unchanged) applyCatalogPayload(pageCatalog, fullCatalog, { ...options, fingerprint });
+    writeCachedPublicCatalogPage(getCatalogPageCacheSignature(pageUrl), pageCatalog);
     return true;
   } catch (e) {
     if (requestSeq === S.catalogRequestSeq) toast('無法連接後端：' + e.message, 'err');
@@ -4390,12 +4423,20 @@ async function init() {
   syncMobileCtrlHeight();
   mobileCtrlLastY = Math.max(window.scrollY || window.pageYOffset || 0, 0);
   updateMobileCtrlVisibility();
-  showLdg('載入中…');
   const initialCollection = String(S.collection || 'scenario').trim().toLowerCase() || 'scenario';
   const initialStoredView = getCatalogViewStateMap()[initialCollection];
   if (initialStoredView?.page) S.F.page = Math.max(1, Number(initialStoredView.page) || 1);
   const initialFocusItem = getShareUrlState().itemId;
   const initialPageUrl = buildCatalogRequestUrl({ focusItem: initialFocusItem });
+  const cachedInitialCatalog = S.collections.some(entry => entry.key === initialCollection)
+    ? readCachedPublicCatalogPage(getCatalogPageCacheSignature(initialPageUrl, initialCollection))
+    : null;
+  const restoredCachedPage = !!cachedInitialCatalog;
+  if (cachedInitialCatalog) {
+    applyCatalogPayload(cachedInitialCatalog, null, { fingerprint: JSON.stringify(cachedInitialCatalog) });
+  } else {
+    showLdg('載入中…');
+  }
   const prefetchedInitialCatalog = api('GET', initialPageUrl, undefined, { collection: initialCollection }).catch(() => null);
   const [cfgPublic] = await Promise.all([
     api('GET', '/api/cfg-public').catch(() => ({})),
@@ -4434,9 +4475,10 @@ window.addEventListener('offline', () => setConnState('offline'));
     }
   });
   initGoogleSignIn(cfgPublic);
-  const initialCatalogRequest = loadCatalog(true, {
+  const initialCatalogRequest = loadCatalog(!restoredCachedPage, {
     focusItem: initialFocusItem,
-    pageCatalogPromise: S.collection === initialCollection ? prefetchedInitialCatalog : null
+    pageCatalogPromise: S.collection === initialCollection ? prefetchedInitialCatalog : null,
+    skipIfUnchanged: restoredCachedPage
   });
   if (getToken()) void loadRoleConfig();
   await initialCatalogRequest;
@@ -4802,11 +4844,23 @@ function scheduleUploadPanelToTop() {
 }
 async function loadCatalogPageWithFeedback(options = {}) {
   const grid = document.getElementById('grid');
-  grid?.classList.add('page-loading');
+  const countLabel = document.getElementById('hd-c');
+  const previousPage = Math.max(1, Number(S.catalogPage.page) || 1);
+  let loaded = false;
+  grid?.classList.add('page-loading', 'page-swap');
+  if (countLabel) countLabel.textContent = `正在載入第 ${S.F.page} 頁…`;
+  renderPager(Math.max(0, Number(S.catalogPage.totalItems) || 0));
   try {
-    return await loadCatalogPage(false, options);
+    loaded = await loadCatalogPage(false, options);
+    return loaded;
   } finally {
     grid?.classList.remove('page-loading');
+    window.setTimeout(() => grid?.classList.remove('page-swap'), 220);
+    if (!loaded) {
+      S.F.page = previousPage;
+      if (countLabel) countLabel.textContent = S.catalogPage.totalItems > 0 ? `共 ${S.catalogPage.totalItems} 件` : '';
+      renderPager(Math.max(0, Number(S.catalogPage.totalItems) || 0));
+    }
   }
 }
 async function goPage(page) {

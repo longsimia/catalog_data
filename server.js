@@ -4107,6 +4107,22 @@ app.get('/api/catalog', (req, res) => {
   res.json(paginateCatalogForRequest(visibleCatalog, req.query || {}));
 });
 
+// 匿名公開分頁：使用 .js 路徑讓 CDN 視為可快取靜態資源，但內容仍是 JSON。
+// 登入後的資料與完整管理清單一律維持走 /api/catalog，不進入共享快取。
+app.get('/api/catalog-page.js', (req, res) => {
+  const collection = getC(req);
+  const cfg = readCfg();
+  if (!canAccessCollectionByRole(collection, 'public', cfg)) {
+    return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
+  }
+  const cat = readCat(collection, { syncFiles: false });
+  const visibleCatalog = filterCatalogForViewer(cat, 'public');
+  res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
+  res.setHeader('CDN-Cache-Control', 'public, max-age=30, stale-while-revalidate=300');
+  res.setHeader('Vary', 'Accept-Encoding');
+  return res.json(paginateCatalogForRequest(visibleCatalog, req.query || {}));
+});
+
 app.get('/api/ping', (req, res) => {
   res.json({ ok: true });
 });
