@@ -4371,8 +4371,6 @@ async function setCollection(next, options = {}) {
 //  INIT
 // ════════════════════════════════════════════════════
 async function init() {
-  const _cfgPublic = await api('GET', '/api/cfg-public').catch(() => ({}));
-  window.UPLOAD_ORIGIN = String(_cfgPublic.uploadOrigin || '').trim().replace(/\/+$/, '');
   applyTheme(getTheme());
   syncViewportHeightVar();
   initDescriptionTextareaScrollGuard('u-d');
@@ -4385,7 +4383,11 @@ async function init() {
   syncMobileCtrlHeight();
   mobileCtrlLastY = Math.max(window.scrollY || window.pageYOffset || 0, 0);
   updateMobileCtrlVisibility();
-  await loadCollections();
+  const [cfgPublic] = await Promise.all([
+    api('GET', '/api/cfg-public').catch(() => ({})),
+    loadCollections()
+  ]);
+  window.UPLOAD_ORIGIN = String(cfgPublic.uploadOrigin || '').trim().replace(/\/+$/, '');
   applyCollectionUI();
   const savedView = getCatalogViewState(S.collection);
   if (savedView?.page) S.F.page = savedView.page;
@@ -4418,8 +4420,9 @@ window.addEventListener('offline', () => setConnState('offline'));
     }
   });
   initGoogleSignIn();
-  if (getToken()) await loadRoleConfig();
-  await loadCatalog(true, { focusItem: getShareUrlState().itemId });
+  const initialCatalogRequest = loadCatalog(true, { focusItem: getShareUrlState().itemId });
+  if (getToken()) void loadRoleConfig();
+  await initialCatalogRequest;
   await openSharedLightboxFromUrl();
 }
 
