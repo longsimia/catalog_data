@@ -2999,6 +2999,13 @@ function scheduleDescriptionTextareaScrollRestore(el, force = false) {
   requestAnimationFrame(() => requestAnimationFrame(run));
 }
 
+function scheduleEditTextareaScrollRestore(el, force = false) {
+  if (!el) return;
+  const run = () => restoreDescriptionTextareaScroll(el, force);
+  queueMicrotask(run);
+  requestAnimationFrame(run);
+}
+
 function autoGrowUploadTextarea(el) {
   if (!el || el.dataset.isComposing === '1') return;
   rememberDescriptionTextareaScroll(el);
@@ -3016,11 +3023,15 @@ function initDescriptionTextareaScrollGuard(textareaId) {
     el.addEventListener(type, remember, true);
   });
   ['input', 'compositionupdate'].forEach(type => {
-    el.addEventListener(type, () => scheduleDescriptionTextareaScrollRestore(el), true);
+    el.addEventListener(type, () => {
+      if (el.id === 'e-d') scheduleEditTextareaScrollRestore(el);
+      else scheduleDescriptionTextareaScrollRestore(el);
+    }, true);
   });
   el.addEventListener('compositionend', () => {
     rememberDescriptionTextareaScroll(el);
-    scheduleDescriptionTextareaScrollRestore(el, true);
+    if (el.id === 'e-d') scheduleEditTextareaScrollRestore(el, true);
+    else scheduleDescriptionTextareaScrollRestore(el, true);
   }, true);
 }
 
@@ -3077,15 +3088,17 @@ function initTextareaTabIndent() {
 }
 
 function autoGrowEditTextarea(el) {
-  autoGrowUploadTextarea(el);
+  if (!el || el.dataset.isComposing === '1') return;
+  rememberDescriptionTextareaScroll(el);
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+  restoreDescriptionTextareaScroll(el, true);
+  scheduleEditTextareaScrollRestore(el, true);
 }
 
 function autoGrowEditTextareaAfterPaint(el) {
   if (!el) return;
-  requestAnimationFrame(() => {
-    autoGrowEditTextarea(el);
-    requestAnimationFrame(() => autoGrowEditTextarea(el));
-  });
+  requestAnimationFrame(() => autoGrowEditTextarea(el));
 }
 
 function refreshDescriptionTextareas() {
