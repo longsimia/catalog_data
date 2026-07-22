@@ -4854,11 +4854,7 @@ async function loadCatalogPageWithFeedback(options = {}) {
     loaded = await loadCatalogPage(false, options);
     return loaded;
   } finally {
-    grid?.classList.remove('page-loading');
-    if (grid) {
-      grid.querySelectorAll('.card').forEach(card => { card.style.animation = 'none'; });
-      grid.classList.remove('page-swap');
-    }
+    grid?.classList.remove('page-loading', 'page-swap');
     if (!loaded) {
       S.F.page = previousPage;
       if (countLabel) countLabel.textContent = S.catalogPage.totalItems > 0 ? `共 ${S.catalogPage.totalItems} 件` : '';
