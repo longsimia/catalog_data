@@ -3621,14 +3621,111 @@ function renderPreviewThumbFromEntry(item) {
   const displaySrc = item?.thumbSrc || item?.src || '';
   return `<img class="pt" src="${esc(displaySrc)}" title="${esc(label || '')}"${imgThumbFallbackAttrs(displaySrc, item?.src || '')}>`;
 }
-function renderLightboxMedia(entry) {
+const lightboxImagePreloadCache = new Map();
+function preloadLightboxImage(src = '') {
+  const url = String(src || '').trim();
+  if (!url) return Promise.resolve('');
+  if (lightboxImagePreloadCache.has(url)) return lightboxImagePreloadCache.get(url);
+  const request = new Promise(resolve => {
+    const loader = new Image();
+    loader.decoding = 'async';
+    loader.onload = () => {
+      const decoded = typeof loader.decode === 'function' ? loader.decode().catch(() => {}) : Promise.resolve();
+      decoded.finally(() => resolve(url));
+    };
+    loader.onerror = () => resolve('');
+    loader.src = url;
+  });
+  lightboxImagePreloadCache.set(url, request);
+  request.then(loaded => {
+    if (!loaded) lightboxImagePreloadCache.delete(url);
+  });
+  return request;
+}
+function renderLightboxMedia(entry, index = 0, isActive = false) {
   if (!entry?.src) return `<div class="lb-slide-media-empty">${icon('image')}<span>目前沒有可顯示的媒體</span></div>`;
   const mediaLocked = !getToken();
   const mediaLockAttrs = mediaLocked ? ' controlslist="nodownload"' : '';
   const mediaContextAttrs = mediaLocked ? ' oncontextmenu="return false"' : '';
-  if (entry.kind === 'video') return `<video src="${esc(entry.src)}" controls playsinline preload="metadata"${mediaLockAttrs}${mediaContextAttrs}></video>`;
-  if (entry.kind === 'audio') return `<audio src="${esc(entry.src)}" controls preload="metadata"${mediaLockAttrs}></audio>`;
-  return `<img src="${esc(entry.src)}" alt=""${mediaContextAttrs}${mediaLocked ? ' draggable="false"' : ''} onclick="enterLightboxMediaFocus(event)">`;
+  const mediaSrcAttr = isActive ? ` src="${esc(entry.src)}"` : ` data-media-src="${esc(entry.src)}"`;
+  if (entry.kind === 'video') return `<video${mediaSrcAttr} controls playsinline preload="metadata" data-lb-index="${index}"${mediaLockAttrs}${mediaContextAttrs}></video>`;
+  if (entry.kind === 'audio') return `<audio${mediaSrcAttr} controls preload="metadata" data-lb-index="${index}"${mediaLockAttrs}></audio>`;
+  const previewSrc = entry.thumbSrc || entry.src;
+  const initialSrcAttr = isActive ? ` src="${esc(previewSrc)}" fetchpriority="high"` : '';
+  const thumbFallback = previewSrc !== entry.src
+    ? ' onerror="if(this.dataset.fullsrc){ this.onerror=null; this.src=this.dataset.fullsrc; }"'
+    : '';
+  return `<img${initialSrcAttr} data-preview-src="${esc(previewSrc)}" data-fullsrc="${esc(entry.src)}" data-lb-index="${index}" decoding="async" alt=""${thumbFallback}${mediaContextAttrs}${mediaLocked ? ' draggable="false"' : ''} onclick="enterLightboxMediaFocus(event)">`;
+}
+function preloadLightboxAdjacentFullImages(index) {
+  const count = S.lbImgs.length;
+  if (count <= 1) return;
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (connection?.saveData || /(?:^|-)2g$/i.test(String(connection?.effectiveType || ''))) return;
+  const neighbors = [...new Set([
+    (index - 1 + count) % count,
+    (index + 1) % count
+  ])];
+  const seen = new Set();
+  neighbors.forEach(next => {
+    const entry = S.lbImgs[next];
+    const fullSrc = entry?.kind === 'image' ? String(entry.src || '').trim() : '';
+    if (!fullSrc || seen.has(fullSrc)) return;
+    seen.add(fullSrc);
+    void preloadLightboxImage(fullSrc);
+  });
+}
+function upgradeLightboxImage(img, entry) {
+  const fullSrc = String(entry?.src || '').trim();
+  const previewSrc = String(entry?.thumbSrc || '').trim();
+  if (!img || !fullSrc || !previewSrc || previewSrc === fullSrc) return;
+  if (img.dataset.fullReady === fullSrc || img.dataset.fullLoading === fullSrc) return;
+  img.dataset.fullLoading = fullSrc;
+  void preloadLightboxImage(fullSrc).then(loadedSrc => {
+    if (!loadedSrc || !img.isConnected || img.dataset.fullLoading !== fullSrc) return;
+    img.onerror = null;
+    img.src = loadedSrc;
+    img.dataset.fullReady = fullSrc;
+    delete img.dataset.fullLoading;
+    preloadLightboxAdjacentFullImages(Number(img.dataset.lbIndex) || 0);
+  });
+}
+function prepareLightboxSlide(index = S.lbSlide) {
+  const track = document.getElementById('lbt');
+  const entry = S.lbImgs[index];
+  const slide = track?.children?.[index];
+  if (!entry || !slide) return;
+  const media = slide.querySelector('img,video,audio');
+  if (!media) return;
+  if (!media.getAttribute('src')) {
+    const source = media.dataset.previewSrc || media.dataset.mediaSrc || entry.src || '';
+    if (source) media.setAttribute('src', source);
+    if (typeof media.load === 'function' && media.matches('video,audio')) media.load();
+  }
+  if (media.matches('img')) {
+    media.fetchPriority = 'high';
+    const hasSeparatePreview = !!entry.thumbSrc && entry.thumbSrc !== entry.src;
+    if (hasSeparatePreview) {
+      upgradeLightboxImage(media, entry);
+    } else {
+      const preloadNeighbors = () => preloadLightboxAdjacentFullImages(index);
+      if (media.complete && media.naturalWidth > 0) preloadNeighbors();
+      else media.addEventListener('load', preloadNeighbors, { once:true });
+    }
+  }
+
+  const neighborIndexes = [...new Set([
+    index - 1,
+    index + 1
+  ].filter(next => next >= 0 && next < S.lbImgs.length))];
+  neighborIndexes.forEach(next => {
+    const neighborEntry = S.lbImgs[next];
+    if (neighborEntry?.kind !== 'image' || !neighborEntry.thumbSrc) return;
+    const neighborImg = track.children?.[next]?.querySelector('img');
+    if (!neighborImg || neighborImg.getAttribute('src')) return;
+    neighborImg.fetchPriority = 'low';
+    neighborImg.src = neighborEntry.thumbSrc;
+  });
 }
 function getItemDownloadFiles(item) {
   const files = Array.isArray(item?.downloadFiles) ? item.downloadFiles.filter(file => file?.key) : [];
@@ -5244,8 +5341,8 @@ function syncLightboxItem(item, options = {}) {
   S.lbImgs = mediaEntries;
   S.lbSlide = nextSlide;
 
-  document.getElementById('lbt').innerHTML = mediaEntries.map(entry =>
-    `<div class="lb-slide${entry.kind === 'image' ? ' focusable' : ''}" onclick="handleLightboxSlideClick(event)">${renderLightboxMedia(entry)}</div>`
+  document.getElementById('lbt').innerHTML = mediaEntries.map((entry, index) =>
+    `<div class="lb-slide${entry.kind === 'image' ? ' focusable' : ''}" onclick="handleLightboxSlideClick(event)">${renderLightboxMedia(entry, index, index === nextSlide)}</div>`
   ).join('');
   document.getElementById('lbt').style.transform = '';
   setLightboxMediaFocus(false);
@@ -5682,6 +5779,7 @@ function lbStepItem(d) {
 function lbSync()  {
   document.getElementById('lbt').style.transform = `translateX(-${S.lbSlide * 100}%)`;
   document.querySelectorAll('.lb-dot').forEach((d, i) => d.classList.toggle('on', i === S.lbSlide));
+  prepareLightboxSlide(S.lbSlide);
 }
 
 function resetLightboxScroll() {
