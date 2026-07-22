@@ -1354,6 +1354,99 @@ function filterCatalogForViewer(cat, role = 'public') {
   return result;
 }
 
+function normalizeCatalogQueryList(value) {
+  const source = Array.isArray(value) ? value : (value === undefined || value === null ? [] : [value]);
+  return [...new Set(source.map(entry => String(entry || '').trim()).filter(Boolean))];
+}
+
+function applyCatalogLibraryOperations(values, operations) {
+  let next = normalizeCatalogQueryList(values);
+  (Array.isArray(operations) ? operations : []).forEach(operation => {
+    const type = String(operation?.type || '');
+    if (type === 'rename') {
+      const from = String(operation?.from || '').trim();
+      const to = String(operation?.to || '').trim();
+      if (from && to) next = next.map(value => value === from ? to : value);
+    } else if (type === 'remove') {
+      const value = String(operation?.value || '').trim();
+      if (value) next = next.filter(entry => entry !== value);
+    }
+    next = [...new Set(next)];
+  });
+  return next;
+}
+
+function sortCatalogLibraryValues(values, library) {
+  const normalized = normalizeCatalogQueryList(values);
+  const order = new Map(normalizeCatalogQueryList(library).map((value, index) => [value, index]));
+  return normalized.sort((a, b) => {
+    const ai = order.has(a) ? order.get(a) : Number.MAX_SAFE_INTEGER;
+    const bi = order.has(b) ? order.get(b) : Number.MAX_SAFE_INTEGER;
+    return ai === bi ? 0 : ai - bi;
+  });
+}
+
+function filterCatalogItemsForPage(items = [], query = {}) {
+  let filtered = Array.isArray(items) ? items : [];
+  const q = String(query.q || '').trim().toLowerCase();
+  const cats = normalizeCatalogQueryList(query.cats);
+  const tags = normalizeCatalogQueryList(query.tags);
+  const hasPrivateFilter = cats.includes('__private__');
+  const selectedCats = cats.filter(cat => cat !== '__private__');
+
+  if (q) {
+    filtered = filtered.filter(item => [
+      item?.title,
+      item?.creator || item?.author,
+      item?.subtitle || item?.translatedTitle,
+      item?.description
+    ].some(value => String(value || '').toLowerCase().includes(q)));
+  }
+
+  if (cats.length || tags.length) {
+    filtered = filtered.filter(item => {
+      const itemCats = normalizeItemCategories(item);
+      const itemTags = Array.isArray(item?.tags) ? item.tags : [];
+      const catMatch = (selectedCats.length > 0 && selectedCats.some(cat => itemCats.includes(cat)))
+        || (hasPrivateFilter && normalizeItemPermission(item?.permission) !== 'public');
+      const tagMatch = tags.length > 0 && tags.some(tag => itemTags.includes(tag));
+      return catMatch || tagMatch;
+    });
+  }
+
+  return filtered;
+}
+
+function paginateCatalogForRequest(catalog, query = {}) {
+  const pageSize = Math.max(1, Math.min(100, Number.parseInt(query.pageSize, 10) || 20));
+  const filteredItems = filterCatalogItemsForPage(catalog?.items || [], query);
+  const totalItems = filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const focusItemId = String(query.focusItem || '').trim();
+  const focusIndex = focusItemId ? filteredItems.findIndex(item => String(item?.id || '') === focusItemId) : -1;
+  const requestedPage = focusIndex >= 0
+    ? Math.floor(focusIndex / pageSize) + 1
+    : (Number.parseInt(query.page, 10) || 1);
+  const page = Math.max(1, Math.min(totalPages, requestedPage));
+  const start = (page - 1) * pageSize;
+  const accessibleItems = Array.isArray(catalog?.items) ? catalog.items : [];
+  const usedTags = [...new Set(accessibleItems.flatMap(item => Array.isArray(item?.tags) ? item.tags : []).filter(Boolean))];
+  const usedCategories = [...new Set(accessibleItems.flatMap(item => normalizeItemCategories(item)).filter(Boolean))];
+  const tagOrder = Array.isArray(catalog?.tags) ? catalog.tags : [];
+  const categoryOrder = Array.isArray(catalog?.categories) ? catalog.categories : [];
+
+  return {
+    ...catalog,
+    items: filteredItems.slice(start, start + pageSize),
+    pagination: { page, pageSize, totalItems, totalPages },
+    filterOptions: {
+      tags: [...tagOrder.filter(tag => usedTags.includes(tag)), ...usedTags.filter(tag => !tagOrder.includes(tag))],
+      categories: [...categoryOrder.filter(category => usedCategories.includes(category)), ...usedCategories.filter(category => !categoryOrder.includes(category))],
+      hasPrivateItems: accessibleItems.some(item => normalizeItemPermission(item?.permission) !== 'public')
+    }
+  };
+}
+
 const auth = (req, res, next) => {
   const t = getTokenFromReq(req);
   const user = verifyToken(t);
@@ -3984,7 +4077,9 @@ app.get('/api/catalog', (req, res) => {
   const cfg = readCfg();
   if (!canAccessCollectionByRole(collection, role, cfg)) return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
   const cat = readCat(collection);
-  res.json(filterCatalogForViewer(cat, role));
+  const visibleCatalog = filterCatalogForViewer(cat, role);
+  if (req.query?.all === '1' && role !== 'public') return res.json(visibleCatalog);
+  res.json(paginateCatalogForRequest(visibleCatalog, req.query || {}));
 });
 
 app.get('/api/ping', (req, res) => {
@@ -5467,13 +5562,20 @@ app.put('/api/tags', auth, (req, res) => {
     const collection = getC(req);
     if (!hasRolePermission(req.authUser, 'editTags', collection)) return res.status(403).json({ error: '你沒有權限編輯標籤庫' });
     const cat = readCat(collection);
-    cat.tags = Array.isArray(req.body.tags) ? req.body.tags : [];
+    cat.tags = normalizeCatalogQueryList(req.body.tags);
     if (Array.isArray(req.body.items)) {
       const tagMap = new Map(req.body.items.map(item => [item.id, Array.isArray(item.tags) ? item.tags : []]));
       cat.items = (cat.items || []).map(item => tagMap.has(item.id)
         ? { ...item, tags: tagMap.get(item.id) }
         : item);
     }
+    cat.items = (cat.items || []).map(item => ({
+      ...item,
+      tags: sortCatalogLibraryValues(
+        applyCatalogLibraryOperations(item.tags || [], req.body.operations),
+        cat.tags
+      )
+    }));
     saveCat(cat, collection);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -5484,7 +5586,7 @@ app.put('/api/categories', auth, (req, res) => {
     const collection = getC(req);
     if (!hasRolePermission(req.authUser, 'editCategories', collection)) return res.status(403).json({ error: '你沒有權限編輯類別庫' });
     const cat = readCat(collection);
-    cat.categories = Array.isArray(req.body.categories) ? req.body.categories : [];
+    cat.categories = normalizeCatalogQueryList(req.body.categories);
     if (Array.isArray(req.body.items)) {
       const catMap = new Map(req.body.items.map(item => [
         item.id,
@@ -5496,6 +5598,13 @@ app.put('/api/categories', auth, (req, res) => {
         ? { ...item, categories: catMap.get(item.id), category: catMap.get(item.id)[0] || '' }
         : item);
     }
+    cat.items = (cat.items || []).map(item => {
+      const categories = sortCatalogLibraryValues(
+        applyCatalogLibraryOperations(normalizeItemCategories(item), req.body.operations),
+        cat.categories
+      );
+      return { ...item, categories, category: categories[0] || '' };
+    });
     saveCat(cat, collection);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }

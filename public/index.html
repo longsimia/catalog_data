@@ -1836,6 +1836,10 @@ const COLLECTIONS = {
 
 const S = {
   cat:    { items:[], tags:[], categories:[], sc:{ title:'CATALOG', subtitle:'', footer:'' } },
+  pageItems: [],
+  catalogPage: { page:1, pageSize:20, totalItems:0, totalPages:1, filterTags:[], filterCategories:[], hasPrivateItems:false },
+  catalogRequestSeq: 0,
+  adminCatalogLoaded: false,
   collections: [
     { key:'scenario', label:'資料庫', mode:'scenario', permission:'public' },
     { key:'image', label:'圖庫', mode:'image', permission:'public' }
@@ -1941,6 +1945,8 @@ S.cat.categories = [];
 S.tagDragIdx = null;
 S.catDragIdx = null;
 S.saved = { categories:[], categoryMap:{}, tags:[], tagMap:{}, itemOrder:[] };
+S.categoryOps = [];
+S.tagOps = [];
 
 // ════════════════════════════════════════════════════
 //  API 工具函式
@@ -2078,7 +2084,7 @@ async function openSharedLightboxFromUrl() {
     }
     const targetCollection = targetEntry.key;
     if (targetCollection !== S.collection) {
-      await setCollection(targetCollection, { preserveShareUrl: true });
+      await setCollection(targetCollection, { preserveShareUrl: true, focusItem: share.itemId });
     }
   }
   const target = (S.cat.items || []).find(item => item.id === share.itemId);
@@ -2163,21 +2169,11 @@ function hasVisiblePrivateItems(items = S.cat.items || []) {
   return (items || []).some(item => isPrivateItemPermission(item?.permission));
 }
 function getGalleryTagFilterOptions() {
-  const order = (S.cat.tags || []).slice();
-  const used = [...new Set((S.cat.items || []).flatMap(item => getItemTags(item)).filter(Boolean))];
-  return [
-    ...order.filter(tag => used.includes(tag)),
-    ...used.filter(tag => !order.includes(tag))
-  ];
+  return (Array.isArray(S.catalogPage.filterTags) ? S.catalogPage.filterTags : (S.cat.tags || [])).slice();
 }
 function getGalleryCategoryFilterOptions() {
-  const order = (S.cat.categories || []).slice();
-  const used = [...new Set((S.cat.items || []).flatMap(item => getItemCategories(item)).filter(Boolean))];
-  const options = [
-    ...order.filter(cat => used.includes(cat)),
-    ...used.filter(cat => !order.includes(cat))
-  ];
-  if (hasVisiblePrivateItems()) options.unshift(PRIVATE_CATEGORY_FILTER_KEY);
+  const options = (Array.isArray(S.catalogPage.filterCategories) ? S.catalogPage.filterCategories : (S.cat.categories || [])).slice();
+  if (S.catalogPage.hasPrivateItems && !options.includes(PRIVATE_CATEGORY_FILTER_KEY)) options.unshift(PRIVATE_CATEGORY_FILTER_KEY);
   return options;
 }
 function getCategoryFilterOptionLabel(value) {
@@ -2425,6 +2421,8 @@ function refreshManageSnapshots() {
     tagMap: Object.fromEntries((S.cat.items || []).map(item => [item.id, [...(item.tags || [])]])),
     itemOrder: (S.cat.items || []).map(item => item.id)
   };
+  S.categoryOps = [];
+  S.tagOps = [];
 }
 
 function decorateStaticIcons() {
@@ -2639,6 +2637,11 @@ async function openManageListPage(ev) {
     await acquireManagePageLock();
   } catch (e) {
     toast(e.message || '目前有人正在編輯資料清單，請稍後再試', 'err');
+    return;
+  }
+  const catalogLoaded = await loadCatalog(true, { loadAll: true });
+  if (!catalogLoaded) {
+    await releaseManagePageLock(true);
     return;
   }
   S.manPageOpen = true;
@@ -3464,11 +3467,7 @@ function getGalleryCoverToolsHtml(item, coverEntry = null) {
 }
 function getGalleryCardPageIndex(itemId) {
   const items = filtered();
-  const totalPages = Math.max(1, Math.ceil(items.length / S.F.pageSize));
-  const page = Math.min(Math.max(1, S.F.page), totalPages);
-  const start = (page - 1) * S.F.pageSize;
-  const shown = items.slice(start, start + S.F.pageSize);
-  return shown.findIndex(item => item.id === itemId);
+  return items.findIndex(item => item.id === itemId);
 }
 function refreshGalleryCard(itemId) {
   const card = getGalleryCardById(itemId);
@@ -4257,31 +4256,91 @@ function applyCollectionUI() {
   applyManageDisclosureOrder();
 }
 
-async function loadCatalog(showLoading = true) {
-  const current = getCollectionEntry();
+function buildCatalogRequestUrl(options = {}) {
+  const params = new URLSearchParams();
+  params.set('page', String(Math.max(1, Number(S.F.page) || 1)));
+  params.set('pageSize', String(Math.max(1, Number(S.F.pageSize) || 20)));
+  const q = String(S.F.q || '').trim();
+  if (q) params.set('q', q);
+  (S.F.cats || []).forEach(cat => params.append('cats', cat));
+  (S.F.tags || []).forEach(tag => params.append('tags', tag));
+  const focusItem = String(options.focusItem || '').trim();
+  if (focusItem) params.set('focusItem', focusItem);
+  return `/api/catalog?${params.toString()}`;
+}
+
+async function loadCatalog(showLoading = true, options = {}) {
+  const requestSeq = ++S.catalogRequestSeq;
+  const shouldLoadAll = !!options.loadAll || (!options.pageOnly && S.manPageOpen && S.adminCatalogLoaded);
   if (showLoading) showLdg(`載入中…`);
   try {
-    S.cat = await api('GET', '/api/catalog');
+    const [pageCatalog, fullCatalog] = await Promise.all([
+      api('GET', buildCatalogRequestUrl(options)),
+      shouldLoadAll ? api('GET', '/api/catalog?all=1') : Promise.resolve(null)
+    ]);
+    if (requestSeq !== S.catalogRequestSeq) return false;
+
+    const pagination = pageCatalog?.pagination || {};
+    const filterOptions = pageCatalog?.filterOptions || {};
+    S.F.page = Math.max(1, Number(pagination.page) || 1);
+    S.F.pageSize = Math.max(1, Number(pagination.pageSize) || S.F.pageSize || 20);
+    S.pageItems = Array.isArray(pageCatalog?.items) ? pageCatalog.items : [];
+    S.catalogPage = {
+      page: S.F.page,
+      pageSize: S.F.pageSize,
+      totalItems: Math.max(0, Number(pagination.totalItems) || 0),
+      totalPages: Math.max(1, Number(pagination.totalPages) || 1),
+      filterTags: Array.isArray(filterOptions.tags) ? filterOptions.tags : (pageCatalog?.tags || []),
+      filterCategories: Array.isArray(filterOptions.categories) ? filterOptions.categories : (pageCatalog?.categories || []),
+      hasPrivateItems: !!filterOptions.hasPrivateItems
+    };
+
+    if (fullCatalog) {
+      S.cat = fullCatalog;
+      S.adminCatalogLoaded = true;
+      const fullItemMap = new Map((S.cat.items || []).map(item => [item.id, item]));
+      S.pageItems = S.pageItems.map(item => fullItemMap.get(item.id) || item);
+    } else if (S.adminCatalogLoaded && options.pageOnly) {
+      S.cat = {
+        ...S.cat,
+        tags: Array.isArray(pageCatalog?.tags) ? pageCatalog.tags : S.cat.tags,
+        categories: Array.isArray(pageCatalog?.categories) ? pageCatalog.categories : S.cat.categories,
+        sc: pageCatalog?.sc || S.cat.sc
+      };
+      const fullItemMap = new Map((S.cat.items || []).map(item => [item.id, item]));
+      S.pageItems = S.pageItems.map(item => fullItemMap.get(item.id) || item);
+    } else {
+      S.cat = { ...pageCatalog, items: S.pageItems };
+      S.adminCatalogLoaded = false;
+    }
+
     if (!S.cat.items) S.cat.items = [];
     if (!S.cat.sc) S.cat.sc = {};
     normalizeCat();
-    refreshManageSnapshots();
+    if (fullCatalog || !options.pageOnly) refreshManageSnapshots();
     applyUI();
+    renderGallery(); renderPills(); updateCatSel();
+    restoreCatalogViewState();
+    if (document.getElementById('adm-body')?.style.display === 'flex' && S.adminCatalogLoaded) {
+      loadCfgForm();
+      renderMan();
+      renderCategoryManager();
+      renderTagManager();
+      renderChips('u');
+      renderCategoryChips('u');
+      updCatDl();
+    }
+    return true;
   } catch (e) {
-    toast('無法連接後端：' + e.message, 'err');
+    if (requestSeq === S.catalogRequestSeq) toast('無法連接後端：' + e.message, 'err');
+    return false;
+  } finally {
+    if (showLoading && requestSeq === S.catalogRequestSeq) hideLdg();
   }
-  if (showLoading) hideLdg();
-  renderGallery(); renderPills(); updateCatSel();
-  restoreCatalogViewState();
-  if (document.getElementById('adm-body')?.style.display === 'flex') {
-    loadCfgForm();
-    renderMan();
-    renderCategoryManager();
-    renderTagManager();
-    renderChips('u');
-    renderCategoryChips('u');
-    updCatDl();
-  }
+}
+
+function loadCatalogPage(showLoading = false, options = {}) {
+  return loadCatalog(showLoading, { ...options, pageOnly: true });
 }
 
 async function setCollection(next, options = {}) {
@@ -4294,6 +4353,9 @@ async function setCollection(next, options = {}) {
   if (document.getElementById('lb')?.classList.contains('on')) closeLb();
   if (document.getElementById('edit-mo')?.classList.contains('on')) closeEdit();
   S.collection = target;
+  S.adminCatalogLoaded = false;
+  S.pageItems = [];
+  S.catalogPage = { page:1, pageSize:S.F.pageSize || 20, totalItems:0, totalPages:1, filterTags:[], filterCategories:[], hasPrivateItems:false };
   setCollectionStorage(target);
   const savedView = getCatalogViewState(target);
   S.F = { ...S.F, q: '', cats: [], tags: [], page: savedView?.page || 1 };
@@ -4301,7 +4363,7 @@ async function setCollection(next, options = {}) {
   const search = document.getElementById('search-in');
   if (search) search.value = '';
   applyCollectionUI();
-  await loadCatalog(true);
+  await loadCatalog(true, { loadAll: S.manPageOpen && !!getToken(), focusItem: options.focusItem || '' });
   if (getToken()) await loadRoleConfig();
 }
 
@@ -4357,7 +4419,7 @@ window.addEventListener('offline', () => setConnState('offline'));
   });
   initGoogleSignIn();
   if (getToken()) await loadRoleConfig();
-  await loadCatalog(true);
+  await loadCatalog(true, { focusItem: getShareUrlState().itemId });
   await openSharedLightboxFromUrl();
 }
 
@@ -4376,30 +4438,7 @@ function applyUI() {
 //  GALLERY
 // ════════════════════════════════════════════════════
 function filtered() {
-  let items = S.cat.items || [];
-  const { q, cats, tags } = S.F;
-  const hasPrivateFilter = cats.includes(PRIVATE_CATEGORY_FILTER_KEY);
-  const selectedCats = cats.filter(cat => cat !== PRIVATE_CATEGORY_FILTER_KEY);
-  if (q) {
-    const lq = q.toLowerCase();
-    items = items.filter(i =>
-      (i.title || '').toLowerCase().includes(lq) ||
-      (i.creator || i.author || '').toLowerCase().includes(lq) ||
-      (i.subtitle || i.translatedTitle || '').toLowerCase().includes(lq) ||
-      (i.description || '').toLowerCase().includes(lq)
-    );
-  }
-  if (cats.length || tags.length) {
-    items = items.filter(i => {
-      const itemCats = getItemCategories(i);
-      const itemTags = i.tags || [];
-      const catMatch = (selectedCats.length > 0 && selectedCats.some(c => itemCats.includes(c)))
-        || (hasPrivateFilter && isPrivateItemPermission(i.permission));
-      const tagMatch = tags.length > 0 && tags.some(t => itemTags.includes(t));
-      return catMatch || tagMatch;
-    });
-  }
-  return items;
+  return Array.isArray(S.pageItems) ? S.pageItems : [];
 }
 
 function renderPager(totalItems) {
@@ -4558,8 +4597,8 @@ function renderGallery() {
     S.galleryCoverEditId = null;
     S.galleryCoverDragging = false;
   }
-  const n = items.length;
-  document.getElementById('hd-c').textContent = n > 0 ? `共 ${n} 件` : '';
+  const totalItems = Math.max(0, Number(S.catalogPage.totalItems) || 0);
+  document.getElementById('hd-c').textContent = totalItems > 0 ? `共 ${totalItems} 件` : '';
 
   if (!items.length) {
     S.F.page = 1;
@@ -4574,19 +4613,15 @@ function renderGallery() {
   if (galleryView === 'list') {
     grid.innerHTML = items.map((item, idx) => galleryListRowHtml(item, idx)).join('');
     fitCardTags();
-    renderPager(0);
+    saveCatalogViewState({ page: S.F.page });
+    renderPager(totalItems);
     return;
   }
 
-  const totalPages = Math.max(1, Math.ceil(items.length / S.F.pageSize));
-  if (S.F.page > totalPages) S.F.page = totalPages;
   saveCatalogViewState({ page: S.F.page });
-  const start = (S.F.page - 1) * S.F.pageSize;
-  const shown = items.slice(start, start + S.F.pageSize);
-
-  grid.innerHTML = shown.map((item, idx) => galleryGridCardHtml(item, idx)).join('');
+  grid.innerHTML = items.map((item, idx) => galleryGridCardHtml(item, idx)).join('');
   fitCardTags();
-  renderPager(items.length);
+  renderPager(totalItems);
 }
 
 function fitCardTags() {
@@ -4745,17 +4780,16 @@ function scheduleUploadPanelToTop() {
     requestAnimationFrame(() => scrollUploadPanelToTop('auto'));
   });
 }
-function goPage(page) {
+async function goPage(page) {
   S.F.page = Math.max(1, Number(page) || 1);
   saveCatalogViewState({ page: S.F.page, scrollY: 0 });
-  renderGallery();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const loaded = await loadCatalogPage(true);
+  if (loaded) window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function submitPageJump(value) {
   const raw = Number(String(value).trim());
-  const items = filtered();
-  const totalPages = Math.max(1, Math.ceil(items.length / S.F.pageSize));
-  if (!items.length) {
+  const totalPages = Math.max(1, Number(S.catalogPage.totalPages) || 1);
+  if (!S.catalogPage.totalItems) {
     updatePageJump(totalPages, false);
     return;
   }
@@ -4937,9 +4971,18 @@ async function downloadFromUrl(url, fallbackName) {
 function setPageSize(v) {
   S.F.pageSize = Number(v) || 20;
   resetLoaded();
-  renderGallery();
+  void loadCatalogPage(true);
 }
-function doQ(v)    { S.F.q = v; resetLoaded(); renderGallery(); }
+let catalogSearchTimer = 0;
+function doQ(v) {
+  S.F.q = v;
+  resetLoaded();
+  if (catalogSearchTimer) window.clearTimeout(catalogSearchTimer);
+  catalogSearchTimer = window.setTimeout(() => {
+    catalogSearchTimer = 0;
+    void loadCatalogPage(false);
+  }, 250);
+}
 function toggleCategoryFilter(ev) {
   if (ev) ev.stopPropagation();
   document.getElementById('cat-filter').classList.toggle('on');
@@ -4947,7 +4990,7 @@ function toggleCategoryFilter(ev) {
 function closeCategoryFilter() {
   document.getElementById('cat-filter').classList.remove('on');
 }
-function togCategory(cat) {
+async function togCategory(cat) {
   const wrap = document.getElementById('cat-filter');
   const panel = wrap?.querySelector('.tf-panel');
   const keepOpen = wrap?.classList.contains('on');
@@ -4955,10 +4998,11 @@ function togCategory(cat) {
   const i = S.F.cats.indexOf(cat);
   if (i >= 0) S.F.cats.splice(i, 1); else S.F.cats.push(cat);
   resetLoaded();
-  renderCategoryFilter(); renderGallery();
+  renderCategoryFilter();
+  await loadCatalogPage(false);
   restoreCategoryFilterState(keepOpen, scrollTop);
 }
-function clearCategoryFilter() {
+async function clearCategoryFilter() {
   const wrap = document.getElementById('cat-filter');
   const panel = wrap?.querySelector('.tf-panel');
   const keepOpen = wrap?.classList.contains('on');
@@ -4966,7 +5010,8 @@ function clearCategoryFilter() {
   if (!S.F.cats.length) return restoreCategoryFilterState(keepOpen, scrollTop);
   S.F.cats = [];
   resetLoaded();
-  renderCategoryFilter(); renderGallery();
+  renderCategoryFilter();
+  await loadCatalogPage(false);
   restoreCategoryFilterState(keepOpen, scrollTop);
 }
 function toggleManCategoryFilter(ev) {
@@ -5012,7 +5057,7 @@ function toggleManTagFilter(ev) {
 function closeManTagFilter() {
   document.getElementById('mp-tag-filter').classList.remove('on');
 }
-function clearTagFilter() {
+async function clearTagFilter() {
   const wrap = document.getElementById('pills');
   const panel = wrap?.querySelector('.tf-panel');
   const keepOpen = wrap?.classList.contains('on');
@@ -5020,7 +5065,8 @@ function clearTagFilter() {
   if (!S.F.tags.length) return restoreTagFilterState(keepOpen, scrollTop);
   S.F.tags = [];
   resetLoaded();
-  renderPills(); renderGallery();
+  renderPills();
+  await loadCatalogPage(false);
   restoreTagFilterState(keepOpen, scrollTop);
 }
 function clearManTagFilter() {
@@ -5034,7 +5080,7 @@ function clearManTagFilter() {
   renderManVirtual();
   restoreManTagFilterState(keepOpen, scrollTop);
 }
-function togTag(t) {
+async function togTag(t) {
   const wrap = document.getElementById('pills');
   const panel = wrap?.querySelector('.tf-panel');
   const keepOpen = wrap?.classList.contains('on');
@@ -5042,7 +5088,8 @@ function togTag(t) {
   const i = S.F.tags.indexOf(t);
   if (i >= 0) S.F.tags.splice(i, 1); else S.F.tags.push(t);
   resetLoaded();
-  renderPills(); renderGallery();
+  renderPills();
+  await loadCatalogPage(false);
   restoreTagFilterState(keepOpen, scrollTop);
 }
 function togManTag(t) {
@@ -5662,7 +5709,10 @@ function openAdm() {
   document.getElementById('adm').classList.add('on');
   document.getElementById('ovbg').classList.add('on');
   const token = getToken();
-  if (token) showAdmBody(); // 已有 token，直接進入
+  if (token) {
+    if (!S.categoryOps.length && !S.tagOps.length) refreshManageSnapshots();
+    showAdmBody();
+  }
   else {
     document.getElementById('adm-login').style.display = 'flex';
     document.getElementById('adm-body').style.display  = 'none';
@@ -5704,8 +5754,8 @@ async function doLogin() {
     setToken(token);
     setAuthUsername(user?.username || '');
     S.currentAuthUser = user || null;
+    await loadCatalog(true, { focusItem: getShareUrlState().itemId });
     showAdmBody();
-    await loadCatalog(true);
     await openSharedLightboxFromUrl();
   } catch(e) {
     hideLdg();
@@ -5740,8 +5790,8 @@ async function handleGoogleCredential(response) {
     setToken(token);
     setAuthUsername(user?.username || '');
     S.currentAuthUser = user || null;
+    await loadCatalog(true, { focusItem: getShareUrlState().itemId });
     showAdmBody();
-    await loadCatalog(true);
     await openSharedLightboxFromUrl();
   } catch(e) {
     hideLdg();
@@ -5757,8 +5807,8 @@ async function skipLogin() {
     setToken(token);
     setAuthUsername(user?.username || '');
     S.currentAuthUser = user || null;
+    await loadCatalog(true, { focusItem: getShareUrlState().itemId });
     showAdmBody();
-    await loadCatalog(true);
     await openSharedLightboxFromUrl();
   } catch(e) {
     toast('需要用戶名與密碼，請輸入', 'err');
@@ -9404,6 +9454,7 @@ function commitCategoryRename(i) {
   const prev = S.cat.categories[i];
   if (!next || !prev) return;
   if (next !== prev && S.cat.categories.includes(next)) { toast('這個類別已存在', 'err'); return; }
+  if (next !== prev) S.categoryOps.push({ type:'rename', from:prev, to:next });
   S.cat.categories[i] = next;
   S.cat.items.forEach(item => {
     item.categories = getItemCategories(item).map(cat => cat === prev ? next : cat);
@@ -9424,6 +9475,7 @@ function removeMasterCategory(i) {
 function removeMasterCategoryConfirmed(i) {
   const cat = S.cat.categories[i];
   if (!cat) return;
+  S.categoryOps.push({ type:'remove', value:cat });
   S.cat.categories.splice(i, 1);
   S.cat.items.forEach(item => {
     item.categories = getItemCategories(item).filter(c => c !== cat);
@@ -9502,8 +9554,11 @@ async function saveCategories() {
   if (!canRolePermission('editCategories')) { toast('你沒有權限編輯類別庫', 'err'); return; }
   try {
     showLdg('\u5132\u5b58\u985e\u5225\u4e2d...');
-    await api('PUT', '/api/categories', { categories: S.cat.categories, items: S.cat.items.map(item => ({ id: item.id, categories: [...getItemCategories(item)] })) });
-    refreshManageSnapshots();
+    await api('PUT', '/api/categories', { categories: S.cat.categories, operations: S.categoryOps });
+    await loadCatalogPage(false);
+    S.saved.categories = [...(S.cat.categories || [])];
+    S.saved.categoryMap = Object.fromEntries((S.cat.items || []).map(item => [item.id, [...getItemCategories(item)]]));
+    S.categoryOps = [];
     hideLdg(); toast('\u985e\u5225\u9806\u5e8f\u5df2\u5132\u5b58', 'ok');
   } catch (e) { hideLdg(); toast(e.message, 'err'); }
 }
@@ -9515,6 +9570,7 @@ function cancelCategoryChanges() {
     syncItemCategoryFields(item);
   });
   S.catEditIdx = null;
+  S.categoryOps = [];
   renderCategoryManager(); renderCategoryFilter(); updCatDl(); renderGallery(); renderMan();
 }
 function addMasterTag() {
@@ -9544,6 +9600,7 @@ function commitTagRename(i) {
   const prev = S.cat.tags[i];
   if (!next || !prev) return;
   if (next !== prev && S.cat.tags.includes(next)) { toast('這個標籤已存在', 'err'); return; }
+  if (next !== prev) S.tagOps.push({ type:'rename', from:prev, to:next });
   S.cat.tags[i] = next;
   S.cat.items.forEach(item => {
     item.tags = (item.tags || []).map(tag => tag === prev ? next : tag);
@@ -9564,6 +9621,7 @@ function removeMasterTag(i) {
 function removeMasterTagConfirmed(i) {
   const tag = S.cat.tags[i];
   if (!tag) return;
+  S.tagOps.push({ type:'remove', value:tag });
   S.cat.tags.splice(i, 1);
   S.cat.items.forEach(item => {
     item.tags = sortTagsByLibrary((item.tags || []).filter(t => t !== tag));
@@ -9609,8 +9667,11 @@ async function saveTags() {
   if (!canRolePermission('editTags')) { toast('你沒有權限編輯標籤庫', 'err'); return; }
   try {
     showLdg('\u5132\u5b58\u6a19\u7c64\u4e2d...');
-    await api('PUT', '/api/tags', { tags: S.cat.tags, items: S.cat.items.map(({ id, tags }) => ({ id, tags: tags || [] })) });
-    refreshManageSnapshots();
+    await api('PUT', '/api/tags', { tags: S.cat.tags, operations: S.tagOps });
+    await loadCatalogPage(false);
+    S.saved.tags = [...(S.cat.tags || [])];
+    S.saved.tagMap = Object.fromEntries((S.cat.items || []).map(item => [item.id, [...(item.tags || [])]]));
+    S.tagOps = [];
     hideLdg(); toast('\u6a19\u7c64\u9806\u5e8f\u5df2\u5132\u5b58', 'ok');
   } catch (e) { hideLdg(); toast(e.message, 'err'); }
 }
@@ -9623,6 +9684,7 @@ function cancelTagChanges() {
   S.up.tags = sortTagsByLibrary(S.up.tags);
   S.eTags = sortTagsByLibrary(S.eTags);
   S.tagEditIdx = null;
+  S.tagOps = [];
   renderTagManager(); renderTagPool('u'); renderTagPool('e'); renderPills(); renderGallery(); renderChips('u'); renderChips('e');
 }
 
@@ -10672,9 +10734,8 @@ async function doSaveOrd(trashIds = []) {
       S.manPendingTrash.clear();
       renderTrashPanel();
     }
-    refreshManageSnapshots();
+    await loadCatalog(false);
     hideLdg(); toast(trashIds.length ? '已儲存，並清除回收桶檔案' : '排序已儲存', 'ok');
-    renderGallery();
   } catch(e) { hideLdg(); toast(e.message, 'err'); }
 }
 async function saveOrd() {
@@ -10761,6 +10822,7 @@ async function confirmDeleteAction() {
     await api('DELETE', `/api/items/${id}`);
     S.cat.items = S.cat.items.filter(i => i.id !== id);
     S.manPendingTrash.add(id);
+    await loadCatalogPage(false);
     hideLdg(); toast('\u5df2\u79fb\u81f3\u56de\u6536\u6876', 'ok');
     normalizeCat();
     renderMan(); renderGallery(); renderPills(); updateCatSel(); renderCategoryManager(); updCatDl();
