@@ -2674,13 +2674,14 @@ function pruneExpiredTextHistoryFiles(now = Date.now()) {
 
 function formatReadOnlyMeta(options = {}) {
   const label = escapeXml(options.label || '');
+  const createdAtLabel = escapeXml(String(options.createdAtLabel || '').trim().slice(0, 10));
   const updatedAtLabel = escapeXml(options.updatedAtLabel || '');
   const updatedByLabel = escapeXml(options.updatedByLabel || '');
   if (!label && !updatedAtLabel && !updatedByLabel) return '';
   return `<div class="meta-times">
     <span id="metaLabelWrap"${label ? '' : ' style="display:none"'}><span id="metaLabelText">${label}</span></span>
     <span class="meta-dot" id="metaDotPrimary"${label && updatedAtLabel ? '' : ' style="display:none"'} aria-hidden="true"></span>
-    <time id="updatedAtText">${updatedAtLabel}</time>
+    <time id="updatedAtText"${createdAtLabel ? ` data-created-at="建立時間：${createdAtLabel}"` : ''}>${updatedAtLabel}</time>
     <span class="meta-dot" id="updatedDot"${updatedAtLabel && updatedByLabel ? '' : ' style="display:none"'} aria-hidden="true"></span>
     <span id="updatedByWrap"${updatedByLabel ? '' : ' style="display:none"'}><span id="updatedByText">${updatedByLabel}</span></span>
   </div>`;
@@ -3008,6 +3009,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   });
   const metaHtml = formatReadOnlyMeta({
     label: txtMetaTitleRaw,
+    createdAtLabel: canEditTxt ? (options.createdAtLabel || '') : '',
     updatedAtLabel: options.updatedAtLabel || '',
     updatedByLabel: options.updatedByLabel || ''
   });
@@ -3093,6 +3095,11 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .meta-times{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;font-size:15px;color:var(--muted)}
     .meta-times time,.meta-times #metaLabelWrap,.meta-times #metaLabelText,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
     .meta-dot{width:3px;height:3px;border-radius:999px;background:currentColor;opacity:.55}
+    @media (min-width: 721px){
+      #updatedAtText[data-created-at]{position:relative;cursor:help}
+      #updatedAtText[data-created-at]::after{content:attr(data-created-at);position:absolute;left:50%;bottom:calc(100% + 9px);z-index:20;padding:7px 10px;border-radius:8px;background:var(--text);color:var(--bg);box-shadow:0 8px 24px rgba(0,0,0,.2);font-size:12px;line-height:1.35;white-space:nowrap;pointer-events:none;opacity:0;transform:translate(-50%,4px);transition:opacity .16s ease,transform .16s ease}
+      #updatedAtText[data-created-at]:hover::after{opacity:1;transform:translate(-50%,0)}
+    }
     .actions{display:flex;gap:10px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
     .icon-btn{width:30px;height:30px;border:none;background:transparent;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
     .icon-btn:hover{color:var(--text)}
