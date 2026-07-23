@@ -1839,9 +1839,12 @@ const COLLECTIONS = {
 const S = {
   cat:    { items:[], tags:[], categories:[], sc:{ title:'CATALOG', subtitle:'', footer:'' } },
   pageItems: [],
+  catalogFilteredItems: [],
+  catalogFilterOptions: { tags:[], categories:[], hasPrivateItems:false },
   catalogPage: { page:1, pageSize:20, totalItems:0, totalPages:1, filterTags:[], filterCategories:[], hasPrivateItems:false },
   catalogRequestSeq: 0,
-  catalogPayloadFingerprint: '',
+  catalogIndexLoaded: false,
+  catalogIndexDirty: false,
   adminCatalogLoaded: false,
   collections: [
     { key:'scenario', label:'資料庫', mode:'scenario', permission:'public' },
@@ -4388,125 +4391,129 @@ function applyCollectionUI() {
   applyManageDisclosureOrder();
 }
 
-function buildCatalogRequestUrl(options = {}) {
-  const params = new URLSearchParams();
-  params.set('page', String(Math.max(1, Number(S.F.page) || 1)));
-  params.set('pageSize', String(Math.max(1, Number(S.F.pageSize) || 20)));
-  const q = String(S.F.q || '').trim();
-  if (q) params.set('q', q);
-  (S.F.cats || []).forEach(cat => params.append('cats', cat));
-  (S.F.tags || []).forEach(tag => params.append('tags', tag));
-  const focusItem = String(options.focusItem || '').trim();
-  if (focusItem) params.set('focusItem', focusItem);
-  const endpoint = getToken() ? '/api/catalog' : '/api/catalog-page.js';
-  return `${endpoint}?${params.toString()}`;
+function buildCatalogIndexRequestUrl() {
+  return getToken() ? '/api/catalog-index' : '/api/catalog-index.js';
 }
 
-const PUBLIC_CATALOG_PAGE_CACHE_KEY = 'catalog-public-page-cache-v1';
-const CATALOG_MEMORY_CACHE_TTL_MS = 30 * 60 * 1000;
-const CATALOG_MEMORY_CACHE_MAX_ENTRIES = 100;
-const PUBLIC_CATALOG_SESSION_CACHE_TTL_MS = 10 * 60 * 1000;
-const PUBLIC_CATALOG_SESSION_CACHE_MAX_ENTRIES = 30;
-const catalogPageMemoryCache = new Map();
-function getCatalogPageCacheSignature(pageUrl, collection = S.collection) {
+const CATALOG_INDEX_MEMORY_CACHE_TTL_MS = 30 * 60 * 1000;
+const CATALOG_INDEX_MEMORY_CACHE_MAX_ENTRIES = 12;
+const catalogIndexMemoryCache = new Map();
+function getCatalogIndexCacheSignature(collection = S.collection) {
   const key = String(collection || 'scenario').trim().toLowerCase() || 'scenario';
   const token = getToken();
   const viewer = token ? `auth:${token.slice(-16)}` : 'public';
-  return `${viewer}|${key}|${pageUrl}`;
-}
-function readPublicCatalogPageCacheEntries() {
-  try {
-    const stored = JSON.parse(sessionStorage.getItem(PUBLIC_CATALOG_PAGE_CACHE_KEY) || 'null');
-    if (Array.isArray(stored?.entries)) return stored.entries;
-    if (stored?.signature && stored?.catalog) return [stored];
-  } catch {
-    return [];
-  }
-  return [];
+  return `${viewer}|${key}|index`;
 }
 function clearCatalogPageCacheForCollection(collection = S.collection) {
   const key = String(collection || 'scenario').trim().toLowerCase() || 'scenario';
   const marker = `|${key}|`;
-  [...catalogPageMemoryCache.keys()].forEach(signature => {
-    if (signature.includes(marker)) catalogPageMemoryCache.delete(signature);
+  [...catalogIndexMemoryCache.keys()].forEach(signature => {
+    if (signature.includes(marker)) catalogIndexMemoryCache.delete(signature);
   });
-  try {
-    const entries = readPublicCatalogPageCacheEntries().filter(entry => !String(entry?.signature || '').includes(marker));
-    if (entries.length) sessionStorage.setItem(PUBLIC_CATALOG_PAGE_CACHE_KEY, JSON.stringify({ entries }));
-    else sessionStorage.removeItem(PUBLIC_CATALOG_PAGE_CACHE_KEY);
-  } catch {}
+  if (key === String(S.collection || 'scenario').trim().toLowerCase()) S.catalogIndexDirty = true;
 }
-function readCachedCatalogPage(signature) {
-  const now = Date.now();
-  const memoryCached = catalogPageMemoryCache.get(signature);
-  if (memoryCached?.catalog && now - Number(memoryCached.savedAt || 0) <= CATALOG_MEMORY_CACHE_TTL_MS) {
-    return memoryCached.catalog;
-  }
-  if (memoryCached) catalogPageMemoryCache.delete(signature);
+function readCachedCatalogIndex(signature) {
   if (getToken()) return null;
-  const cached = readPublicCatalogPageCacheEntries().find(entry => entry?.signature === signature && entry?.catalog);
-  if (!cached || now - Number(cached.savedAt || 0) > PUBLIC_CATALOG_SESSION_CACHE_TTL_MS) return null;
-  catalogPageMemoryCache.set(signature, { savedAt: Number(cached.savedAt) || now, catalog: cached.catalog });
-  return cached.catalog;
-}
-function writeCachedCatalogPage(signature, catalog) {
-  if (!catalog) return;
-  const savedAt = Date.now();
-  catalogPageMemoryCache.delete(signature);
-  catalogPageMemoryCache.set(signature, { savedAt, catalog });
-  while (catalogPageMemoryCache.size > CATALOG_MEMORY_CACHE_MAX_ENTRIES) {
-    catalogPageMemoryCache.delete(catalogPageMemoryCache.keys().next().value);
+  const cached = catalogIndexMemoryCache.get(signature);
+  if (!cached) return null;
+  if (Date.now() - Number(cached.savedAt || 0) > CATALOG_INDEX_MEMORY_CACHE_TTL_MS) {
+    catalogIndexMemoryCache.delete(signature);
+    return null;
   }
-  if (getToken()) return;
-  try {
-    const entries = readPublicCatalogPageCacheEntries()
-      .filter(entry => entry?.signature !== signature && savedAt - Number(entry?.savedAt || 0) <= PUBLIC_CATALOG_SESSION_CACHE_TTL_MS);
-    entries.unshift({ signature, savedAt, catalog });
-    sessionStorage.setItem(PUBLIC_CATALOG_PAGE_CACHE_KEY, JSON.stringify({ entries: entries.slice(0, PUBLIC_CATALOG_SESSION_CACHE_MAX_ENTRIES) }));
-  } catch {}
+  return cached.catalog || null;
 }
-function applyCatalogPayload(pageCatalog, fullCatalog = null, options = {}) {
-  const pagination = pageCatalog?.pagination || {};
-  const filterOptions = pageCatalog?.filterOptions || {};
-  S.F.page = Math.max(1, Number(pagination.page) || 1);
-  S.F.pageSize = Math.max(1, Number(pagination.pageSize) || S.F.pageSize || 20);
-  S.pageItems = Array.isArray(pageCatalog?.items) ? pageCatalog.items : [];
+function writeCachedCatalogIndex(signature, catalog) {
+  if (!catalog || getToken()) return;
+  catalogIndexMemoryCache.delete(signature);
+  catalogIndexMemoryCache.set(signature, { savedAt: Date.now(), catalog });
+  while (catalogIndexMemoryCache.size > CATALOG_INDEX_MEMORY_CACHE_MAX_ENTRIES) {
+    catalogIndexMemoryCache.delete(catalogIndexMemoryCache.keys().next().value);
+  }
+}
+function getLocallyFilteredCatalogItems() {
+  let items = Array.isArray(S.cat.items) ? S.cat.items : [];
+  const q = String(S.F.q || '').trim().toLowerCase();
+  const cats = Array.isArray(S.F.cats) ? S.F.cats : [];
+  const tags = Array.isArray(S.F.tags) ? S.F.tags : [];
+  if (q) {
+    items = items.filter(item => String(item?._catalogSearchText || '').includes(q));
+  }
+  if (cats.length || tags.length) {
+    const hasPrivateFilter = cats.includes(PRIVATE_CATEGORY_FILTER_KEY);
+    const selectedCats = cats.filter(cat => cat !== PRIVATE_CATEGORY_FILTER_KEY);
+    items = items.filter(item => {
+      const itemCats = getItemCategories(item);
+      const itemTags = getItemTags(item);
+      const catMatch = (selectedCats.length > 0 && selectedCats.some(cat => itemCats.includes(cat)))
+        || (hasPrivateFilter && isPrivateItemPermission(item.permission));
+      const tagMatch = tags.length > 0 && tags.some(tag => itemTags.includes(tag));
+      return catMatch || tagMatch;
+    });
+  }
+  return items;
+}
+function refreshLocalCatalogFilterOptions() {
+  const allItems = Array.isArray(S.cat.items) ? S.cat.items : [];
+  const usedTags = [...new Set(allItems.flatMap(item => getItemTags(item)).filter(Boolean))];
+  const usedCategories = [...new Set(allItems.flatMap(item => getItemCategories(item)).filter(Boolean))];
+  const tagOrder = Array.isArray(S.cat.tags) ? S.cat.tags : [];
+  const categoryOrder = Array.isArray(S.cat.categories) ? S.cat.categories : [];
+  S.catalogFilterOptions = {
+    tags: [...tagOrder.filter(tag => usedTags.includes(tag)), ...usedTags.filter(tag => !tagOrder.includes(tag))],
+    categories: [...categoryOrder.filter(category => usedCategories.includes(category)), ...usedCategories.filter(category => !categoryOrder.includes(category))],
+    hasPrivateItems: allItems.some(item => isPrivateItemPermission(item?.permission))
+  };
+}
+function applyLocalCatalogView(options = {}) {
+  const pageSize = Math.max(1, Number(S.F.pageSize) || 20);
+  const matchingItems = getLocallyFilteredCatalogItems();
+  const filterOptions = S.catalogFilterOptions || { tags:[], categories:[], hasPrivateItems:false };
+  const totalItems = matchingItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const focusItem = String(options.focusItem || '').trim();
+  const focusIndex = focusItem ? matchingItems.findIndex(item => String(item?.id || '') === focusItem) : -1;
+  const requestedPage = focusIndex >= 0 ? Math.floor(focusIndex / pageSize) + 1 : (Number(S.F.page) || 1);
+  S.F.page = Math.max(1, Math.min(totalPages, requestedPage));
+  const start = (S.F.page - 1) * pageSize;
+  S.catalogFilteredItems = matchingItems;
+  S.pageItems = matchingItems.slice(start, start + pageSize);
   S.catalogPage = {
     page: S.F.page,
-    pageSize: S.F.pageSize,
-    totalItems: Math.max(0, Number(pagination.totalItems) || 0),
-    totalPages: Math.max(1, Number(pagination.totalPages) || 1),
-    filterTags: Array.isArray(filterOptions.tags) ? filterOptions.tags : (pageCatalog?.tags || []),
-    filterCategories: Array.isArray(filterOptions.categories) ? filterOptions.categories : (pageCatalog?.categories || []),
+    pageSize,
+    totalItems,
+    totalPages,
+    filterTags: filterOptions.tags || [],
+    filterCategories: filterOptions.categories || [],
     hasPrivateItems: !!filterOptions.hasPrivateItems
   };
-
-  if (fullCatalog) {
-    S.cat = fullCatalog;
-    S.adminCatalogLoaded = true;
-    const fullItemMap = new Map((S.cat.items || []).map(item => [item.id, item]));
-    S.pageItems = S.pageItems.map(item => fullItemMap.get(item.id) || item);
-  } else if (S.adminCatalogLoaded && options.pageOnly) {
-    S.cat = {
-      ...S.cat,
-      tags: Array.isArray(pageCatalog?.tags) ? pageCatalog.tags : S.cat.tags,
-      categories: Array.isArray(pageCatalog?.categories) ? pageCatalog.categories : S.cat.categories,
-      sc: pageCatalog?.sc || S.cat.sc
-    };
-    const fullItemMap = new Map((S.cat.items || []).map(item => [item.id, item]));
-    S.pageItems = S.pageItems.map(item => fullItemMap.get(item.id) || item);
-  } else {
-    S.cat = { ...pageCatalog, items: S.pageItems };
-    S.adminCatalogLoaded = false;
+  if (options.render !== false) {
+    renderGallery(); renderPills(); updateCatSel();
+    scheduleAdjacentCatalogPagePrefetch();
   }
-
-  if (!S.cat.items) S.cat.items = [];
+}
+function applyCatalogIndex(indexCatalog, fullCatalog = null, options = {}) {
+  S.cat = fullCatalog || indexCatalog || { items:[], tags:[], categories:[], sc:{} };
+  S.adminCatalogLoaded = !!fullCatalog;
+  if (!Array.isArray(S.cat.items)) S.cat.items = [];
   if (!S.cat.sc) S.cat.sc = {};
   normalizeCat();
-  if (fullCatalog || !options.pageOnly) refreshManageSnapshots();
-  S.catalogPayloadFingerprint = options.fingerprint || JSON.stringify(pageCatalog || {});
+  S.cat.items.forEach(item => {
+    const searchText = [
+      item?.title,
+      item?.creator || item?.author,
+      item?.subtitle || item?.translatedTitle,
+      item?.description
+    ].map(value => String(value || '').toLowerCase()).join('\u0000');
+    Object.defineProperty(item, '_catalogSearchText', { value:searchText, writable:true, configurable:true });
+  });
+  refreshLocalCatalogFilterOptions();
+  S.catalogIndexLoaded = true;
+  S.catalogIndexDirty = false;
+  applyLocalCatalogView({ ...options, render:false });
+  if (fullCatalog) refreshManageSnapshots();
   applyUI();
   renderGallery(); renderPills(); updateCatSel();
+  scheduleAdjacentCatalogPagePrefetch();
   restoreCatalogViewState();
   if (document.getElementById('adm-body')?.style.display === 'flex' && S.adminCatalogLoaded) {
     loadCfgForm();
@@ -4521,46 +4528,40 @@ function applyCatalogPayload(pageCatalog, fullCatalog = null, options = {}) {
 
 async function loadCatalog(showLoading = true, options = {}) {
   const requestSeq = ++S.catalogRequestSeq;
-  const shouldLoadAll = !!options.loadAll || (!options.pageOnly && S.manPageOpen && S.adminCatalogLoaded);
-  if (showLoading) showLdg(`載入中…`);
+  const shouldLoadAll = !!options.loadAll || (S.manPageOpen && S.adminCatalogLoaded);
+  const indexUrl = buildCatalogIndexRequestUrl();
+  const signature = getCatalogIndexCacheSignature(options.collection || S.collection);
+  const cachedIndex = !options.forceRefresh && !S.catalogIndexDirty ? readCachedCatalogIndex(signature) : null;
+  if (showLoading && !cachedIndex) showLdg(`載入中…`);
   try {
-    const pageUrl = buildCatalogRequestUrl(options);
-    const pageRequest = options.pageCatalogPromise
-      ? Promise.resolve(options.pageCatalogPromise).then(catalog => catalog || api('GET', pageUrl))
-      : api('GET', pageUrl);
-    const [pageCatalog, fullCatalog] = await Promise.all([
-      pageRequest,
+    const indexRequest = options.indexCatalogPromise
+      ? Promise.resolve(options.indexCatalogPromise).then(catalog => catalog || api('GET', indexUrl))
+      : (cachedIndex ? Promise.resolve(cachedIndex) : api('GET', indexUrl));
+    const [indexCatalog, fullCatalog] = await Promise.all([
+      indexRequest,
       shouldLoadAll ? api('GET', '/api/catalog?all=1') : Promise.resolve(null)
     ]);
     if (requestSeq !== S.catalogRequestSeq) return false;
-    const fingerprint = JSON.stringify(pageCatalog || {});
-    const unchanged = !fullCatalog && options.skipIfUnchanged && fingerprint === S.catalogPayloadFingerprint;
-    if (!unchanged) applyCatalogPayload(pageCatalog, fullCatalog, { ...options, fingerprint });
-    writeCachedCatalogPage(getCatalogPageCacheSignature(pageUrl), pageCatalog);
+    applyCatalogIndex(indexCatalog, fullCatalog, options);
+    writeCachedCatalogIndex(signature, indexCatalog);
     return true;
   } catch (e) {
     if (requestSeq === S.catalogRequestSeq) toast('無法連接後端：' + e.message, 'err');
     return false;
   } finally {
-    if (showLoading && requestSeq === S.catalogRequestSeq) hideLdg();
+    if (showLoading && !cachedIndex && requestSeq === S.catalogRequestSeq) hideLdg();
   }
 }
 
 function loadCatalogPage(showLoading = false, options = {}) {
-  return loadCatalog(showLoading, { ...options, pageOnly: true });
+  if (!options.forceRefresh && S.catalogIndexLoaded && !S.catalogIndexDirty) {
+    applyLocalCatalogView(options);
+    return Promise.resolve(true);
+  }
+  return loadCatalog(showLoading, { ...options, pageOnly:true, forceRefresh:true });
 }
 
 function loadCachedCatalogPageOrFetch(showLoading = false, options = {}) {
-  if (!options.forceRefresh) {
-    const pageUrl = buildCatalogRequestUrl(options);
-    const cached = readCachedCatalogPage(getCatalogPageCacheSignature(pageUrl));
-    if (cached) {
-      ++S.catalogRequestSeq;
-      const fingerprint = JSON.stringify(cached);
-      applyCatalogPayload(cached, null, { ...options, pageOnly:true, fingerprint });
-      return Promise.resolve(true);
-    }
-  }
   return loadCatalogPage(showLoading, options);
 }
 
@@ -4575,6 +4576,10 @@ async function setCollection(next, options = {}) {
   if (document.getElementById('edit-mo')?.classList.contains('on')) closeEdit();
   S.collection = target;
   S.adminCatalogLoaded = false;
+  S.catalogIndexLoaded = false;
+  S.catalogIndexDirty = false;
+  S.catalogFilteredItems = [];
+  S.catalogFilterOptions = { tags:[], categories:[], hasPrivateItems:false };
   S.pageItems = [];
   S.catalogPage = { page:1, pageSize:S.F.pageSize || 20, totalItems:0, totalPages:1, filterTags:[], filterCategories:[], hasPrivateItems:false };
   setCollectionStorage(target);
@@ -4608,17 +4613,9 @@ async function init() {
   const initialStoredView = getCatalogViewStateMap()[initialCollection];
   if (initialStoredView?.page) S.F.page = Math.max(1, Number(initialStoredView.page) || 1);
   const initialFocusItem = getShareUrlState().itemId;
-  const initialPageUrl = buildCatalogRequestUrl({ focusItem: initialFocusItem });
-  const cachedInitialCatalog = S.collections.some(entry => entry.key === initialCollection)
-    ? readCachedCatalogPage(getCatalogPageCacheSignature(initialPageUrl, initialCollection))
-    : null;
-  const restoredCachedPage = !!cachedInitialCatalog;
-  if (cachedInitialCatalog) {
-    applyCatalogPayload(cachedInitialCatalog, null, { fingerprint: JSON.stringify(cachedInitialCatalog) });
-  } else {
-    showLdg('載入中…');
-  }
-  const prefetchedInitialCatalog = api('GET', initialPageUrl, undefined, { collection: initialCollection }).catch(() => null);
+  try { sessionStorage.removeItem('catalog-public-page-cache-v1'); } catch {}
+  showLdg('載入中…');
+  const prefetchedInitialCatalog = api('GET', buildCatalogIndexRequestUrl(), undefined, { collection: initialCollection }).catch(() => null);
   const [cfgPublic] = await Promise.all([
     api('GET', '/api/cfg-public').catch(() => ({})),
     loadCollections()
@@ -4656,10 +4653,9 @@ window.addEventListener('offline', () => setConnState('offline'));
     }
   });
   initGoogleSignIn(cfgPublic);
-  const initialCatalogRequest = loadCatalog(!restoredCachedPage, {
+  const initialCatalogRequest = loadCatalog(true, {
     focusItem: initialFocusItem,
-    pageCatalogPromise: S.collection === initialCollection ? prefetchedInitialCatalog : null,
-    skipIfUnchanged: restoredCachedPage
+    indexCatalogPromise: S.collection === initialCollection ? prefetchedInitialCatalog : null
   });
   if (getToken()) void loadRoleConfig();
   await initialCatalogRequest;
@@ -4867,6 +4863,37 @@ function renderGallery() {
   renderPager(totalItems);
 }
 
+let adjacentCatalogPrefetchKey = '';
+function scheduleAdjacentCatalogPagePrefetch() {
+  const items = Array.isArray(S.catalogFilteredItems) ? S.catalogFilteredItems : [];
+  if (!items.length) return;
+  const page = Math.max(1, Number(S.F.page) || 1);
+  const pageSize = Math.max(1, Number(S.F.pageSize) || 20);
+  const key = [S.collection, S.F.q, (S.F.cats || []).join('\u001f'), (S.F.tags || []).join('\u001f'), page, pageSize, items.length].join('|');
+  if (key === adjacentCatalogPrefetchKey) return;
+  adjacentCatalogPrefetchKey = key;
+  const run = () => {
+    const neighborItems = [];
+    const previousStart = Math.max(0, (page - 2) * pageSize);
+    const nextStart = page * pageSize;
+    if (page > 1) neighborItems.push(...items.slice(previousStart, previousStart + pageSize));
+    if (nextStart < items.length) neighborItems.push(...items.slice(nextStart, nextStart + pageSize));
+    const seen = new Set();
+    neighborItems.forEach(item => {
+      const cover = getItemCoverEntry(item);
+      if (!cover || cover.kind !== 'image') return;
+      const src = cover.thumbSrc || cover.src;
+      if (!src || seen.has(src)) return;
+      seen.add(src);
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = src;
+    });
+  };
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout:1200 });
+  else window.setTimeout(run, 80);
+}
+
 function fitCardTags() {
   document.querySelectorAll('.card-tags').forEach(wrap => {
     const tags = Array.from(wrap.children);
@@ -5024,6 +5051,9 @@ function scheduleUploadPanelToTop() {
   });
 }
 async function loadCatalogPageWithFeedback(options = {}) {
+  if (!options.forceRefresh && S.catalogIndexLoaded && !S.catalogIndexDirty) {
+    return loadCatalogPage(false, options);
+  }
   const grid = document.getElementById('grid');
   const countLabel = document.getElementById('hd-c');
   const previousPage = Math.max(1, Number(S.catalogPage.page) || 1);
@@ -5127,6 +5157,17 @@ async function getDownloadDataForItem(item, options = {}) {
     return await request;
   } finally {
     S.downloadDataPending.delete(cacheKey);
+  }
+}
+async function hydrateCatalogIndexItem(item) {
+  if (!item?.id || !item.catalogIndexEntry) return item;
+  try {
+    const data = await api('GET', `/api/items/${encodeURIComponent(item.id)}/catalog-detail`);
+    if (!data?.item) return item;
+    Object.assign(item, data.item, { catalogIndexEntry:false });
+    return item;
+  } catch {
+    return item;
   }
 }
 async function getPreviewDataForItem(item, options = {}) {
@@ -5244,7 +5285,7 @@ function doQ(v) {
   catalogSearchTimer = window.setTimeout(() => {
     catalogSearchTimer = 0;
     void loadCachedCatalogPageOrFetch(true);
-  }, 250);
+  }, 80);
 }
 function toggleCategoryFilter(ev) {
   if (ev) ev.stopPropagation();
@@ -5373,6 +5414,7 @@ function togManTag(t) {
 async function openLb(id, options = {}) {
   const item = (S.cat.items||[]).find(i => i.id === id);
   if (!item) return;
+  const needsHydration = !!item.catalogIndexEntry;
   if (document.getElementById('lb')?.classList.contains('on') && S.lbItemId !== id) stopLightboxMediaPlayback();
   S.lbItemId = id;
   setLightboxMediaFocus(false);
@@ -5405,12 +5447,14 @@ async function openLb(id, options = {}) {
     };
   }
 
-  const [downloadData, previewData] = await Promise.all([
+  const [hydratedItem, downloadData, previewData] = await Promise.all([
+    hydrateCatalogIndexItem(item),
     getDownloadDataForItem(item),
     getPreviewDataForItem(item)
   ]);
   if (!document.getElementById('lb').classList.contains('on') || S.lbItemId !== id) return;
-  syncLightboxDownload(item, downloadData, previewData);
+  if (needsHydration && hydratedItem) syncLightboxItem(hydratedItem, { resetSlide:false });
+  syncLightboxDownload(hydratedItem || item, downloadData, previewData);
   prefetchLightboxNeighborFiles(id);
 }
 
@@ -9495,7 +9539,8 @@ async function doUp() {
             }
           }
         }
-        await loadCatalog();
+        clearCatalogPageCacheForCollection();
+        await loadCatalog(true, { forceRefresh:true });
         if (createdItem) {
           const localItem = S.cat.items.find(entry => entry.id === createdItem.id);
           if (localItem) Object.assign(localItem, createdItem);
@@ -11100,10 +11145,26 @@ async function confirmDeleteAction() {
 // ════════════════════════════════════════════════════
 //  EDIT MODAL
 // ════════════════════════════════════════════════════
-function openEdit(id) {
+async function openEdit(id) {
   if (!canRolePermission('editItemInfo')) { toast('你沒有權限編輯項目資訊', 'err'); return; }
-  const item = S.cat.items.find(i => i.id === id);
+  let item = S.cat.items.find(i => i.id === id);
   if (!item) return;
+  if (!Array.isArray(item.downloadFiles)) {
+    try {
+      showLdg('載入項目資料…');
+      const detail = await api('GET', `/api/items/${encodeURIComponent(id)}/catalog-detail`);
+      const fullItem = detail?.item;
+      if (!fullItem) throw new Error('找不到項目資料');
+      const index = S.cat.items.findIndex(entry => entry.id === id);
+      if (index >= 0) S.cat.items[index] = fullItem;
+      item = fullItem;
+    } catch (e) {
+      toast(e.message || '無法載入項目資料', 'err');
+      return;
+    } finally {
+      hideLdg();
+    }
+  }
   S.editAdminWasOpen = document.getElementById('adm')?.classList.contains('on') || false;
   S.editManagePageWasOpen = document.getElementById('man-page')?.classList.contains('on') || false;
   S.eId = id; S.eTags = sortTagsByLibrary([...(item.tags || [])]);

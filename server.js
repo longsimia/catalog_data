@@ -1379,6 +1379,30 @@ function filterCatalogForViewer(cat, role = 'public') {
   return result;
 }
 
+function compactCatalogForIndex(cat) {
+  return {
+    items: (cat?.items || []).map(item => ({
+      id: item.id,
+      title: item.title || '',
+      creator: item.creator || item.author || '',
+      subtitle: item.subtitle || item.translatedTitle || '',
+      permission: normalizeItemPermission(item.permission),
+      categories: normalizeItemCategories(item),
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      description: item.description || '',
+      coverFocusX: Number.isFinite(Number(item.coverFocusX)) ? Number(item.coverFocusX) : 50,
+      coverFocusY: Number.isFinite(Number(item.coverFocusY)) ? Number(item.coverFocusY) : 50,
+      coverKey: item.coverKey || null,
+      coverUrl: item.coverUrl || null,
+      catalogIndexEntry: true
+    })),
+    tags: Array.isArray(cat?.tags) ? cat.tags : [],
+    categories: Array.isArray(cat?.categories) ? cat.categories : [],
+    sc: cat?.sc && typeof cat.sc === 'object' ? cat.sc : {},
+    compactIndex: true
+  };
+}
+
 function normalizeCatalogQueryList(value) {
   const source = Array.isArray(value) ? value : (value === undefined || value === null ? [] : [value]);
   return [...new Set(source.map(entry => String(entry || '').trim()).filter(Boolean))];
@@ -4107,6 +4131,30 @@ app.get('/api/catalog', (req, res) => {
   res.json(paginateCatalogForRequest(visibleCatalog, req.query || {}));
 });
 
+// 精簡目錄索引：一次載入後由瀏覽器在本機完成搜尋、篩選與分頁。
+app.get('/api/catalog-index', (req, res) => {
+  const collection = getC(req);
+  const role = getViewerRole(req);
+  const cfg = readCfg();
+  if (!canAccessCollectionByRole(collection, role, cfg)) return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
+  const cat = readCat(collection, { syncFiles: false });
+  return res.json(compactCatalogForIndex(filterCatalogForViewer(cat, role)));
+});
+
+// 匿名索引使用可快取路徑；登入後資料不會進入共享快取。
+app.get('/api/catalog-index.js', (req, res) => {
+  const collection = getC(req);
+  const cfg = readCfg();
+  if (!canAccessCollectionByRole(collection, 'public', cfg)) {
+    return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
+  }
+  const cat = readCat(collection, { syncFiles: false });
+  res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
+  res.setHeader('CDN-Cache-Control', 'public, max-age=30, stale-while-revalidate=300');
+  res.setHeader('Vary', 'Accept-Encoding');
+  return res.json(compactCatalogForIndex(filterCatalogForViewer(cat, 'public')));
+});
+
 // 匿名公開分頁：使用 .js 路徑讓 CDN 視為可快取靜態資源，但內容仍是 JSON。
 // 登入後的資料與完整管理清單一律維持走 /api/catalog，不進入共享快取。
 app.get('/api/catalog-page.js', (req, res) => {
@@ -4305,6 +4353,26 @@ app.post('/api/manage-page-lock/release', auth, (req, res) => {
   if (!sessionId) return res.status(400).json({ error: '缺少編輯識別' });
   clearManagePageLock(collection, sessionId);
   res.json({ ok: true, locked: false });
+});
+
+// 精簡索引未包含預覽及附件清單；開啟燈箱或編輯視窗時只補取該項目的完整資料。
+app.get('/api/items/:id/catalog-detail', (req, res) => {
+  try {
+    const collection = getC(req);
+    const role = getViewerRole(req);
+    const cfg = readCfg();
+    if (!canAccessCollectionByRole(collection, role, cfg)) return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
+    const cat = readCat(collection, { syncFiles: false });
+    const item = (cat.items || []).find(entry => entry.id === req.params.id);
+    if (!item) return res.status(404).json({ error: '項目不存在' });
+    if (!canAccessItemByRole(item, role)) return res.status(403).json({ error: '你沒有權限查看這個項目' });
+    const visibleItem = role === 'public'
+      ? sanitizeCatalogForPublic({ items:[item] }).items[0]
+      : item;
+    return res.json({ item: { ...visibleItem, catalogIndexEntry:false } });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/api/items/:id/download', auth, (req, res) => {
