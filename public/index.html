@@ -4551,6 +4551,18 @@ function applyLocalCatalogView(options = {}) {
   }
 }
 function applyCatalogIndex(indexCatalog, fullCatalog = null, options = {}) {
+  if (fullCatalog && Array.isArray(fullCatalog.items) && Array.isArray(indexCatalog?.items)) {
+    const availabilityById = new Map(indexCatalog.items.map(item => [String(item?.id || ''), {
+      hasDownloadFiles: item?.hasDownloadFiles,
+      hasPreviewFiles: item?.hasPreviewFiles
+    }]));
+    fullCatalog.items.forEach(item => {
+      const availability = availabilityById.get(String(item?.id || ''));
+      if (!availability) return;
+      if (typeof availability.hasDownloadFiles === 'boolean') item.hasDownloadFiles = availability.hasDownloadFiles;
+      if (typeof availability.hasPreviewFiles === 'boolean') item.hasPreviewFiles = availability.hasPreviewFiles;
+    });
+  }
   S.cat = fullCatalog || indexCatalog || { items:[], tags:[], categories:[], sc:{} };
   S.adminCatalogLoaded = !!fullCatalog;
   if (!Array.isArray(S.cat.items)) S.cat.items = [];
@@ -5207,8 +5219,7 @@ async function getDownloadDataForItem(item, options = {}) {
       S.downloadDataCache.set(cacheKey, data);
       return data;
     } catch {
-      const fallback = { files: [], allUrl: '', allName: '' };
-      S.downloadDataCache.set(cacheKey, fallback);
+      const fallback = { loadFailed: true, files: [], allUrl: '', allName: '' };
       return fallback;
     }
   })();
@@ -5258,8 +5269,7 @@ async function getPreviewDataForItem(item, options = {}) {
       S.previewDataCache.set(cacheKey, data);
       return data;
     } catch {
-      const fallback = { supported: false, url: '', count: 0, files: [], itemId: item.id };
-      S.previewDataCache.set(cacheKey, fallback);
+      const fallback = { loadFailed: true, supported: false, url: '', count: 0, files: [], itemId: item.id };
       return fallback;
     }
   })();
@@ -5618,19 +5628,37 @@ function syncLightboxDownload(item, downloadData, previewData) {
   const canEditInfo = canRolePermission('editItemInfo');
   const previewShareBtn = document.getElementById('lb-preview-share');
   const files = Array.isArray(downloadData?.files) ? downloadData.files : [];
-  const hasDownload = canDownload && (!!downloadData?.allUrl || files.length > 0);
+  const downloadLoading = canDownload && !!downloadData?.loading;
+  const previewLoading = canPreview && !!previewData?.loading;
+  const loadedHasDownload = !!downloadData?.allUrl || files.length > 0;
+  const loadedHasPreview = !!previewData?.supported;
+  if (!downloadLoading && !downloadData?.loadFailed) item.hasDownloadFiles = loadedHasDownload;
+  if (!previewLoading && !previewData?.loadFailed) item.hasPreviewFiles = loadedHasPreview;
+  const showDownload = canDownload && (typeof item.hasDownloadFiles === 'boolean'
+    ? item.hasDownloadFiles
+    : (downloadLoading || loadedHasDownload));
+  const showPreview = canPreview && (typeof item.hasPreviewFiles === 'boolean'
+    ? item.hasPreviewFiles
+    : (previewLoading || loadedHasPreview));
   dlBtn.href   = '#';
   dlBtn.style.display = 'none';
   dlBtn.onclick = null;
-  dlBtn.toggleAttribute('disabled', !canDownload);
+  dlBtn.setAttribute('aria-busy', downloadLoading ? 'true' : 'false');
+  dlBtn.setAttribute('aria-disabled', canDownload ? 'false' : 'true');
 
   const previewBtn = document.getElementById('lb-preview');
   const previewFiles = Array.isArray(previewData?.files) ? previewData.files : [];
   const hasSinglePreviewFile = canPreview && previewData?.supported && previewFiles.length === 1;
-  previewBtn.style.display = (canPreview && previewData?.supported) ? 'inline-flex' : 'none';
-  previewBtn.onclick = (canPreview && previewData?.supported)
+  previewBtn.setAttribute('aria-busy', previewLoading ? 'true' : 'false');
+  previewBtn.disabled = !canPreview;
+  previewBtn.style.display = showPreview ? 'inline-flex' : 'none';
+  previewBtn.onclick = showPreview
     ? () => {
       if (previewData && !previewData.itemId) previewData.itemId = item.id;
+      if (previewLoading) {
+        openPreviewModal(previewData);
+        return;
+      }
       const files = Array.isArray(previewData?.files) ? previewData.files : [];
         if (files.length === 1 && files[0]?.url && !String(files[0]?.relativePath || '').includes('/')) {
           window.open(files[0].url, '_blank', 'noopener');
@@ -5657,15 +5685,13 @@ function syncLightboxDownload(item, downloadData, previewData) {
   srcBtn.href  = item.sourceUrl || item.originalUrl || '#';
   srcBtn.style.display = (item.sourceUrl || item.originalUrl) ? 'flex' : 'none';
   dlBtn.href = '#';
-  dlBtn.onclick = hasDownload
+  dlBtn.onclick = showDownload
     ? e => {
         e.preventDefault();
         openDownloadModal(item, downloadData);
       }
     : null;
-  dlBtn.style.display = hasDownload ? 'flex' : 'none';
-  const showPreview = !!previewData?.supported;
-  const showDownload = hasDownload;
+  dlBtn.style.display = showDownload ? 'flex' : 'none';
   const showEdit = !!(getToken() && canEditInfo);
   bottomActions.style.display = (showEdit || showDownload) ? 'grid' : 'none';
   bottomActions.classList.toggle('single', !(showEdit && showDownload));

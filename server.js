@@ -1535,23 +1535,39 @@ function filterCatalogForViewer(cat, role = 'public') {
   return result;
 }
 
-function compactCatalogForIndex(cat) {
+function compactCatalogForIndex(cat, collection = 'scenario') {
+  const mode = getCollectionConfig(collection).mode;
+  const previewableExts = new Set(['.pdf', '.txt', '.docx', '.html', '.htm', ...Object.keys(PREVIEWABLE_MEDIA_MIME)]);
   return {
-    items: (cat?.items || []).map(item => ({
-      id: item.id,
-      title: item.title || '',
-      creator: item.creator || item.author || '',
-      subtitle: item.subtitle || item.translatedTitle || '',
-      permission: normalizeItemPermission(item.permission),
-      categories: normalizeItemCategories(item),
-      tags: Array.isArray(item.tags) ? item.tags : [],
-      description: item.description || '',
-      coverFocusX: Number.isFinite(Number(item.coverFocusX)) ? Number(item.coverFocusX) : 50,
-      coverFocusY: Number.isFinite(Number(item.coverFocusY)) ? Number(item.coverFocusY) : 50,
-      coverKey: item.coverKey || null,
-      coverUrl: item.coverUrl || null,
-      catalogIndexEntry: true
-    })),
+    items: (cat?.items || []).map(item => {
+      const storedFiles = normalizeDownloadFiles(item);
+      const previewKeys = Array.isArray(item.previewKeys) ? item.previewKeys.filter(Boolean) : [];
+      const previewCandidates = mode === 'image'
+        ? [...storedFiles.map(file => file.name || file.key), ...previewKeys]
+        : storedFiles.map(file => file.name || file.key);
+      const hasDownloadFiles = !!item.downloadUrl
+        || storedFiles.length > 0
+        || normalizeDownloadFolderEntries(item).length > 0
+        || (mode === 'image' && previewKeys.length > 0);
+      const hasPreviewFiles = previewCandidates.some(name => previewableExts.has(getExt(name)));
+      return {
+        id: item.id,
+        title: item.title || '',
+        creator: item.creator || item.author || '',
+        subtitle: item.subtitle || item.translatedTitle || '',
+        permission: normalizeItemPermission(item.permission),
+        categories: normalizeItemCategories(item),
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        description: item.description || '',
+        coverFocusX: Number.isFinite(Number(item.coverFocusX)) ? Number(item.coverFocusX) : 50,
+        coverFocusY: Number.isFinite(Number(item.coverFocusY)) ? Number(item.coverFocusY) : 50,
+        coverKey: item.coverKey || null,
+        coverUrl: item.coverUrl || null,
+        hasDownloadFiles,
+        hasPreviewFiles,
+        catalogIndexEntry: true
+      };
+    }),
     tags: Array.isArray(cat?.tags) ? cat.tags : [],
     categories: Array.isArray(cat?.categories) ? cat.categories : [],
     sc: cat?.sc && typeof cat.sc === 'object' ? cat.sc : {},
@@ -4314,7 +4330,7 @@ app.get('/api/catalog-index', (req, res) => {
   const cfg = readCfg();
   if (!canAccessCollectionByRole(collection, role, cfg)) return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
   const cat = readCat(collection, { syncFiles: false });
-  return res.json(compactCatalogForIndex(filterCatalogForViewer(cat, role)));
+  return res.json(compactCatalogForIndex(filterCatalogForViewer(cat, role), collection));
 });
 
 // 匿名索引使用可快取路徑；登入後資料不會進入共享快取。
@@ -4328,7 +4344,7 @@ app.get('/api/catalog-index.js', (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=30');
   res.setHeader('CDN-Cache-Control', 'public, max-age=30, stale-while-revalidate=300');
   res.setHeader('Vary', 'Accept-Encoding');
-  return res.json(compactCatalogForIndex(filterCatalogForViewer(cat, 'public')));
+  return res.json(compactCatalogForIndex(filterCatalogForViewer(cat, 'public'), collection));
 });
 
 // 匿名公開分頁：使用 .js 路徑讓 CDN 視為可快取靜態資源，但內容仍是 JSON。
