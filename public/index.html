@@ -1883,6 +1883,7 @@ const S = {
   previewDataCache: new Map(),
   downloadDataPending: new Map(),
   previewDataPending: new Map(),
+  catalogDetailPending: new Map(),
   dragIdx: null, dragOverIdx: null, dragOverPos: null, justMovedId: null, _tx: 0, _ty: 0, manPageOpen: false,
   tagEditIdx: null, catEditIdx: null, prevDragIdx: null, ePrevDragIdx: null, tagSuggestIdx: -1, authorSuggestIdx: -1,
   tagDragOverIdx: null, tagDragOverPos: null, tagJustMoved: null,
@@ -5192,7 +5193,8 @@ function handlePageJumpKeydown(ev) {
 }
 async function getDownloadDataForItem(item, options = {}) {
   if (!item?.id || !getToken()) return { files: [], allUrl: '', allName: '' };
-  const cacheKey = String(item.id);
+  const collection = sanitizeCollectionKey(options.collection || S.collection);
+  const cacheKey = `${collection}:${item.id}`;
   if (!options.forceRefresh && S.downloadDataCache.has(cacheKey)) {
     return S.downloadDataCache.get(cacheKey);
   }
@@ -5201,7 +5203,7 @@ async function getDownloadDataForItem(item, options = {}) {
   }
   const request = (async () => {
     try {
-      const data = await api('GET', `/api/items/${item.id}/download-files`);
+      const data = await api('GET', `/api/items/${encodeURIComponent(item.id)}/download-files`, undefined, { collection });
       S.downloadDataCache.set(cacheKey, data);
       return data;
     } catch {
@@ -5217,20 +5219,32 @@ async function getDownloadDataForItem(item, options = {}) {
     S.downloadDataPending.delete(cacheKey);
   }
 }
-async function hydrateCatalogIndexItem(item) {
+async function hydrateCatalogIndexItem(item, options = {}) {
   if (!item?.id || !item.catalogIndexEntry) return item;
+  const collection = sanitizeCollectionKey(options.collection || S.collection);
+  const cacheKey = `${collection}:${item.id}`;
+  if (S.catalogDetailPending.has(cacheKey)) return S.catalogDetailPending.get(cacheKey);
+  const request = (async () => {
+    try {
+      const data = await api('GET', `/api/items/${encodeURIComponent(item.id)}/catalog-detail`, undefined, { collection });
+      if (!data?.item) return item;
+      Object.assign(item, data.item, { catalogIndexEntry:false });
+      return item;
+    } catch {
+      return item;
+    }
+  })();
+  S.catalogDetailPending.set(cacheKey, request);
   try {
-    const data = await api('GET', `/api/items/${encodeURIComponent(item.id)}/catalog-detail`);
-    if (!data?.item) return item;
-    Object.assign(item, data.item, { catalogIndexEntry:false });
-    return item;
-  } catch {
-    return item;
+    return await request;
+  } finally {
+    S.catalogDetailPending.delete(cacheKey);
   }
 }
 async function getPreviewDataForItem(item, options = {}) {
   if (!item?.id || !getToken()) return { supported: false, url: '', count: 0, files: [] };
-  const cacheKey = String(item.id);
+  const collection = sanitizeCollectionKey(options.collection || S.collection);
+  const cacheKey = `${collection}:${item.id}`;
   if (!options.forceRefresh && S.previewDataCache.has(cacheKey)) {
     return S.previewDataCache.get(cacheKey);
   }
@@ -5239,7 +5253,7 @@ async function getPreviewDataForItem(item, options = {}) {
   }
   const request = (async () => {
     try {
-      const data = await api('GET', `/api/items/${item.id}/preview`);
+      const data = await api('GET', `/api/items/${encodeURIComponent(item.id)}/preview`, undefined, { collection });
       if (data && !data.itemId) data.itemId = item.id;
       S.previewDataCache.set(cacheKey, data);
       return data;
@@ -5256,7 +5270,7 @@ async function getPreviewDataForItem(item, options = {}) {
     S.previewDataPending.delete(cacheKey);
   }
 }
-function prefetchLightboxNeighborFiles(currentItemId) {
+function prefetchLightboxNeighborFiles(currentItemId, collection = S.collection) {
   const items = filtered();
   if (!items.length || !currentItemId) return;
   const idx = items.findIndex(item => item.id === currentItemId);
@@ -5271,8 +5285,8 @@ function prefetchLightboxNeighborFiles(currentItemId) {
     return true;
   });
   neighbors.forEach(item => {
-    void getDownloadDataForItem(item);
-    void getPreviewDataForItem(item);
+    void getDownloadDataForItem(item, { collection });
+    void getPreviewDataForItem(item, { collection });
   });
 }
 function getDownloadFilenameFromHeader(header) {
@@ -5472,6 +5486,8 @@ function togManTag(t) {
 async function openLb(id, options = {}) {
   const item = (S.cat.items||[]).find(i => i.id === id);
   if (!item) return;
+  const collection = sanitizeCollectionKey(S.collection);
+  const cacheKey = `${collection}:${item.id}`;
   const needsHydration = !!item.catalogIndexEntry;
   if (document.getElementById('lb')?.classList.contains('on') && S.lbItemId !== id) stopLightboxMediaPlayback();
   S.lbItemId = id;
@@ -5481,6 +5497,15 @@ async function openLb(id, options = {}) {
   document.body.style.overflow = 'hidden';
   updateShareUrl(id);
   resetLightboxScroll();
+
+  const cachedDownloadData = S.downloadDataCache.get(cacheKey);
+  const cachedPreviewData = S.previewDataCache.get(cacheKey);
+  syncLightboxDownload(
+    item,
+    cachedDownloadData || { loading: true, files: [], allUrl: '', allName: '' },
+    cachedPreviewData || { loading: true, supported: false, url: '', count: 0, files: [], itemId: item.id }
+  );
+  prefetchLightboxNeighborFiles(id, collection);
 
   const touchArea = document.querySelector('.lb-tw');
   if (touchArea) {
@@ -5506,14 +5531,14 @@ async function openLb(id, options = {}) {
   }
 
   const [hydratedItem, downloadData, previewData] = await Promise.all([
-    hydrateCatalogIndexItem(item),
-    getDownloadDataForItem(item),
-    getPreviewDataForItem(item)
+    hydrateCatalogIndexItem(item, { collection }),
+    getDownloadDataForItem(item, { collection }),
+    getPreviewDataForItem(item, { collection })
   ]);
-  if (!document.getElementById('lb').classList.contains('on') || S.lbItemId !== id) return;
+  if (!document.getElementById('lb').classList.contains('on') || S.lbItemId !== id || S.collection !== collection) return;
   if (needsHydration && hydratedItem) syncLightboxItem(hydratedItem, { resetSlide:false });
   syncLightboxDownload(hydratedItem || item, downloadData, previewData);
-  prefetchLightboxNeighborFiles(id);
+  prefetchLightboxNeighborFiles(id, collection);
 }
 
 function syncLightboxItem(item, options = {}) {
@@ -5651,13 +5676,13 @@ function syncLightboxDownload(item, downloadData, previewData) {
   if (!modalState) return;
   if (modalState.type === 'download') {
     S.downloadModalData = { item, data: downloadData };
-    S.previewModalState = { type: 'download', item, data: downloadData };
+    S.previewModalState = { type: 'download', itemId: item.id, item, data: downloadData };
     renderDownloadModalContent(item, downloadData);
     return;
   }
   if (previewData && !previewData.itemId) previewData.itemId = item.id;
   S.downloadModalData = null;
-  S.previewModalState = { type: 'preview', data: previewData };
+  S.previewModalState = { type: 'preview', itemId: item.id, data: previewData };
   renderPreviewModalContent(previewData);
 }
 
@@ -5879,6 +5904,10 @@ function renderPreviewModalContent(data) {
   const body = document.getElementById('preview-body');
   if (!body || !title) return;
   title.textContent = '線上閱覽清單';
+  if (data?.loading) {
+    body.innerHTML = `<p class="preview-help">正在載入這筆資料的線上閱覽清單…</p>`;
+    return;
+  }
   const files = Array.isArray(data?.files) ? data.files : [];
   body.innerHTML = files.length
     ? `
@@ -5892,6 +5921,10 @@ function renderDownloadModalContent(item, data) {
   const body = document.getElementById('preview-body');
   if (!body || !title) return;
   title.textContent = '下載檔案清單';
+  if (data?.loading) {
+    body.innerHTML = `<p class="preview-help">正在載入這筆資料的下載檔案清單…</p>`;
+    return;
+  }
   const files = Array.isArray(data?.files) ? data.files : [];
   const allUrl = data?.allUrl || '';
   const allName = data?.allName || item?.downloadName || item?.title || 'download';
@@ -5908,7 +5941,7 @@ function openPreviewModal(data) {
   const modal = document.getElementById('preview-modal');
   if (!modal) return;
   S.downloadModalData = null;
-  S.previewModalState = { type: 'preview', data };
+  S.previewModalState = { type: 'preview', itemId: data?.itemId || S.lbItemId || '', data };
   S.previewTreeOpen = {};
   renderPreviewModalContent(data);
   modal.classList.add('on');
@@ -5917,7 +5950,7 @@ function openDownloadModal(item, data) {
   const modal = document.getElementById('preview-modal');
   if (!modal) return;
   S.downloadModalData = { item, data };
-  S.previewModalState = { type: 'download', item, data };
+  S.previewModalState = { type: 'download', itemId: item?.id || S.lbItemId || '', item, data };
   S.previewTreeOpen = {};
   renderDownloadModalContent(item, data);
   modal.classList.add('on');

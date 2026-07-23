@@ -940,7 +940,7 @@ function collectThumbSourceKeys(item = {}) {
 }
 
 async function backfillThumbsForCollection(collection = 'scenario') {
-  const cat = readCat(collection);
+  const cat = readCat(collection, { syncFiles: false });
   const keys = new Set();
   (Array.isArray(cat.items) ? cat.items : []).forEach(item => {
     collectThumbSourceKeys(item).forEach(key => keys.add(key));
@@ -4574,7 +4574,7 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
   const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
   if (collectionDenied) return res.status(403).json(collectionDenied);
   if (!hasRolePermission(req.authUser, 'downloadFiles', collection)) return res.status(403).json({ error: '你沒有下載檔案的權限。' });
-  const cat = readCat(collection);
+  const cat = readCat(collection, { syncFiles: false });
   const collCfg = getCollectionConfig(collection);
   const item = (cat.items || []).find(i => i.id === req.params.id);
   if (!item) return res.status(404).json({ error: '找不到項目。' });
@@ -4626,7 +4626,7 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
     const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
     if (collectionDenied) return res.status(403).json(collectionDenied);
     if (!hasRolePermission(req.authUser, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限使用線上閱覽。' });
-    const cat = readCat(collection);
+    const cat = readCat(collection, { syncFiles: false });
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).json({ error: '找不到項目。' });
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
