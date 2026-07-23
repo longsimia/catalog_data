@@ -4,6 +4,8 @@ set -e
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 DATA_DIR="${DATA_DIR:-$HOME/catalog_data}"
 LOG_FILE="${UPDATE_LOG_FILE:-$HOME/catalog_update.log}"
+LOG_TIME_ZONE="${UPDATE_LOG_TIME_ZONE:-Asia/Taipei}"
+export TZ="$LOG_TIME_ZONE"
 STATE_DIR="$DATA_DIR/.update_state"
 LAST_UPDATE_FILE="$STATE_DIR/last_update_date"
 LAST_NO_UPDATE_LOG_FILE="$STATE_DIR/last_no_update_log_date"
