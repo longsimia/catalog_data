@@ -1559,6 +1559,8 @@ function compactCatalogForIndex(cat, collection = 'scenario') {
         categories: normalizeItemCategories(item),
         tags: Array.isArray(item.tags) ? item.tags : [],
         description: item.description || '',
+        sourceUrl: item.sourceUrl || item.originalUrl || '',
+        originalUrl: item.sourceUrl || item.originalUrl || '',
         coverFocusX: Number.isFinite(Number(item.coverFocusX)) ? Number(item.coverFocusX) : 50,
         coverFocusY: Number.isFinite(Number(item.coverFocusY)) ? Number(item.coverFocusY) : 50,
         coverKey: item.coverKey || null,
