@@ -3247,6 +3247,16 @@ function thumbUrl(key) {
   const thumbPath = [...parts, '.thumbs', `${base}.webp`].join('/');
   return '/thumbs/' + thumbPath;
 }
+function lightboxPreviewUrl(key) {
+  if (!key) return '';
+  const normalized = String(key || '').replace(/\\/g, '/').trim();
+  if (!normalized) return '';
+  const parts = normalized.split('/').filter(Boolean);
+  const base = parts.pop();
+  if (!base) return '';
+  const previewPath = [...parts, '.previews', `${base}.webp`].join('/');
+  return '/lightbox-previews/' + previewPath + `?c=${encodeURIComponent(S.collection || 'scenario')}`;
+}
 function canUseThumbForName(name = '') {
   const clean = String(name || '').split('?')[0].split('#')[0].toLowerCase();
   return ['.jpg','.jpeg','.png','.webp','.bmp','.gif'].some(ext => clean.endsWith(ext));
@@ -3275,14 +3285,24 @@ function getMediaKindLabel(kind) {
 function getPreviewMediaEntries(item) {
   const seen = new Set();
   const list = [];
-  const push = (src, value = '', thumbSrc = '') => {
+  const push = (src, value = '', thumbSrc = '', previewSrc = '') => {
     if (!src || seen.has(src)) return;
     seen.add(src);
-    list.push({ src, thumbSrc, kind: getMediaKindFromName(value || src), label: value || src });
+    list.push({ src, thumbSrc, previewSrc, kind: getMediaKindFromName(value || src), label: value || src });
   };
-  if (item?.coverKey) push(fileUrl(item.coverKey), item.coverKey, canUseThumbForName(item.coverKey) ? thumbUrl(item.coverKey) : '');
+  if (item?.coverKey) push(
+    fileUrl(item.coverKey),
+    item.coverKey,
+    canUseThumbForName(item.coverKey) ? thumbUrl(item.coverKey) : '',
+    canUseThumbForName(item.coverKey) ? lightboxPreviewUrl(item.coverKey) : ''
+  );
   if (item?.coverUrl) push(item.coverUrl, item.coverUrl);
-  (item?.previewKeys || []).forEach(k => push(fileUrl(k), k, canUseThumbForName(k) ? thumbUrl(k) : ''));
+  (item?.previewKeys || []).forEach(k => push(
+    fileUrl(k),
+    k,
+    canUseThumbForName(k) ? thumbUrl(k) : '',
+    canUseThumbForName(k) ? lightboxPreviewUrl(k) : ''
+  ));
   (item?.previewUrls || []).forEach(url => push(url, url));
   return list;
 }
@@ -3655,13 +3675,14 @@ function renderPreviewThumbFromEntry(item) {
   return `<img class="pt" src="${esc(displaySrc)}" title="${esc(label || '')}"${imgThumbFallbackAttrs(displaySrc, item?.src || '')}>`;
 }
 const lightboxImagePreloadCache = new Map();
-function preloadLightboxImage(src = '') {
+function preloadLightboxImage(src = '', fetchPriority = 'auto') {
   const url = String(src || '').trim();
   if (!url) return Promise.resolve('');
   if (lightboxImagePreloadCache.has(url)) return lightboxImagePreloadCache.get(url);
   const request = new Promise(resolve => {
     const loader = new Image();
     loader.decoding = 'async';
+    loader.fetchPriority = fetchPriority;
     loader.onload = () => {
       const decoded = typeof loader.decode === 'function' ? loader.decode().catch(() => {}) : Promise.resolve();
       decoded.finally(() => resolve(url));
@@ -3683,18 +3704,20 @@ function renderLightboxMedia(entry, index = 0, isActive = false) {
   const mediaSrcAttr = isActive ? ` src="${esc(entry.src)}"` : ` data-media-src="${esc(entry.src)}"`;
   if (entry.kind === 'video') return `<video${mediaSrcAttr} controls playsinline preload="metadata" data-lb-index="${index}"${mediaLockAttrs}${mediaContextAttrs}></video>`;
   if (entry.kind === 'audio') return `<audio${mediaSrcAttr} controls preload="metadata" data-lb-index="${index}"${mediaLockAttrs}></audio>`;
-  const previewSrc = entry.thumbSrc || entry.src;
+  const previewSrc = entry.previewSrc || entry.thumbSrc || entry.src;
   const initialSrcAttr = isActive ? ` src="${esc(previewSrc)}" fetchpriority="high"` : '';
   const thumbFallback = previewSrc !== entry.src
     ? ' onerror="if(this.dataset.fullsrc){ this.onerror=null; this.src=this.dataset.fullsrc; }"'
     : '';
   return `<img${initialSrcAttr} data-preview-src="${esc(previewSrc)}" data-fullsrc="${esc(entry.src)}" data-lb-index="${index}" decoding="async" alt=""${thumbFallback}${mediaContextAttrs}${mediaLocked ? ' draggable="false"' : ''} onclick="enterLightboxMediaFocus(event)">`;
 }
-function preloadLightboxAdjacentFullImages(index) {
-  const count = S.lbImgs.length;
-  if (count <= 1) return;
+function canPrefetchLargeLightboxImages() {
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-  if (connection?.saveData || /(?:^|-)2g$/i.test(String(connection?.effectiveType || ''))) return;
+  return !(connection?.saveData || /(?:^|-)2g$/i.test(String(connection?.effectiveType || '')));
+}
+function preloadLightboxAdjacentPreviewImages(index) {
+  const count = S.lbImgs.length;
+  if (count <= 1 || !canPrefetchLargeLightboxImages()) return;
   const neighbors = [...new Set([
     (index - 1 + count) % count,
     (index + 1) % count
@@ -3702,26 +3725,34 @@ function preloadLightboxAdjacentFullImages(index) {
   const seen = new Set();
   neighbors.forEach(next => {
     const entry = S.lbImgs[next];
-    const fullSrc = entry?.kind === 'image' ? String(entry.src || '').trim() : '';
-    if (!fullSrc || seen.has(fullSrc)) return;
-    seen.add(fullSrc);
-    void preloadLightboxImage(fullSrc);
+    const previewSrc = entry?.kind === 'image'
+      ? String(entry.previewSrc || entry.thumbSrc || entry.src || '').trim()
+      : '';
+    if (!previewSrc || seen.has(previewSrc)) return;
+    seen.add(previewSrc);
+    void preloadLightboxImage(previewSrc);
   });
 }
 function upgradeLightboxImage(img, entry) {
   const fullSrc = String(entry?.src || '').trim();
-  const previewSrc = String(entry?.thumbSrc || '').trim();
+  const previewSrc = String(entry?.previewSrc || entry?.thumbSrc || '').trim();
   if (!img || !fullSrc || !previewSrc || previewSrc === fullSrc) return;
   if (img.dataset.fullReady === fullSrc || img.dataset.fullLoading === fullSrc) return;
   img.dataset.fullLoading = fullSrc;
-  void preloadLightboxImage(fullSrc).then(loadedSrc => {
-    if (!loadedSrc || !img.isConnected || img.dataset.fullLoading !== fullSrc) return;
-    img.onerror = null;
-    img.src = loadedSrc;
-    img.dataset.fullReady = fullSrc;
-    delete img.dataset.fullLoading;
-    preloadLightboxAdjacentFullImages(Number(img.dataset.lbIndex) || 0);
-  });
+  const fullRequest = preloadLightboxImage(fullSrc, 'low');
+  const applyFullImage = () => {
+    if (!img.isConnected || img.dataset.fullReady === fullSrc) return;
+    void fullRequest.then(loadedSrc => {
+      if (!loadedSrc || !img.isConnected || img.dataset.fullLoading !== fullSrc) return;
+      img.onerror = null;
+      img.src = loadedSrc;
+      img.dataset.fullReady = fullSrc;
+      delete img.dataset.fullLoading;
+      preloadLightboxAdjacentPreviewImages(Number(img.dataset.lbIndex) || 0);
+    });
+  };
+  if (img.complete && img.naturalWidth > 0) applyFullImage();
+  else img.addEventListener('load', applyFullImage, { once:true });
 }
 function prepareLightboxSlide(index = S.lbSlide) {
   const track = document.getElementById('lbt');
@@ -3730,6 +3761,12 @@ function prepareLightboxSlide(index = S.lbSlide) {
   if (!entry || !slide) return;
   const media = slide.querySelector('img,video,audio');
   if (!media) return;
+  if (media.matches('img')) {
+    const expectedPreviewSrc = entry.previewSrc || entry.thumbSrc || entry.src || '';
+    if (!media.dataset.fullReady && expectedPreviewSrc && media.getAttribute('src') !== expectedPreviewSrc) {
+      media.setAttribute('src', expectedPreviewSrc);
+    }
+  }
   if (!media.getAttribute('src')) {
     const source = media.dataset.previewSrc || media.dataset.mediaSrc || entry.src || '';
     if (source) media.setAttribute('src', source);
@@ -3737,11 +3774,12 @@ function prepareLightboxSlide(index = S.lbSlide) {
   }
   if (media.matches('img')) {
     media.fetchPriority = 'high';
-    const hasSeparatePreview = !!entry.thumbSrc && entry.thumbSrc !== entry.src;
+    const displayPreviewSrc = entry.previewSrc || entry.thumbSrc || '';
+    const hasSeparatePreview = !!displayPreviewSrc && displayPreviewSrc !== entry.src;
     if (hasSeparatePreview) {
       upgradeLightboxImage(media, entry);
     } else {
-      const preloadNeighbors = () => preloadLightboxAdjacentFullImages(index);
+      const preloadNeighbors = () => preloadLightboxAdjacentPreviewImages(index);
       if (media.complete && media.naturalWidth > 0) preloadNeighbors();
       else media.addEventListener('load', preloadNeighbors, { once:true });
     }
@@ -3753,11 +3791,13 @@ function prepareLightboxSlide(index = S.lbSlide) {
   ].filter(next => next >= 0 && next < S.lbImgs.length))];
   neighborIndexes.forEach(next => {
     const neighborEntry = S.lbImgs[next];
-    if (neighborEntry?.kind !== 'image' || !neighborEntry.thumbSrc) return;
+    if (neighborEntry?.kind !== 'image' || !(neighborEntry.previewSrc || neighborEntry.thumbSrc)) return;
     const neighborImg = track.children?.[next]?.querySelector('img');
     if (!neighborImg || neighborImg.getAttribute('src')) return;
     neighborImg.fetchPriority = 'low';
-    neighborImg.src = neighborEntry.thumbSrc;
+    neighborImg.src = canPrefetchLargeLightboxImages()
+      ? (neighborEntry.previewSrc || neighborEntry.thumbSrc)
+      : (neighborEntry.thumbSrc || neighborEntry.previewSrc);
   });
 }
 function getItemDownloadFiles(item) {

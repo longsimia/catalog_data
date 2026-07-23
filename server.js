@@ -28,6 +28,9 @@ const TEXT_HISTORY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const APP_TIME_ZONE = 'Asia/Taipei';
 const THUMB_MAX_EDGE = 400;
 const THUMB_QUALITY = 80;
+const SCENARIO_LIGHTBOX_PREVIEW_MAX_EDGE = 1600;
+const IMAGE_LIGHTBOX_PREVIEW_MAX_EDGE = 2048;
+const LIGHTBOX_PREVIEW_QUALITY = 84;
 const DOCX_PARSER_DEBUG = /^(?:1|true|yes|on)$/i.test(String(process.env.DOCX_PARSER_DEBUG || ''));
 const PREVIEW_NOTO_FONT_LINKS = '<link rel="preconnect" href="https://fonts.googleapis.com">\n  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@300;400;600;700&family=Noto+Serif+TC:wght@300;400;600;700&family=Noto+Serif+SC:wght@300;400;600;700&family=Noto+Serif+JP:wght@300;400;600;700&family=Noto+Serif+KR:wght@300;400;600;700&display=swap" rel="stylesheet">';
 const PREVIEW_SERIF_FONT_STACK = 'Georgia,"Times New Roman","Noto Serif TC","Noto Serif SC","Noto Serif JP","Noto Serif KR","Noto Serif","Songti TC","PMingLiU",serif';
@@ -199,7 +202,10 @@ function getHostUsageSnapshot() {
   let thumbBytes = 0;
   const uploadsBytes = scanDirSize(UPLOADS, (entryPath, size) => {
     const rel = path.relative(UPLOADS, entryPath).split(path.sep).join('/');
-    if (rel.includes('/.thumbs/') || rel.startsWith('.thumbs/')) thumbBytes += size;
+    if (
+      rel.includes('/.thumbs/') || rel.startsWith('.thumbs/') ||
+      rel.includes('/.previews/') || rel.startsWith('.previews/')
+    ) thumbBytes += size;
     else uploadBytes += size;
   });
 
@@ -337,7 +343,7 @@ function listStoredScenarioFiles(collection = 'scenario', itemId = '') {
     entries
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'))
       .forEach(entry => {
-        if (!entry?.name || entry.name === '.thumbs') return;
+        if (!entry?.name || entry.name === '.thumbs' || entry.name === '.previews') return;
         const nextRelative = relativeBase ? `${relativeBase}/${entry.name}` : entry.name;
         const nextPath = path.join(currentDir, entry.name);
         if (entry.isDirectory()) {
@@ -708,6 +714,34 @@ function getThumbUrl(sourceKey = '') {
   return thumbKey ? `/thumbs/${thumbKey}` : '';
 }
 
+function buildLightboxPreviewKey(sourceKey = '') {
+  const normalized = String(sourceKey || '').replace(/\\/g, '/').trim();
+  if (!normalized) return '';
+  const dir = path.posix.dirname(normalized);
+  const base = path.posix.basename(normalized);
+  return path.posix.join(dir === '.' ? '' : dir, '.previews', `${base}.webp`);
+}
+
+function getLightboxPreviewAbsPath(sourceKey = '') {
+  const previewKey = buildLightboxPreviewKey(sourceKey);
+  return previewKey ? path.join(UPLOADS, previewKey) : '';
+}
+
+function getStoredKeyCollection(sourceKey = '') {
+  const normalized = String(sourceKey || '').replace(/\\/g, '/').trim().replace(/^\/+/, '');
+  const firstPart = normalized.split('/').filter(Boolean)[0] || '';
+  const cfg = readCfg();
+  const matched = getCollectionsConfig(cfg).find(entry => entry.key !== 'scenario' && entry.key === firstPart);
+  return matched?.key || 'scenario';
+}
+
+function getLightboxPreviewMaxEdge(sourceKey = '', collection = '') {
+  const collectionKey = collection ? sanitizeCollectionKey(collection) : getStoredKeyCollection(sourceKey);
+  return getCollectionConfig(collectionKey).mode === 'image'
+    ? IMAGE_LIGHTBOX_PREVIEW_MAX_EDGE
+    : SCENARIO_LIGHTBOX_PREVIEW_MAX_EDGE;
+}
+
 function getUploadPublicUrl(sourceKey = '') {
   const normalized = String(sourceKey || '').replace(/\\/g, '/').trim().replace(/^\/+/, '');
   if (!normalized) return '';
@@ -726,6 +760,21 @@ function resolveThumbSourceFromRequestPath(rawPath = '') {
   if (!filename) return '';
   const sourceKey = prefix ? `${prefix}/${filename}` : filename;
   if (buildThumbKey(sourceKey) !== normalized) return '';
+  return sourceKey;
+}
+
+function resolveLightboxPreviewSourceFromRequestPath(rawPath = '') {
+  const normalized = String(rawPath || '').replace(/\\/g, '/').trim().replace(/^\/+/, '');
+  if (!normalized.toLowerCase().endsWith('.webp')) return '';
+  const withoutExt = normalized.slice(0, -'.webp'.length);
+  const marker = '/.previews/';
+  const markerIndex = withoutExt.lastIndexOf(marker);
+  if (markerIndex === -1) return '';
+  const prefix = withoutExt.slice(0, markerIndex);
+  const filename = withoutExt.slice(markerIndex + marker.length);
+  if (!filename) return '';
+  const sourceKey = prefix ? `${prefix}/${filename}` : filename;
+  if (buildLightboxPreviewKey(sourceKey) !== normalized) return '';
   return sourceKey;
 }
 
@@ -764,6 +813,42 @@ async function ensureThumbForKey(sourceKey = '', options = {}) {
   return thumbAbs;
 }
 
+async function ensureLightboxPreviewForKey(sourceKey = '', options = {}) {
+  const key = String(sourceKey || '').trim();
+  if (!key || !isThumbEligibleImageKey(key)) return '';
+  const sourceAbs = path.join(UPLOADS, key);
+  if (!fs.existsSync(sourceAbs)) return '';
+  const previewAbs = getLightboxPreviewAbsPath(key);
+  if (!previewAbs) return '';
+
+  const sourceStat = fs.statSync(sourceAbs);
+  if (!options.force && fs.existsSync(previewAbs)) {
+    const previewStat = fs.statSync(previewAbs);
+    if (previewStat.size > 0 && previewStat.mtimeMs >= sourceStat.mtimeMs) return previewAbs;
+  }
+
+  fs.mkdirSync(path.dirname(previewAbs), { recursive: true });
+  const maxEdge = getLightboxPreviewMaxEdge(key, options.collection);
+  try {
+    await sharp(sourceAbs, { failOn: 'none' })
+      .rotate()
+      .resize({
+        width: maxEdge,
+        height: maxEdge,
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .webp({ quality: LIGHTBOX_PREVIEW_QUALITY })
+      .toFile(previewAbs);
+  } catch (error) {
+    try { fs.rmSync(previewAbs, { force: true }); } catch {}
+    const stderr = String(error?.message || '').trim();
+    if (stderr) console.warn(`[lightbox-preview] ${key}: ${stderr}`);
+    return '';
+  }
+  return previewAbs;
+}
+
 async function ensureThumbsForKeys(keys = [], options = {}) {
   const seen = new Set();
   for (const key of (Array.isArray(keys) ? keys : [])) {
@@ -771,6 +856,7 @@ async function ensureThumbsForKeys(keys = [], options = {}) {
     if (!value || seen.has(value)) continue;
     seen.add(value);
     await ensureThumbForKey(value, options);
+    await ensureLightboxPreviewForKey(value, options);
   }
 }
 
@@ -791,7 +877,7 @@ async function backfillThumbsForCollection(collection = 'scenario') {
   (Array.isArray(cat.items) ? cat.items : []).forEach(item => {
     collectThumbSourceKeys(item).forEach(key => keys.add(key));
   });
-  await ensureThumbsForKeys([...keys]);
+  await ensureThumbsForKeys([...keys], { collection });
 }
 function normalizeRelativePath(relativePath, fallback = 'download.bin') {
   const raw = String(relativePath || '').replace(/\\/g, '/').trim();
@@ -3981,6 +4067,8 @@ function persistDownloadFiles(itemId, files, preferredBaseName, collection = 'sc
       if (previousKey && previousKey !== finalKey) {
         const prevThumb = getThumbAbsPath(previousKey);
         if (prevThumb && fs.existsSync(prevThumb)) fs.rmSync(prevThumb, { force: true });
+        const prevLightboxPreview = getLightboxPreviewAbsPath(previousKey);
+        if (prevLightboxPreview && fs.existsSync(prevLightboxPreview)) fs.rmSync(prevLightboxPreview, { force: true });
       }
     }
     return {
@@ -4085,6 +4173,8 @@ function removeStoredFile(key) {
   if (fs.existsSync(abs)) fs.rmSync(abs, { force: true });
   const thumbAbs = getThumbAbsPath(key);
   if (thumbAbs && fs.existsSync(thumbAbs)) fs.rmSync(thumbAbs, { force: true });
+  const lightboxPreviewAbs = getLightboxPreviewAbsPath(key);
+  if (lightboxPreviewAbs && fs.existsSync(lightboxPreviewAbs)) fs.rmSync(lightboxPreviewAbs, { force: true });
 }
 
 // ── 中介層 ────────────────────────────────────────
@@ -4113,6 +4203,20 @@ app.get('/thumbs/*', async (req, res) => {
   res.type('image/webp');
   res.set('Cache-Control', 'public, max-age=604800');
   return res.sendFile(thumbAbs);
+});
+
+app.get('/lightbox-previews/*', async (req, res) => {
+  const sourceKey = resolveLightboxPreviewSourceFromRequestPath(req.params[0] || '');
+  if (!sourceKey || path.basename(sourceKey).startsWith('dl.')) {
+    return res.status(404).end();
+  }
+  const previewAbs = await ensureLightboxPreviewForKey(sourceKey, { collection: getC(req) });
+  if (!previewAbs || !fs.existsSync(previewAbs)) {
+    return res.status(404).end();
+  }
+  res.type('image/webp');
+  res.set('Cache-Control', 'public, max-age=604800');
+  return res.sendFile(previewAbs);
 });
 
 // ══════════════════════════════════════════════════
@@ -5781,7 +5885,7 @@ app.post('/api/upload/:itemId', auth,
         createdAt:   new Date().toISOString()
       };
 
-      await ensureThumbsForKeys([...previewKeys, ...download.downloadFiles.map(file => file.key)]);
+      await ensureThumbsForKeys([...previewKeys, ...download.downloadFiles.map(file => file.key)], { collection });
 
       const cat = readCat(collection);
       cat.items.push(item);
@@ -5879,7 +5983,7 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), async (r
     it.coverKey = keptPreviewKeys[0] || null;
     it.coverUrl = it.coverKey ? null : (keptPreviewUrls[0] || null);
 
-    await ensureThumbsForKeys(keptPreviewKeys);
+    await ensureThumbsForKeys(keptPreviewKeys, { collection });
 
     saveCat(cat, collection);
     cleanupPreviewShareLinksInConfig();
@@ -5979,7 +6083,7 @@ app.post('/api/items/:id/file', auth, upload.fields([
     it.downloadFiles = download.downloadFiles;
     it.downloadUrl = null;
 
-    await ensureThumbsForKeys(download.downloadFiles.map(file => file.key));
+    await ensureThumbsForKeys(download.downloadFiles.map(file => file.key), { collection });
 
     saveCat(cat, collection);
     cleanupPreviewShareLinksInConfig();
