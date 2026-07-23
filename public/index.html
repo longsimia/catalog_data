@@ -1884,6 +1884,7 @@ const S = {
   downloadDataPending: new Map(),
   previewDataPending: new Map(),
   catalogDetailPending: new Map(),
+  lightboxListBatchPending: new Map(),
   dragIdx: null, dragOverIdx: null, dragOverPos: null, justMovedId: null, _tx: 0, _ty: 0, manPageOpen: false,
   tagEditIdx: null, catEditIdx: null, prevDragIdx: null, ePrevDragIdx: null, tagSuggestIdx: -1, authorSuggestIdx: -1,
   tagDragOverIdx: null, tagDragOverPos: null, tagJustMoved: null,
@@ -4545,6 +4546,7 @@ function applyLocalCatalogView(options = {}) {
     filterCategories: filterOptions.categories || [],
     hasPrivateItems: !!filterOptions.hasPrivateItems
   };
+  void prefetchLightboxListsForItems(S.pageItems, { collection: S.collection });
   if (options.render !== false) {
     renderGallery(); renderPills(); updateCatSel();
     scheduleAdjacentCatalogPagePrefetch();
@@ -5279,6 +5281,68 @@ async function getPreviewDataForItem(item, options = {}) {
   } finally {
     S.previewDataPending.delete(cacheKey);
   }
+}
+function prefetchLightboxListsForItems(items = [], options = {}) {
+  if (!getToken()) return Promise.resolve([]);
+  const collection = sanitizeCollectionKey(options.collection || S.collection);
+  const requests = [];
+  const seen = new Set();
+  for (const item of (Array.isArray(items) ? items : [])) {
+    const id = String(item?.id || '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const cacheKey = `${collection}:${id}`;
+    const needsDownload = item?.hasDownloadFiles !== false
+      && !S.downloadDataCache.has(cacheKey)
+      && !S.downloadDataPending.has(cacheKey);
+    const needsPreview = item?.hasPreviewFiles !== false
+      && !S.previewDataCache.has(cacheKey)
+      && !S.previewDataPending.has(cacheKey);
+    if (needsDownload || needsPreview) requests.push({ item, id, cacheKey, needsDownload, needsPreview });
+  }
+  if (!requests.length) return Promise.resolve([]);
+  const batchKey = `${collection}:${requests.map(entry => entry.id).sort().join('|')}`;
+  const existingBatch = S.lightboxListBatchPending.get(batchKey);
+  if (existingBatch) return existingBatch;
+  const idsParam = requests.map(entry => encodeURIComponent(entry.id)).join(',');
+  const batchRequest = api('GET', `/api/lightbox-lists?ids=${idsParam}`, undefined, { collection });
+  const pending = [];
+  requests.forEach(entry => {
+    if (entry.needsDownload) {
+      const downloadRequest = batchRequest
+        .then(data => (Array.isArray(data?.items) ? data.items : []).find(row => String(row?.id || '') === entry.id)?.downloadData)
+        .then(data => {
+          const result = data || { files: [], allUrl: '', allName: '' };
+          S.downloadDataCache.set(entry.cacheKey, result);
+          return result;
+        })
+        .catch(() => ({ loadFailed:true, files:[], allUrl:'', allName:'' }));
+      S.downloadDataPending.set(entry.cacheKey, downloadRequest);
+      pending.push(downloadRequest.finally(() => {
+        if (S.downloadDataPending.get(entry.cacheKey) === downloadRequest) S.downloadDataPending.delete(entry.cacheKey);
+      }));
+    }
+    if (entry.needsPreview) {
+      const previewRequest = batchRequest
+        .then(data => (Array.isArray(data?.items) ? data.items : []).find(row => String(row?.id || '') === entry.id)?.previewData)
+        .then(data => {
+          const result = data || { supported:false, url:'', count:0, files:[], itemId:entry.id };
+          if (!result.itemId) result.itemId = entry.id;
+          S.previewDataCache.set(entry.cacheKey, result);
+          return result;
+        })
+        .catch(() => ({ loadFailed:true, supported:false, url:'', count:0, files:[], itemId:entry.id }));
+      S.previewDataPending.set(entry.cacheKey, previewRequest);
+      pending.push(previewRequest.finally(() => {
+        if (S.previewDataPending.get(entry.cacheKey) === previewRequest) S.previewDataPending.delete(entry.cacheKey);
+      }));
+    }
+  });
+  const completed = Promise.all(pending).finally(() => {
+    if (S.lightboxListBatchPending.get(batchKey) === completed) S.lightboxListBatchPending.delete(batchKey);
+  });
+  S.lightboxListBatchPending.set(batchKey, completed);
+  return completed;
 }
 function prefetchLightboxNeighborFiles(currentItemId, collection = S.collection) {
   const items = filtered();

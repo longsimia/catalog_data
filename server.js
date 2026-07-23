@@ -4587,6 +4587,89 @@ app.get('/api/items/:id/download', auth, (req, res) => {
   return res.json({ url: '' });
 });
 
+function buildDownloadListData(item, collection, mode = 'scenario') {
+  const files = getDownloadableFilesForItem(item, mode).map(file => ({
+    index: file.index,
+    name: path.posix.basename(String(file.relativePath || file.name || path.basename(file.key || 'download')).replace(/\\/g, '/')),
+    relativePath: file.relativePath || file.name,
+    url: withCollection(`/api/download/${item.id}/files/${file.index}`, collection),
+    key: file.key || '',
+    mediaUrl: file.key ? withCollection(`/uploads/${file.key}`, collection) : '',
+    thumbUrl: file.key && isThumbEligibleImageKey(file.key) ? getThumbUrl(file.key) : ''
+  }));
+  const folderPaths = getDownloadFolderPaths(item);
+  if (files.length || folderPaths.length) {
+    return {
+      files,
+      allUrl: withCollection(`/api/download/${item.id}`, collection),
+      allName: item.downloadName || `${sanitizeDownloadName(String(item.title || item.subtitle || 'download')).replace(/\.zip$/i, '')}.zip`
+    };
+  }
+  if (item.downloadUrl) {
+    const name = sanitizeDownloadName(item.downloadName || item.title || item.subtitle || 'download');
+    return {
+      files: [{ index: 0, name, url: item.downloadUrl, external: true }],
+      allUrl: item.downloadUrl,
+      allName: name,
+      externalAll: true
+    };
+  }
+  return { files: [], allUrl: '', allName: '' };
+}
+
+function buildPreviewListData(item, collection) {
+  const files = getPreviewableFiles(item, collection).filter(file => fs.existsSync(file.abs));
+  if (!files.length) return { supported: false, url: '', count: 0, files: [], itemId: item.id };
+  const url = files.length === 1
+    ? withCollection(`/preview-open/${item.id}/0`, collection)
+    : withCollection(`/preview-hub/${item.id}`, collection);
+  return {
+    supported: true,
+    url,
+    count: files.length,
+    itemId: item.id,
+    title: item.translatedTitle || item.title || '線上閱覽',
+    files: files.map((file, index) => ({
+      index,
+      name: path.posix.basename(String(file?.relativePath || file?.name || path.basename(file?.key || 'document')).replace(/\\/g, '/')),
+      relativePath: file?.relativePath || file?.name || path.basename(file?.key || 'document'),
+      url: withCollection(`/preview-open/${item.id}/${index}`, collection),
+      mediaUrl: PREVIEWABLE_MEDIA_MIME[file?.ext]
+        ? withCollection(`/uploads/${file.key}`, collection)
+        : withCollection(`/api/preview/${item.id}/${index}`, collection),
+      thumbUrl: PREVIEWABLE_MEDIA_MIME[file?.ext] && isThumbEligibleImageKey(file?.key) ? getThumbUrl(file.key) : ''
+    }))
+  };
+}
+
+app.get('/api/lightbox-lists', auth, (req, res) => {
+  try {
+    const collection = getC(req);
+    const cfg = readCfg();
+    const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, cfg);
+    if (collectionDenied) return res.status(403).json(collectionDenied);
+    const ids = [...new Set(String(req.query.ids || '').split(',').map(value => value.trim()).filter(Boolean))].slice(0, 50);
+    if (!ids.length) return res.json({ items: [] });
+    const cat = readCat(collection, { syncFiles: false });
+    const mode = getCollectionConfig(collection, cfg).mode;
+    const itemById = new Map((cat.items || []).map(item => [String(item.id), item]));
+    const canDownload = hasRolePermission(req.authUser, 'downloadFiles', collection);
+    const canPreview = hasRolePermission(req.authUser, 'onlinePreview', collection);
+    const items = ids.flatMap(id => {
+      const item = itemById.get(id);
+      if (!item || !canAccessItemByRole(item, req.authUser?.role)) return [];
+      return [{
+        id,
+        downloadData: canDownload ? buildDownloadListData(item, collection, mode) : { files: [], allUrl: '', allName: '' },
+        previewData: canPreview ? buildPreviewListData(item, collection) : { supported: false, url: '', count: 0, files: [], itemId: id }
+      }];
+    });
+    return res.json({ items });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/items/:id/download-files', auth, (req, res) => {
   const collection = getC(req);
   const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
@@ -4597,45 +4680,7 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
   const item = (cat.items || []).find(i => i.id === req.params.id);
   if (!item) return res.status(404).json({ error: '找不到項目。' });
   if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
-
-  const files = getDownloadableFilesForItem(item, collCfg.mode).map(file => ({
-    index: file.index,
-    name: path.posix.basename(String(file.relativePath || file.name || path.basename(file.key || 'download')).replace(/\\/g, '/')),
-    relativePath: file.relativePath || file.name,
-    url: withCollection(`/api/download/${item.id}/files/${file.index}`, collection),
-    key: file.key || '',
-    mediaUrl: file.key ? withCollection(`/uploads/${file.key}`, collection) : '',
-    thumbUrl: file.key && isThumbEligibleImageKey(file.key) ? getThumbUrl(file.key) : ''
-  }));
-  const folderPaths = getDownloadFolderPaths(item);
-
-  if (files.length) {
-    return res.json({
-      files,
-      allUrl: withCollection(`/api/download/${item.id}`, collection),
-      allName: item.downloadName || `${sanitizeDownloadName(String(item.title || item.subtitle || 'download')).replace(/\.zip$/i, '')}.zip`
-    });
-  }
-
-  if (folderPaths.length) {
-    return res.json({
-      files: [],
-      allUrl: withCollection(`/api/download/${item.id}`, collection),
-      allName: item.downloadName || `${sanitizeDownloadName(String(item.title || item.subtitle || 'download')).replace(/\.zip$/i, '')}.zip`
-    });
-  }
-
-  if (item.downloadUrl) {
-    const name = sanitizeDownloadName(item.downloadName || item.title || item.subtitle || 'download');
-    return res.json({
-      files: [{ index: 0, name, url: item.downloadUrl, external: true }],
-      allUrl: item.downloadUrl,
-      allName: name,
-      externalAll: true
-    });
-  }
-
-  return res.json({ files: [], allUrl: '', allName: '' });
+  return res.json(buildDownloadListData(item, collection, collCfg.mode));
 });
 
 app.get('/api/items/:id/preview', auth, (req, res) => {
@@ -4648,28 +4693,7 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).json({ error: '找不到項目。' });
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
-    const files = getPreviewableFiles(item, collection).filter(file => fs.existsSync(file.abs));
-    if (!files.length) return res.json({ supported: false, url: '', count: 0 });
-    const url = files.length === 1
-      ? withCollection(`/preview-open/${item.id}/0`, collection)
-      : withCollection(`/preview-hub/${item.id}`, collection);
-    return res.json({
-      supported: true,
-      url,
-      count: files.length,
-      itemId: item.id,
-      title: item.translatedTitle || item.title || '線上閱覽',
-      files: files.map((file, index) => ({
-        index,
-        name: path.posix.basename(String(file?.relativePath || file?.name || path.basename(file?.key || 'document')).replace(/\\/g, '/')),
-        relativePath: file?.relativePath || file?.name || path.basename(file?.key || 'document'),
-        url: withCollection(`/preview-open/${item.id}/${index}`, collection),
-        mediaUrl: PREVIEWABLE_MEDIA_MIME[file?.ext]
-          ? withCollection(`/uploads/${file.key}`, collection)
-          : withCollection(`/api/preview/${item.id}/${index}`, collection),
-        thumbUrl: PREVIEWABLE_MEDIA_MIME[file?.ext] && isThumbEligibleImageKey(file?.key) ? getThumbUrl(file.key) : ''
-      }))
-    });
+    return res.json(buildPreviewListData(item, collection));
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
