@@ -31,6 +31,8 @@ const THUMB_QUALITY = 80;
 const SCENARIO_LIGHTBOX_PREVIEW_MAX_EDGE = 1600;
 const IMAGE_LIGHTBOX_PREVIEW_MAX_EDGE = 2048;
 const LIGHTBOX_PREVIEW_QUALITY = 84;
+const LIGHTBOX_PREVIEW_BACKFILL_DELAY_MS = 250;
+const LIGHTBOX_PREVIEW_INTERACTIVE_PAUSE_MS = 1500;
 const DOCX_PARSER_DEBUG = /^(?:1|true|yes|on)$/i.test(String(process.env.DOCX_PARSER_DEBUG || ''));
 const PREVIEW_NOTO_FONT_LINKS = '<link rel="preconnect" href="https://fonts.googleapis.com">\n  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@300;400;600;700&family=Noto+Serif+TC:wght@300;400;600;700&family=Noto+Serif+SC:wght@300;400;600;700&family=Noto+Serif+JP:wght@300;400;600;700&family=Noto+Serif+KR:wght@300;400;600;700&display=swap" rel="stylesheet">';
 const PREVIEW_SERIF_FONT_STACK = 'Georgia,"Times New Roman","Noto Serif TC","Noto Serif SC","Noto Serif JP","Noto Serif KR","Noto Serif","Songti TC","PMingLiU",serif';
@@ -813,6 +815,12 @@ async function ensureThumbForKey(sourceKey = '', options = {}) {
   return thumbAbs;
 }
 
+const lightboxPreviewInFlight = new Map();
+const lightboxPreviewBackfillQueue = [];
+const lightboxPreviewBackfillQueued = new Set();
+let lightboxPreviewBackfillRunning = false;
+let lightboxPreviewLastInteractiveAt = 0;
+
 async function ensureLightboxPreviewForKey(sourceKey = '', options = {}) {
   const key = String(sourceKey || '').trim();
   if (!key || !isThumbEligibleImageKey(key)) return '';
@@ -821,32 +829,51 @@ async function ensureLightboxPreviewForKey(sourceKey = '', options = {}) {
   const previewAbs = getLightboxPreviewAbsPath(key);
   if (!previewAbs) return '';
 
+  const existingTask = lightboxPreviewInFlight.get(previewAbs);
+  if (existingTask) return existingTask;
+
   const sourceStat = fs.statSync(sourceAbs);
   if (!options.force && fs.existsSync(previewAbs)) {
     const previewStat = fs.statSync(previewAbs);
     if (previewStat.size > 0 && previewStat.mtimeMs >= sourceStat.mtimeMs) return previewAbs;
   }
 
-  fs.mkdirSync(path.dirname(previewAbs), { recursive: true });
-  const maxEdge = getLightboxPreviewMaxEdge(key, options.collection);
+  const task = (async () => {
+    fs.mkdirSync(path.dirname(previewAbs), { recursive: true });
+    const maxEdge = getLightboxPreviewMaxEdge(key, options.collection);
+    const startedAt = Date.now();
+    try {
+      await sharp(sourceAbs, { failOn: 'none' })
+        .rotate()
+        .resize({
+          width: maxEdge,
+          height: maxEdge,
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .webp({ quality: LIGHTBOX_PREVIEW_QUALITY })
+        .toFile(previewAbs);
+      const elapsedMs = Date.now() - startedAt;
+      if (elapsedMs >= 2000) {
+        console.log(`[lightbox-preview] generated ${key} (${maxEdge}px) in ${elapsedMs}ms`);
+      }
+      return previewAbs;
+    } catch (error) {
+      try { fs.rmSync(previewAbs, { force: true }); } catch {}
+      const stderr = String(error?.message || '').trim();
+      if (stderr) console.warn(`[lightbox-preview] ${key}: ${stderr}`);
+      return '';
+    }
+  })();
+
+  lightboxPreviewInFlight.set(previewAbs, task);
   try {
-    await sharp(sourceAbs, { failOn: 'none' })
-      .rotate()
-      .resize({
-        width: maxEdge,
-        height: maxEdge,
-        fit: 'inside',
-        withoutEnlargement: true
-      })
-      .webp({ quality: LIGHTBOX_PREVIEW_QUALITY })
-      .toFile(previewAbs);
-  } catch (error) {
-    try { fs.rmSync(previewAbs, { force: true }); } catch {}
-    const stderr = String(error?.message || '').trim();
-    if (stderr) console.warn(`[lightbox-preview] ${key}: ${stderr}`);
-    return '';
+    return await task;
+  } finally {
+    if (lightboxPreviewInFlight.get(previewAbs) === task) {
+      lightboxPreviewInFlight.delete(previewAbs);
+    }
   }
-  return previewAbs;
 }
 
 async function ensureThumbsForKeys(keys = [], options = {}) {
@@ -856,8 +883,49 @@ async function ensureThumbsForKeys(keys = [], options = {}) {
     if (!value || seen.has(value)) continue;
     seen.add(value);
     await ensureThumbForKey(value, options);
-    await ensureLightboxPreviewForKey(value, options);
   }
+}
+
+function scheduleNextLightboxPreviewBackfill() {
+  if (lightboxPreviewBackfillRunning || !lightboxPreviewBackfillQueue.length) return;
+  lightboxPreviewBackfillRunning = true;
+  setTimeout(async () => {
+    const interactiveWaitMs = LIGHTBOX_PREVIEW_INTERACTIVE_PAUSE_MS
+      - (Date.now() - lightboxPreviewLastInteractiveAt);
+    if (interactiveWaitMs > 0) {
+      setTimeout(() => {
+        lightboxPreviewBackfillRunning = false;
+        scheduleNextLightboxPreviewBackfill();
+      }, interactiveWaitMs);
+      return;
+    }
+    const entry = lightboxPreviewBackfillQueue.shift();
+    if (!entry) {
+      lightboxPreviewBackfillRunning = false;
+      return;
+    }
+    lightboxPreviewBackfillQueued.delete(entry.key);
+    try {
+      await ensureLightboxPreviewForKey(entry.key, entry.options);
+    } catch (error) {
+      console.warn(`[lightbox-preview] background generation failed for ${entry.key}:`, error?.message || error);
+    } finally {
+      lightboxPreviewBackfillRunning = false;
+      scheduleNextLightboxPreviewBackfill();
+    }
+  }, LIGHTBOX_PREVIEW_BACKFILL_DELAY_MS);
+}
+
+function enqueueLightboxPreviewsForKeys(keys = [], options = {}) {
+  for (const key of (Array.isArray(keys) ? keys : [])) {
+    const value = String(key || '').trim();
+    if (!value || !isThumbEligibleImageKey(value) || lightboxPreviewBackfillQueued.has(value)) continue;
+    const previewAbs = getLightboxPreviewAbsPath(value);
+    if (!previewAbs || lightboxPreviewInFlight.has(previewAbs)) continue;
+    lightboxPreviewBackfillQueued.add(value);
+    lightboxPreviewBackfillQueue.push({ key: value, options: { ...options } });
+  }
+  scheduleNextLightboxPreviewBackfill();
 }
 
 function collectThumbSourceKeys(item = {}) {
@@ -877,7 +945,9 @@ async function backfillThumbsForCollection(collection = 'scenario') {
   (Array.isArray(cat.items) ? cat.items : []).forEach(item => {
     collectThumbSourceKeys(item).forEach(key => keys.add(key));
   });
-  await ensureThumbsForKeys([...keys], { collection });
+  const sourceKeys = [...keys];
+  await ensureThumbsForKeys(sourceKeys, { collection });
+  enqueueLightboxPreviewsForKeys(sourceKeys, { collection });
 }
 function normalizeRelativePath(relativePath, fallback = 'download.bin') {
   const raw = String(relativePath || '').replace(/\\/g, '/').trim();
@@ -4210,12 +4280,14 @@ app.get('/lightbox-previews/*', async (req, res) => {
   if (!sourceKey || path.basename(sourceKey).startsWith('dl.')) {
     return res.status(404).end();
   }
+  lightboxPreviewLastInteractiveAt = Date.now();
   const previewAbs = await ensureLightboxPreviewForKey(sourceKey, { collection: getC(req) });
   if (!previewAbs || !fs.existsSync(previewAbs)) {
     return res.status(404).end();
   }
   res.type('image/webp');
   res.set('Cache-Control', 'public, max-age=604800');
+  res.set('Cloudflare-CDN-Cache-Control', 'public, max-age=2592000');
   return res.sendFile(previewAbs);
 });
 
@@ -5885,7 +5957,9 @@ app.post('/api/upload/:itemId', auth,
         createdAt:   new Date().toISOString()
       };
 
-      await ensureThumbsForKeys([...previewKeys, ...download.downloadFiles.map(file => file.key)], { collection });
+      const derivedImageKeys = [...previewKeys, ...download.downloadFiles.map(file => file.key)];
+      await ensureThumbsForKeys(derivedImageKeys, { collection });
+      enqueueLightboxPreviewsForKeys(derivedImageKeys, { collection });
 
       const cat = readCat(collection);
       cat.items.push(item);
@@ -5984,6 +6058,7 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), async (r
     it.coverUrl = it.coverKey ? null : (keptPreviewUrls[0] || null);
 
     await ensureThumbsForKeys(keptPreviewKeys, { collection });
+    enqueueLightboxPreviewsForKeys(keptPreviewKeys, { collection });
 
     saveCat(cat, collection);
     cleanupPreviewShareLinksInConfig();
@@ -6083,7 +6158,9 @@ app.post('/api/items/:id/file', auth, upload.fields([
     it.downloadFiles = download.downloadFiles;
     it.downloadUrl = null;
 
-    await ensureThumbsForKeys(download.downloadFiles.map(file => file.key), { collection });
+    const derivedImageKeys = download.downloadFiles.map(file => file.key);
+    await ensureThumbsForKeys(derivedImageKeys, { collection });
+    enqueueLightboxPreviewsForKeys(derivedImageKeys, { collection });
 
     saveCat(cat, collection);
     cleanupPreviewShareLinksInConfig();

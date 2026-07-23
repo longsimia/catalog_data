@@ -3705,11 +3705,12 @@ function renderLightboxMedia(entry, index = 0, isActive = false) {
   if (entry.kind === 'video') return `<video${mediaSrcAttr} controls playsinline preload="metadata" data-lb-index="${index}"${mediaLockAttrs}${mediaContextAttrs}></video>`;
   if (entry.kind === 'audio') return `<audio${mediaSrcAttr} controls preload="metadata" data-lb-index="${index}"${mediaLockAttrs}></audio>`;
   const previewSrc = entry.previewSrc || entry.thumbSrc || entry.src;
-  const initialSrcAttr = isActive ? ` src="${esc(previewSrc)}" fetchpriority="high"` : '';
-  const thumbFallback = previewSrc !== entry.src
+  const initialSrc = entry.thumbSrc || previewSrc;
+  const initialSrcAttr = isActive ? ` src="${esc(initialSrc)}" fetchpriority="high"` : '';
+  const initialFallback = initialSrc !== entry.src
     ? ' onerror="if(this.dataset.fullsrc){ this.onerror=null; this.src=this.dataset.fullsrc; }"'
     : '';
-  return `<img${initialSrcAttr} data-preview-src="${esc(previewSrc)}" data-fullsrc="${esc(entry.src)}" data-lb-index="${index}" decoding="async" alt=""${thumbFallback}${mediaContextAttrs}${mediaLocked ? ' draggable="false"' : ''} onclick="enterLightboxMediaFocus(event)">`;
+  return `<img${initialSrcAttr} data-preview-src="${esc(previewSrc)}" data-fullsrc="${esc(entry.src)}" data-lb-index="${index}" decoding="async" alt=""${initialFallback}${mediaContextAttrs}${mediaLocked ? ' draggable="false"' : ''} onclick="enterLightboxMediaFocus(event)">`;
 }
 function canPrefetchLargeLightboxImages() {
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -3736,6 +3737,7 @@ function preloadLightboxAdjacentPreviewImages(index) {
 function upgradeLightboxImage(img, entry) {
   const fullSrc = String(entry?.src || '').trim();
   const previewSrc = String(entry?.previewSrc || entry?.thumbSrc || '').trim();
+  const thumbSrc = String(entry?.thumbSrc || '').trim();
   if (!img || !fullSrc || !previewSrc || previewSrc === fullSrc) return;
   if (img.dataset.fullReady === fullSrc || img.dataset.fullLoading === fullSrc) return;
   img.dataset.fullLoading = fullSrc;
@@ -3751,8 +3753,28 @@ function upgradeLightboxImage(img, entry) {
       preloadLightboxAdjacentPreviewImages(Number(img.dataset.lbIndex) || 0);
     });
   };
-  if (img.complete && img.naturalWidth > 0) applyFullImage();
-  else img.addEventListener('load', applyFullImage, { once:true });
+  const applyFullAfterVisibleImage = () => {
+    if (img.complete && img.naturalWidth > 0) applyFullImage();
+    else img.addEventListener('load', applyFullImage, { once:true });
+  };
+  const currentSrc = String(img.getAttribute('src') || '').trim();
+  const needsPreviewUpgrade = previewSrc !== thumbSrc
+    && currentSrc !== previewSrc
+    && img.dataset.previewReady !== previewSrc;
+  if (!needsPreviewUpgrade) {
+    applyFullAfterVisibleImage();
+    return;
+  }
+  img.dataset.previewLoading = previewSrc;
+  void preloadLightboxImage(previewSrc, 'high').then(loadedSrc => {
+    if (!img.isConnected || img.dataset.previewLoading !== previewSrc) return;
+    delete img.dataset.previewLoading;
+    if (loadedSrc) {
+      img.src = loadedSrc;
+      img.dataset.previewReady = previewSrc;
+    }
+    applyFullAfterVisibleImage();
+  });
 }
 function prepareLightboxSlide(index = S.lbSlide) {
   const track = document.getElementById('lbt');
@@ -3761,14 +3783,10 @@ function prepareLightboxSlide(index = S.lbSlide) {
   if (!entry || !slide) return;
   const media = slide.querySelector('img,video,audio');
   if (!media) return;
-  if (media.matches('img')) {
-    const expectedPreviewSrc = entry.previewSrc || entry.thumbSrc || entry.src || '';
-    if (!media.dataset.fullReady && expectedPreviewSrc && media.getAttribute('src') !== expectedPreviewSrc) {
-      media.setAttribute('src', expectedPreviewSrc);
-    }
-  }
   if (!media.getAttribute('src')) {
-    const source = media.dataset.previewSrc || media.dataset.mediaSrc || entry.src || '';
+    const source = media.matches('img')
+      ? (entry.thumbSrc || media.dataset.previewSrc || entry.src || '')
+      : (media.dataset.mediaSrc || entry.src || '');
     if (source) media.setAttribute('src', source);
     if (typeof media.load === 'function' && media.matches('video,audio')) media.load();
   }
