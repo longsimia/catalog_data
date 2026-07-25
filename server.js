@@ -6158,6 +6158,102 @@ app.post('/api/items/:id/previews', auth, upload.array('previews', 30), async (r
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/items/:id/file/replace', auth, upload.single('file'), (req, res) => {
+  const uploadedAbs = req.file?.path || '';
+  let targetAbs = '';
+  let backupAbs = '';
+  let replacementInstalled = false;
+  const removeUploadedTemp = () => {
+    if (uploadedAbs && fs.existsSync(uploadedAbs)) fs.rmSync(uploadedAbs, { force: true });
+  };
+  const reject = (status, message) => {
+    removeUploadedTemp();
+    return res.status(status).json({ error: message });
+  };
+
+  try {
+    const collection = getC(req);
+    if (!hasRolePermission(req.authUser, 'editTxtAttachments', collection)) {
+      return reject(403, '你沒有權限編輯附件檔案');
+    }
+    if (!req.file) return reject(400, '請選擇要更新的 HTML 檔案');
+
+    const cat = readCat(collection);
+    const it = cat.items.find(item => item.id === req.params.id);
+    if (!it) return reject(404, '項目不存在');
+    if (!canAccessItemByRole(it, req.authUser?.role)) return reject(403, '你沒有權限修改這個項目');
+
+    const targetKey = String(req.body?.targetKey || '').trim();
+    const targetFile = normalizeDownloadFiles(it).find(file => file.key === targetKey);
+    if (!targetFile) return reject(404, '找不到要更新的附件');
+
+    const targetExt = path.extname(targetFile.name || targetFile.key || '').toLowerCase();
+    const uploadedExt = path.extname(decodeUploadFilename(req.file.originalname || '')).toLowerCase();
+    if (!['.html', '.htm'].includes(targetExt)) return reject(415, '只有 HTML 附件可以使用更新功能');
+    if (!['.html', '.htm'].includes(uploadedExt)) return reject(415, '請選擇 HTML 或 HTM 檔案');
+
+    targetAbs = path.resolve(path.join(UPLOADS, targetFile.key));
+    if (!isSubPath(targetAbs, path.resolve(UPLOADS))) return reject(400, '附件路徑不正確');
+    if (!fs.existsSync(targetAbs) || !fs.statSync(targetAbs).isFile()) return reject(404, '找不到原始 HTML 附件');
+
+    backupAbs = path.join(os.tmpdir(), `catalog-html-replace-${crypto.randomUUID()}.tmp`);
+    fs.copyFileSync(targetAbs, backupAbs);
+    try {
+      fs.renameSync(uploadedAbs, targetAbs);
+    } catch (renameError) {
+      if (!['EEXIST', 'EPERM', 'EACCES', 'ENOTEMPTY'].includes(renameError?.code)) throw renameError;
+      fs.rmSync(targetAbs, { force: true });
+      try {
+        fs.renameSync(uploadedAbs, targetAbs);
+      } catch (installError) {
+        fs.copyFileSync(backupAbs, targetAbs);
+        throw installError;
+      }
+    }
+    replacementInstalled = true;
+
+    const updatedSize = fs.statSync(targetAbs).size;
+    it.downloadFiles = normalizeDownloadEntries(it).map(entry => {
+      if (entry?.kind === 'folder' || entry?.key !== targetFile.key) return entry;
+      return { ...entry, size: updatedSize };
+    });
+    saveCat(cat, collection);
+
+    try {
+      if (fs.existsSync(backupAbs)) fs.rmSync(backupAbs, { force: true });
+    } catch (cleanupError) {
+      console.warn('[html-replace] 無法清理暫存備份:', cleanupError?.message || cleanupError);
+    }
+    return res.json({
+      ok: true,
+      file: {
+        key: targetFile.key,
+        name: targetFile.name,
+        relativePath: targetFile.relativePath,
+        size: updatedSize
+      },
+      item: it
+    });
+  } catch (e) {
+    if (replacementInstalled && targetAbs && backupAbs && fs.existsSync(backupAbs)) {
+      try {
+        if (fs.existsSync(targetAbs)) fs.rmSync(targetAbs, { force: true });
+        fs.renameSync(backupAbs, targetAbs);
+      } catch (restoreError) {
+        console.error('[html-replace] 無法還原原始附件:', restoreError);
+      }
+    } else if (backupAbs && fs.existsSync(backupAbs)) {
+      try {
+        fs.rmSync(backupAbs, { force: true });
+      } catch (cleanupError) {
+        console.warn('[html-replace] 無法清理失敗操作的暫存備份:', cleanupError?.message || cleanupError);
+      }
+    }
+    removeUploadedTemp();
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/items/:id/file', auth, upload.fields([
   { name: 'file',  maxCount: 1  },
   { name: 'files', maxCount: 500 }
