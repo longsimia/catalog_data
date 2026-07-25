@@ -2786,12 +2786,12 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
       transition:background .2s ease,color .2s ease;
     }
     .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
-    .brand{font-size:14px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
-    .actions{display:flex;align-items:center;gap:10px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;min-height:30px;gap:16px;margin-bottom:18px}
+    .brand{height:30px;display:inline-flex;align-items:center;font-size:14px;line-height:1;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
+    .actions{height:30px;display:flex;align-items:center;gap:10px}
     .action-btn{
-      border:none;background:transparent;color:var(--muted);padding:0 2px;
-      font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;height:30px;line-height:1
+      border:none;background:transparent;color:var(--muted);padding:1px 2px 0;
+      font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;height:30px;line-height:1;appearance:none;-webkit-appearance:none
     }
     .action-btn:hover{color:var(--text)}
     .icon-btn{
