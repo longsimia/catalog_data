@@ -11,6 +11,7 @@ const { TextDecoder } = require('util');
 const { OAuth2Client } = require('google-auth-library');
 const sharp   = require('sharp');
 const iconv   = require('iconv-lite');
+const WordExtractor = require('word-extractor');
 
 const app      = express();
 const PORT     = process.env.PORT || 3000;
@@ -59,6 +60,7 @@ const DEFAULT_COLLECTIONS = [
 const MANAGE_LOCK_TTL_MS = 45 * 1000;
 const PREVIEW_SHARE_ACCESS_TTL_MS = 1000 * 60 * 60 * 12;
 const managePageLocks = new Map();
+const wordExtractor = new WordExtractor();
 
 // 確保目錄存在
 [DATA, UPLOADS].forEach(d => fs.mkdirSync(d, { recursive: true }));
@@ -1537,7 +1539,7 @@ function filterCatalogForViewer(cat, role = 'public') {
 
 function compactCatalogForIndex(cat, collection = 'scenario') {
   const mode = getCollectionConfig(collection).mode;
-  const previewableExts = new Set(['.pdf', '.txt', '.docx', '.html', '.htm', ...Object.keys(PREVIEWABLE_MEDIA_MIME)]);
+  const previewableExts = new Set(['.pdf', '.txt', '.doc', '.docx', '.html', '.htm', ...Object.keys(PREVIEWABLE_MEDIA_MIME)]);
   return {
     items: (cat?.items || []).map(item => {
       const storedFiles = normalizeDownloadFiles(item);
@@ -1758,7 +1760,7 @@ function getPreviewableFiles(item, collection = 'scenario', cfg = null) {
       }));
   const results = [];
   const seen = new Set();
-  const supported = new Set(['.pdf', '.txt', '.docx', '.html', '.htm', ...Object.keys(PREVIEWABLE_MEDIA_MIME)]);
+  const supported = new Set(['.pdf', '.txt', '.doc', '.docx', '.html', '.htm', ...Object.keys(PREVIEWABLE_MEDIA_MIME)]);
 
   files.forEach(file => {
     const ext = getExt(file.name || file.key);
@@ -2268,6 +2270,30 @@ function extractDocxHtmlBlocks(absPath) {
     layoutMode: detectDocxLayoutMode(blocks),
     diagnostics
   };
+}
+
+async function extractLegacyDocHtmlBlocks(absPath) {
+  const document = await wordExtractor.extract(absPath);
+  const body = String(document.getBody({ filterUnicode: false }) || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u0000/g, '');
+  const lines = body.split('\n');
+  while (lines.length > 1 && !lines[lines.length - 1].trim()) lines.pop();
+  const readableLines = lines.some(line => line.trim())
+    ? lines
+    : ['這份文件沒有可顯示的文字內容。'];
+  const blocks = readableLines.map(line => {
+    const isEmpty = !line.trim();
+    const classes = ['docx-paragraph', 'docx-body-paragraph'];
+    if (isEmpty) classes.push('docx-empty');
+    return {
+      type: 'paragraph',
+      text: line,
+      splittable: true,
+      html: `<p class="${classes.join(' ')}" data-empty="${isEmpty ? 'true' : 'false'}">${isEmpty ? '&nbsp;' : escapeXml(line)}</p>`
+    };
+  });
+  return { blocks, layoutMode: 'reading', diagnostics: [] };
 }
 
 function decodeTextBuffer(buf) {
@@ -3521,6 +3547,18 @@ function resolvePreview(item, previewIndex = 0, collection = 'scenario', preferr
       file,
       buffer: null,
       abs: file.abs
+    };
+  }
+  if (file.ext === '.doc') {
+    return {
+      type: 'html',
+      filename: `${path.parse(file.name).name}.html`,
+      label: getPreviewLabel(file),
+      file,
+      blocks: null,
+      layoutMode: 'reading',
+      html: '',
+      abs: null
     };
   }
   if (file.ext === '.docx') {
@@ -5231,7 +5269,7 @@ function renderPreviewShareShell(token = '', options = {}) {
 </html>`;
 }
 
-function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
+async function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
   const collection = options.collection || 'scenario';
   const canEditTxt = !!options.canEditTxt;
   const disableContextMenu = !!options.disableContextMenu;
@@ -5257,7 +5295,12 @@ function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
   const txtReloadPath = canEditTxt && preview.file?.ext === '.txt'
     ? withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}/text`, collection)
     : '';
-  preview.html = preview.file?.ext === '.docx'
+  if (preview.file?.ext === '.doc' && !Array.isArray(preview.blocks)) {
+    const docPreview = await extractLegacyDocHtmlBlocks(preview.file.abs);
+    preview.blocks = docPreview.blocks;
+    preview.layoutMode = docPreview.layoutMode;
+  }
+  preview.html = preview.file?.ext === '.docx' || preview.file?.ext === '.doc'
       ? renderDocxPreviewPage(item, preview.file, preview.blocks || [], {
           disableContextMenu,
           layoutMode: preview.layoutMode,
@@ -5319,7 +5362,7 @@ app.get('/preview-share/:token', (req, res) => {
   }
 });
 
-app.get('/api/preview-share/:token', (req, res) => {
+app.get('/api/preview-share/:token', async (req, res) => {
   try {
     const cfg = readCfg();
     if (!ensureTrustedPublicShareRequest(req, res, cfg, 'json')) return;
@@ -5332,7 +5375,7 @@ app.get('/api/preview-share/:token', (req, res) => {
         requiresPassword: !!accessState.requiresPassword
       });
     }
-    return sendResolvedPreview(res, resolved.item, resolved.preview, resolved.previewIndex, {
+    return await sendResolvedPreview(res, resolved.item, resolved.preview, resolved.previewIndex, {
       collection: resolved.share.collection,
       canEditTxt: false,
       disableContextMenu: true
@@ -5342,7 +5385,7 @@ app.get('/api/preview-share/:token', (req, res) => {
   }
 });
 
-app.get('/api/preview/:id/:index', auth, (req, res) => {
+app.get('/api/preview/:id/:index', auth, async (req, res) => {
   try {
     const collection = getC(req);
     const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
@@ -5355,7 +5398,7 @@ app.get('/api/preview/:id/:index', auth, (req, res) => {
     const previewIndex = Number(req.params.index) || 0;
     const preview = resolvePreview(item, previewIndex, collection, req.query?.encoding);
     if (!preview) return res.status(415).json({ error: '這個檔案類型不支援線上閱覽。' });
-    return sendResolvedPreview(res, item, preview, previewIndex, {
+    return await sendResolvedPreview(res, item, preview, previewIndex, {
       collection,
       canEditTxt: preview.file?.ext === '.txt' && canEditTxtPreview(req.authUser, collection)
     });
