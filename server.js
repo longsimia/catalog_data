@@ -2787,7 +2787,7 @@ function renderDocxPreviewPage(item, file, blocks = [], options = {}) {
     }
     .page{width:min(100%,720px);margin:0 auto;padding:48px 24px 72px}
     .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
-    .brand{font-size:13px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
+    .brand{font-size:14px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;white-space:nowrap}
     .actions{display:flex;align-items:center;gap:10px}
     .action-btn{
       border:none;background:transparent;color:var(--muted);padding:0 2px;
