@@ -6176,7 +6176,7 @@ app.post('/api/items/:id/file/replace', auth, upload.single('file'), (req, res) 
     if (!hasRolePermission(req.authUser, 'editTxtAttachments', collection)) {
       return reject(403, '你沒有權限編輯附件檔案');
     }
-    if (!req.file) return reject(400, '請選擇要更新的 HTML 檔案');
+    if (!req.file) return reject(400, '請選擇要更新的檔案');
 
     const cat = readCat(collection);
     const it = cat.items.find(item => item.id === req.params.id);
@@ -6189,14 +6189,20 @@ app.post('/api/items/:id/file/replace', auth, upload.single('file'), (req, res) 
 
     const targetExt = path.extname(targetFile.name || targetFile.key || '').toLowerCase();
     const uploadedExt = path.extname(decodeUploadFilename(req.file.originalname || '')).toLowerCase();
-    if (!['.html', '.htm'].includes(targetExt)) return reject(415, '只有 HTML 附件可以使用更新功能');
-    if (!['.html', '.htm'].includes(uploadedExt)) return reject(415, '請選擇 HTML 或 HTM 檔案');
+    const replaceableExts = new Set(['.html', '.htm', '.doc', '.docx']);
+    if (!replaceableExts.has(targetExt)) return reject(415, '只有 HTML、HTM、DOC 或 DOCX 附件可以使用更新功能');
+    const targetFamily = ['.html', '.htm'].includes(targetExt) ? 'html' : targetExt;
+    const uploadedFamily = ['.html', '.htm'].includes(uploadedExt) ? 'html' : uploadedExt;
+    if (!replaceableExts.has(uploadedExt) || uploadedFamily !== targetFamily) {
+      const expectedLabel = targetFamily === 'html' ? 'HTML 或 HTM' : targetExt.slice(1).toUpperCase();
+      return reject(415, `請選擇 ${expectedLabel} 檔案`);
+    }
 
     targetAbs = path.resolve(path.join(UPLOADS, targetFile.key));
     if (!isSubPath(targetAbs, path.resolve(UPLOADS))) return reject(400, '附件路徑不正確');
     if (!fs.existsSync(targetAbs) || !fs.statSync(targetAbs).isFile()) return reject(404, '找不到原始 HTML 附件');
 
-    backupAbs = path.join(os.tmpdir(), `catalog-html-replace-${crypto.randomUUID()}.tmp`);
+    backupAbs = path.join(os.tmpdir(), `catalog-attachment-replace-${crypto.randomUUID()}.tmp`);
     fs.copyFileSync(targetAbs, backupAbs);
     try {
       fs.renameSync(uploadedAbs, targetAbs);
@@ -6222,7 +6228,7 @@ app.post('/api/items/:id/file/replace', auth, upload.single('file'), (req, res) 
     try {
       if (fs.existsSync(backupAbs)) fs.rmSync(backupAbs, { force: true });
     } catch (cleanupError) {
-      console.warn('[html-replace] 無法清理暫存備份:', cleanupError?.message || cleanupError);
+      console.warn('[attachment-replace] 無法清理暫存備份:', cleanupError?.message || cleanupError);
     }
     return res.json({
       ok: true,
@@ -6240,13 +6246,13 @@ app.post('/api/items/:id/file/replace', auth, upload.single('file'), (req, res) 
         if (fs.existsSync(targetAbs)) fs.rmSync(targetAbs, { force: true });
         fs.renameSync(backupAbs, targetAbs);
       } catch (restoreError) {
-        console.error('[html-replace] 無法還原原始附件:', restoreError);
+        console.error('[attachment-replace] 無法還原原始附件:', restoreError);
       }
     } else if (backupAbs && fs.existsSync(backupAbs)) {
       try {
         fs.rmSync(backupAbs, { force: true });
       } catch (cleanupError) {
-        console.warn('[html-replace] 無法清理失敗操作的暫存備份:', cleanupError?.message || cleanupError);
+        console.warn('[attachment-replace] 無法清理失敗操作的暫存備份:', cleanupError?.message || cleanupError);
       }
     }
     removeUploadedTemp();

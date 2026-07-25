@@ -944,7 +944,7 @@ html[data-theme="dark"] .cover-perm-badge .perm-badge.admin{background:rgba(54,4
 .attachment-tree .preview-entry .name{font-family:var(--font-sans);font-size:.88rem;font-weight:400;color:inherit}
 .attachment-tree .preview-item .actions,
 .attachment-tree .attachment-folder-row .actions{display:flex;align-items:center;gap:.4rem;flex-shrink:0}
-.attachment-update-btn{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 .78rem;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);font:inherit;font-size:.76rem;line-height:1;cursor:pointer;transition:border-color .18s ease,background .18s ease,color .18s ease,opacity .18s ease}
+.attachment-update-btn{display:inline-flex;align-items:center;justify-content:center;height:30px;min-height:30px;padding:0 .42rem;border:1px solid var(--border);border-radius:var(--r);background:transparent;color:var(--text);font:inherit;font-size:.76rem;line-height:1;cursor:pointer;transition:border-color .18s ease,background .18s ease,color .18s ease,opacity .18s ease}
 .attachment-update-btn:hover{border-color:var(--gold);background:var(--gglow);color:var(--gold)}
 .attachment-update-btn:disabled{opacity:.55;cursor:wait}
 .attachment-tree .preview-item .grip,
@@ -1899,7 +1899,7 @@ const S = {
   fileDragOverPos: null, eFileDragOverPos: null,
   fileJustMovedKey: null, eFileJustMovedKey: null,
   uploadFolderDragPath: '',
-  htmlReplaceKeys: new Set(),
+  attachmentReplaceKeys: new Set(),
   editFolderDragPath: '',
   uploadTreeDropKey: '',
   editTreeDropKey: '',
@@ -9145,12 +9145,12 @@ function renderEditAttachmentFileNode(fileNode) {
   const moved = S.eFileJustMovedKey === makeEditDownloadEntryKey(entry) ? ' moved' : '';
   const size = Number.isFinite(entry?.size) ? entry.size : 0;
   const attachmentName = String(entry?.name || fileNode.treeName || '');
-  const canReplaceHtml = entry?.kind === 'existing'
-    && /\.html?$/i.test(attachmentName)
+  const canReplaceFile = entry?.kind === 'existing'
+    && /\.(?:html?|docx?)$/i.test(attachmentName)
     && canRolePermission('editTxtAttachments');
-  const replacingHtml = canReplaceHtml && S.htmlReplaceKeys.has(entry.key);
-  const replaceButton = canReplaceHtml
-    ? `<button class="attachment-update-btn" type="button" onclick="updateEditHtmlAttachment(event,${fileNode.treeIndex})"${replacingHtml ? ' disabled' : ''}>${replacingHtml ? '更新中…' : '更新'}</button>`
+  const replacingFile = canReplaceFile && S.attachmentReplaceKeys.has(entry.key);
+  const replaceButton = canReplaceFile
+    ? `<button class="attachment-update-btn" type="button" onclick="updateEditAttachmentFile(event,${fileNode.treeIndex})"${replacingFile ? ' disabled' : ''}>${replacingFile ? '更新中…' : '更新'}</button>`
     : '';
   return `<div class="preview-item attachment-file-row${moved}" draggable="true" data-tree-key="${esc(`file:${fileNode.treeIndex}`)}" data-entry-index="${fileNode.treeIndex}"
     ondragstart="editFileDragStart(event,${fileNode.treeIndex})" ondragover="editFileDragOver(event)"
@@ -9214,43 +9214,61 @@ function removeEditFileAt(i, count = 1) {
   S.eDownloadEntries.splice(i, count);
   renderEditFilePicked();
 }
-function updateEditHtmlAttachment(event, entryIndex) {
+function getReplaceableAttachmentType(filename = '') {
+  const ext = String(filename || '').trim().toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+  if (ext === '.html' || ext === '.htm') {
+    return { ext, family: 'html', accept: '.html,.htm,text/html', label: 'HTML 或 HTM' };
+  }
+  if (ext === '.doc') {
+    return { ext, family: 'doc', accept: '.doc,application/msword', label: 'DOC' };
+  }
+  if (ext === '.docx') {
+    return { ext, family: 'docx', accept: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document', label: 'DOCX' };
+  }
+  return null;
+}
+function updateEditAttachmentFile(event, entryIndex) {
   event?.preventDefault?.();
   event?.stopPropagation?.();
   if (!canRolePermission('editTxtAttachments')) { toast('你沒有權限編輯附件檔案', 'err'); return; }
   const entry = S.eDownloadEntries[Number(entryIndex)];
   const targetName = String(entry?.name || getEntryRelativeFilePath(entry) || '');
-  if (!S.eId || entry?.kind !== 'existing' || !entry.key || !/\.html?$/i.test(targetName)) {
-    toast('找不到可更新的 HTML 附件', 'err');
+  const targetType = getReplaceableAttachmentType(targetName);
+  if (!S.eId || entry?.kind !== 'existing' || !entry.key || !targetType) {
+    toast('找不到可更新的附件', 'err');
     return;
   }
-  if (S.htmlReplaceKeys.has(entry.key)) return;
+  if (S.attachmentReplaceKeys.has(entry.key)) return;
   const picker = document.createElement('input');
   picker.type = 'file';
-  picker.accept = '.html,.htm,text/html';
+  picker.accept = targetType.accept;
   picker.style.display = 'none';
   picker.addEventListener('change', async () => {
     const file = picker.files?.[0] || null;
     picker.remove();
     if (!file) return;
-    if (!/\.html?$/i.test(String(file.name || ''))) {
-      toast('請選擇 HTML 或 HTM 檔案', 'err');
+    const selectedType = getReplaceableAttachmentType(file.name || '');
+    const typeMatches = targetType.family === 'html'
+      ? selectedType?.family === 'html'
+      : selectedType?.family === targetType.family;
+    if (!typeMatches) {
+      toast(`請選擇 ${targetType.label} 檔案`, 'err');
       return;
     }
-    await replaceEditHtmlAttachment(entryIndex, file);
+    await replaceEditAttachmentFile(entryIndex, file);
   }, { once: true });
   picker.addEventListener('cancel', () => picker.remove(), { once: true });
   document.body.appendChild(picker);
   picker.click();
 }
-async function replaceEditHtmlAttachment(entryIndex, file) {
+async function replaceEditAttachmentFile(entryIndex, file) {
   const entry = S.eDownloadEntries[Number(entryIndex)];
   const itemId = String(S.eId || '');
   const targetKey = String(entry?.key || '');
   if (!itemId || entry?.kind !== 'existing' || !targetKey || !file) return;
-  S.htmlReplaceKeys.add(targetKey);
+  S.attachmentReplaceKeys.add(targetKey);
   renderEditFilePicked();
-  showLdg('更新 HTML 檔案…');
+  showLdg('更新檔案…');
   try {
     const fd = new FormData();
     fd.append('file', file);
@@ -9262,7 +9280,7 @@ async function replaceEditHtmlAttachment(entryIndex, file) {
     });
     const text = await resp.text();
     const data = parseJsonText(text, {});
-    if (!resp.ok) throw new Error(data.error || readResponseErrorText(text, 'HTML 檔案更新失敗'));
+    if (!resp.ok) throw new Error(data.error || readResponseErrorText(text, '檔案更新失敗'));
 
     const nextSize = Number(data?.file?.size);
     if (Number.isFinite(nextSize)) entry.size = nextSize;
@@ -9279,10 +9297,10 @@ async function replaceEditHtmlAttachment(entryIndex, file) {
     clearCatalogPageCacheForCollection(S.collection);
     toast(`已更新「${entry.name || targetKey.split('/').pop()}」，檔名與公開連結維持不變`, 'ok');
   } catch (err) {
-    toast(err?.message || 'HTML 檔案更新失敗', 'err');
+    toast(err?.message || '檔案更新失敗', 'err');
   } finally {
     hideLdg();
-    S.htmlReplaceKeys.delete(targetKey);
+    S.attachmentReplaceKeys.delete(targetKey);
     renderEditFilePicked();
   }
 }
