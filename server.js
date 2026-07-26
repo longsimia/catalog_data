@@ -3131,7 +3131,6 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .icon-btn:hover{color:var(--text)}
     .icon{width:18px;height:18px;display:block}
     .action-btn{border:none;background:transparent;color:var(--muted);padding:0 2px;font:inherit;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;height:30px;line-height:1}
-    .action-btn[hidden]{display:none}
     .action-btn:hover{color:var(--text)}
     .action-btn:disabled{opacity:.55;cursor:default}
     .encoding-field{display:flex;align-items:center;gap:10px;margin:2px 0 10px}
@@ -3281,8 +3280,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
         </div>
         <div class="meta-side${isTxt && canEditTxt ? ' meta-side-editable' : ''}">
           <div class="actions${isTxt && canEditTxt ? ' editable-actions' : ''}">
-            ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="redoBtn" title="重做（Ctrl+Shift+Z）" hidden>重做</button>` : ''}
-            ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="undoBtn" title="復原（Ctrl+Z）" hidden>復原</button>` : ''}
+            ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="redoBtn" title="重做（Ctrl+Shift+Z）" style="display:none">重做</button>` : ''}
+            ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="undoBtn" title="復原（Ctrl+Z）" style="display:none">復原</button>` : ''}
             ${isTxt && canEditTxt ? `<span id="historySlot"></span>` : ''}
             ${isTxt && !canEditTxt ? `<button type="button" class="action-btn" id="tocBtn" title="目錄">目錄</button>` : ''}
             ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="formatBtn" title="格式化排版">格式化</button>` : ''}
@@ -3329,8 +3328,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     function statesEqual(a,b){return(a?.text||'')===(b?.text||'')&&(a?.filename||'')===(b?.filename||'');}
     function hasUnsavedChanges(){return (!!editor&&editor.value!==lastSavedText)||(!!filenameInput&&filenameInput.value!==lastSavedFilename);}
     function syncDirtyState(){if(!status||status.dataset.state==='error')return;if(hasUnsavedChanges())setStatusMessage('尚有未儲存的變更。');else if(status.textContent==='尚有未儲存的變更。')setStatusMessage('');}
-    function updateRedoVisibility(){if(redoBtn)redoBtn.disabled=!redoStack.length;}
-    function updateUndoButtons(){if(undoBtn)undoBtn.disabled=!undoStack.length;updateRedoVisibility();}
+    function updateRedoVisibility(){if(!redoBtn)return;redoBtn.style.display=redoStack.length?'inline-flex':'none';}
+    function updateUndoButtons(){if(undoBtn){const canUndo=undoStack.length>0;const keepUndoVisible=canUndo||redoStack.length>0;undoBtn.disabled=!canUndo;undoBtn.style.display=keepUndoVisible?'inline-flex':'none';}updateRedoVisibility();}
     function rememberUndoState(previousState,allowCurrent=false){if(!previousState||(!allowCurrent&&statesEqual(previousState,snapshotState())))return;const top=undoStack.length?undoStack[undoStack.length-1]:null;if(top&&statesEqual(top,previousState))return;undoStack.push(previousState);if(undoStack.length>200)undoStack.shift();redoStack=[];updateUndoButtons();}
     function clearInputGroupTimer(){if(inputGroupTimer){window.clearTimeout(inputGroupTimer);inputGroupTimer=0;}}
     function commitPendingInputGroup(){clearInputGroupTimer();if(!inputGroupState)return;rememberUndoState(inputGroupState);inputGroupState=null;inputGroupTarget='';}
