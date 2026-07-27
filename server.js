@@ -2969,6 +2969,7 @@ function splitTextNavigationBlocks(text = '') {
   const normalized = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const lines = normalized.split('\n');
   const blocks = [];
+  let paragraphIndex = 0;
   let offset = 0;
   let blockStart = -1;
   let blockLines = [];
@@ -2978,13 +2979,15 @@ function splitTextNavigationBlocks(text = '') {
     const textValue = blockLines.join('\n');
     const firstLine = blockLines.find(line => line.trim()) || '';
     blocks.push({
-      index: blocks.length,
+      kind: 'text',
+      index: paragraphIndex,
       start: blockStart,
       end: blockEnd,
       text: textValue,
-      label: firstLine.replace(/\s+/g, ' ').trim() || `第 ${blocks.length + 1} 段`,
+      label: firstLine.replace(/\s+/g, ' ').trim() || `第 ${paragraphIndex + 1} 段`,
       lineCount: blockLines.length
     });
+    paragraphIndex += 1;
     blockStart = -1;
     blockLines = [];
     blockEnd = -1;
@@ -3001,6 +3004,13 @@ function splitTextNavigationBlocks(text = '') {
       continue;
     }
     pushBlock();
+    blocks.push({
+      kind: 'blank',
+      start: lineStart,
+      end: offset - (hasBreak ? 1 : 0),
+      text: line,
+      lineCount: 1
+    });
   }
   pushBlock();
   return blocks;
@@ -3009,7 +3019,9 @@ function splitTextNavigationBlocks(text = '') {
 function renderTxtReadOnlyBlocksHtml(text = '') {
   const blocks = splitTextNavigationBlocks(text);
   if (!blocks.length) return `<div class="txt-block txt-block-empty" data-block-index="0"></div>`;
-  return blocks.map(block => `<section class="txt-block" data-block-index="${block.index}"><span class="txt-block-anchor" id="txt-block-${block.index}"></span>${escapeXml(block.text)}</section>`).join('');
+  return blocks.map(block => block.kind === 'blank'
+    ? `<div class="txt-blank-line" aria-hidden="true">${escapeXml(block.text)}</div>`
+    : `<section class="txt-block" data-block-index="${block.index}"><span class="txt-block-anchor" id="txt-block-${block.index}"></span>${escapeXml(block.text)}</section>`).join('');
 }
 
 function renderPreviewScrollMemoryScript(storageKey, options = {}) {
@@ -3148,8 +3160,9 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .encoding-menu-item:hover,.encoding-menu-item.is-active{color:var(--text)}
     .article{font-size:16px;line-height:1.92;letter-spacing:.01em;word-break:break-word}
     .article-body,.editor{margin:0;white-space:pre-wrap;word-break:break-word;line-height:1.92;font-size:16px;font-family:inherit;letter-spacing:.01em}
-    .txt-body{display:grid;gap:1.15em}
+    .txt-body{display:grid;gap:0}
     .txt-block{position:relative;white-space:pre-wrap;word-break:break-word;scroll-margin-top:28px}
+    .txt-blank-line{min-height:1.92em;white-space:pre-wrap}
     .txt-block-empty{min-height:1.92em}
     .txt-block-anchor{display:block;position:relative;top:-12px;visibility:hidden}
     .editor{display:block;width:100%;min-height:0;border:none;outline:none;resize:none;overflow:hidden;background:transparent;color:inherit;padding:0}
