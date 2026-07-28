@@ -7,7 +7,49 @@ function clampPosition(value, length) {
   return Math.max(0, Math.min(Math.trunc(number), length));
 }
 
-function createTxtEditor(textarea, host) {
+function buildParagraphEntries(text) {
+  const lines = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const entries = [];
+  let offset = 0;
+  let start = -1;
+  let end = -1;
+  let entryLines = [];
+  const pushEntry = () => {
+    if (start < 0 || !entryLines.length) return;
+    entries.push({
+      sourceIndex: entries.length,
+      start,
+      end,
+      text: entryLines.join('\n'),
+      firstLine: (entryLines.find(line => line.trim()) || '').replace(/\s+/g, ' ').trim()
+    });
+    start = -1;
+    end = -1;
+    entryLines = [];
+  };
+  lines.forEach((line, index) => {
+    const lineStart = offset;
+    const hasBreak = index < lines.length - 1;
+    offset += line.length + (hasBreak ? 1 : 0);
+    if (line.trim()) {
+      if (start < 0) start = lineStart;
+      entryLines.push(line);
+      end = offset - (hasBreak ? 1 : 0);
+    } else {
+      pushEntry();
+    }
+  });
+  pushEntry();
+  return entries;
+}
+
+function paragraphFingerprint(text) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  return normalized.length <= 240 ? normalized : `${normalized.slice(0, 120)}\u0000${normalized.slice(-120)}`;
+}
+
+function createTxtEditor(textarea, host, options = {}) {
   if (!textarea || !host) return null;
 
   const initialValue = textarea.value || '';
@@ -15,6 +57,146 @@ function createTxtEditor(textarea, host) {
   let view = null;
   let suppressInput = 0;
   let scrollRequestToken = 0;
+  let pendingNavigationPosition = null;
+  let tocPersistTimer = 0;
+  let tocAnchorsInitialized = false;
+  const tocStorageKey = String(options.tocStorageKey || '');
+  const trackedTocAnchors = new Map();
+
+  const readTocState = () => {
+    if (!tocStorageKey) return null;
+    try { return JSON.parse(localStorage.getItem(tocStorageKey) || 'null'); } catch { return null; }
+  };
+
+  const addTrackedEntries = entries => {
+    if (!Array.isArray(entries)) return;
+    entries.forEach(entry => {
+      const id = String(entry?.id || '');
+      if (!id || trackedTocAnchors.has(id)) return;
+      trackedTocAnchors.set(id, {
+        id,
+        start: Number(entry.start) || 0,
+        end: Number(entry.end) || 0,
+        sourceIndex: Number(entry.sourceIndex) || 0,
+        text: String(entry.text || ''),
+        anchorBefore: String(entry.anchorBefore || ''),
+        anchorAfter: String(entry.anchorAfter || ''),
+        liveMapped: false,
+        removed: false
+      });
+    });
+  };
+
+  const ensureTrackedTocAnchors = (force = false) => {
+    if (tocAnchorsInitialized && !force) return null;
+    const state = readTocState();
+    addTrackedEntries(state?.tocEntries);
+    addTrackedEntries(state?.manualTocEntries);
+    if (state) tocAnchorsInitialized = true;
+    return state;
+  };
+
+  const findCurrentParagraph = (anchor, paragraphs) => {
+    if (!anchor || !paragraphs.length) return null;
+    if (anchor.text) {
+      const exact = paragraphs.filter(entry => entry.text === anchor.text);
+      if (exact.length) {
+        return exact.sort((left, right) =>
+          Math.abs(left.start - anchor.start) - Math.abs(right.start - anchor.start)
+        )[0];
+      }
+    }
+    if (anchor.removed) return null;
+    if (anchor.liveMapped) {
+      const mapped = paragraphs.find(entry => anchor.start >= entry.start && anchor.start <= entry.end);
+      if (mapped) return mapped;
+    }
+    if (anchor.anchorBefore || anchor.anchorAfter) {
+      const contextual = paragraphs.filter((entry, index) => {
+        const before = paragraphFingerprint(paragraphs[index - 1]?.text);
+        const after = paragraphFingerprint(paragraphs[index + 1]?.text);
+        const beforeMatches = !anchor.anchorBefore || before === anchor.anchorBefore;
+        const afterMatches = !anchor.anchorAfter || after === anchor.anchorAfter;
+        return beforeMatches && afterMatches;
+      });
+      if (contextual.length === 1) return contextual[0];
+    }
+    const sourceCandidate = paragraphs[anchor.sourceIndex];
+    const storedFirstLine = (anchor.text.split('\n').find(line => line.trim()) || '').replace(/\s+/g, ' ').trim();
+    if (sourceCandidate && (!storedFirstLine || sourceCandidate.firstLine === storedFirstLine)) return sourceCandidate;
+    return null;
+  };
+
+  const updateAnchorFromParagraph = (anchor, paragraph, paragraphs) => {
+    if (!anchor || !paragraph) return;
+    anchor.start = paragraph.start;
+    anchor.end = paragraph.end;
+    anchor.sourceIndex = paragraph.sourceIndex;
+    anchor.text = paragraph.text;
+    anchor.anchorBefore = paragraphFingerprint(paragraphs[paragraph.sourceIndex - 1]?.text);
+    anchor.anchorAfter = paragraphFingerprint(paragraphs[paragraph.sourceIndex + 1]?.text);
+    anchor.removed = false;
+  };
+
+  const reconcileTrackedTocAnchors = (text, resetMapping = false) => {
+    ensureTrackedTocAnchors(true);
+    const paragraphs = buildParagraphEntries(text);
+    trackedTocAnchors.forEach(anchor => {
+      if (resetMapping) {
+        anchor.liveMapped = false;
+        anchor.removed = false;
+      }
+      const paragraph = findCurrentParagraph(anchor, paragraphs);
+      if (paragraph) updateAnchorFromParagraph(anchor, paragraph, paragraphs);
+    });
+    return paragraphs;
+  };
+
+  const persistTrackedTocAnchors = () => {
+    if (!tocStorageKey || !trackedTocAnchors.size) return;
+    const latest = readTocState();
+    if (!latest) return;
+    const mergeEntries = entries => {
+      if (!Array.isArray(entries)) return;
+      entries.forEach(entry => {
+        const anchor = trackedTocAnchors.get(String(entry?.id || ''));
+        if (!anchor) return;
+        Object.assign(entry, {
+          start: anchor.start,
+          end: anchor.end,
+          sourceIndex: anchor.sourceIndex,
+          text: anchor.text,
+          anchorBefore: anchor.anchorBefore,
+          anchorAfter: anchor.anchorAfter
+        });
+      });
+    };
+    mergeEntries(latest.tocEntries);
+    mergeEntries(latest.manualTocEntries);
+    latest.savedAt = Date.now();
+    try { localStorage.setItem(tocStorageKey, JSON.stringify(latest)); } catch {}
+  };
+
+  const scheduleTocPersist = (delay = 250) => {
+    window.clearTimeout(tocPersistTimer);
+    tocPersistTimer = window.setTimeout(persistTrackedTocAnchors, delay);
+  };
+
+  const mapTocAnchorsThroughChanges = changes => {
+    ensureTrackedTocAnchors();
+    if (!trackedTocAnchors.size) return;
+    trackedTocAnchors.forEach(anchor => {
+      changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+        if (fromA <= anchor.start && toA >= anchor.end && anchor.end > anchor.start && !inserted.toString().trim()) {
+          anchor.removed = true;
+        }
+      });
+      anchor.start = changes.mapPos(anchor.start, 1);
+      anchor.end = changes.mapPos(anchor.end, 1);
+      anchor.liveMapped = true;
+    });
+    scheduleTocPersist();
+  };
 
   const dispatchSilently = spec => {
     if (!view) return;
@@ -37,6 +219,8 @@ function createTxtEditor(textarea, host) {
       changes: { from: 0, to: view.state.doc.length, insert: text },
       selection: { anchor: head }
     });
+    reconcileTrackedTocAnchors(text, true);
+    scheduleTocPersist();
     restorePageScroll();
     requestAnimationFrame(() => {
       restorePageScroll();
@@ -90,8 +274,8 @@ function createTxtEditor(textarea, host) {
     value: (start, end = start, direction = 'forward') => {
       if (!view) return;
       const length = view.state.doc.length;
-      const from = clampPosition(start, length);
-      const to = clampPosition(end, length);
+      const from = clampPosition(pendingNavigationPosition ?? start, length);
+      const to = clampPosition(pendingNavigationPosition ?? end, length);
       const anchor = direction === 'backward' ? to : from;
       const head = direction === 'backward' ? from : to;
       dispatchSilently({ selection: { anchor, head } });
@@ -118,7 +302,8 @@ function createTxtEditor(textarea, host) {
   define('scrollPositionIntoView', {
     value: position => {
       if (!view) return;
-      const at = clampPosition(position, view.state.doc.length);
+      const at = clampPosition(pendingNavigationPosition ?? position, view.state.doc.length);
+      pendingNavigationPosition = null;
       const requestToken = ++scrollRequestToken;
       const editorHeight = view.dom.getBoundingClientRect().height;
       const preferredMargin = Math.round(window.innerHeight * 0.32);
@@ -144,7 +329,9 @@ function createTxtEditor(textarea, host) {
   });
 
   const updateListener = EditorView.updateListener.of(update => {
-    if (!update.docChanged || suppressInput) return;
+    if (!update.docChanged) return;
+    if (!suppressInput) mapTocAnchorsThroughChanges(update.changes);
+    if (suppressInput) return;
     textarea.dispatchEvent(new InputEvent('input', {
       bubbles: false,
       inputType: update.view.composing ? 'insertCompositionText' : 'insertText',
@@ -208,6 +395,29 @@ function createTxtEditor(textarea, host) {
   textarea.tabIndex = -1;
   host.hidden = false;
   textarea.codeMirrorView = view;
+  reconcileTrackedTocAnchors(initialValue);
+  if (trackedTocAnchors.size) scheduleTocPersist(0);
+
+  const tocList = document.getElementById('tocList');
+  tocList?.addEventListener('click', event => {
+    const jumpButton = event.target?.closest?.('[data-role="jump"]');
+    const row = jumpButton?.closest?.('[data-toc-id]');
+    if (!row) return;
+    ensureTrackedTocAnchors(true);
+    const entryId = String(row.dataset.tocId || '');
+    const anchor = trackedTocAnchors.get(entryId);
+    const paragraphs = buildParagraphEntries(textarea.value);
+    const paragraph = findCurrentParagraph(anchor, paragraphs);
+    if (!anchor || !paragraph) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      window.alert('這個目錄項目指向的段落已不存在，請重新整理目錄。');
+      return;
+    }
+    updateAnchorFromParagraph(anchor, paragraph, paragraphs);
+    pendingNavigationPosition = paragraph.start;
+    scheduleTocPersist(0);
+  }, true);
   return textarea;
 }
 
