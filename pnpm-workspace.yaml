@@ -1,2 +1,4 @@
+allowBuilds:
+  esbuild: true
 minimumReleaseAgeExclude:
   - opencc-js@1.3.2
