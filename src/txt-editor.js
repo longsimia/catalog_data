@@ -29,9 +29,17 @@ function createTxtEditor(textarea, host) {
     if (!view) return;
     const text = String(value ?? '');
     const head = Math.min(view.state.selection.main.head, text.length);
+    const pageX = window.scrollX;
+    const pageY = window.scrollY;
+    const restorePageScroll = () => window.scrollTo(pageX, pageY);
     dispatchSilently({
       changes: { from: 0, to: view.state.doc.length, insert: text },
       selection: { anchor: head }
+    });
+    restorePageScroll();
+    requestAnimationFrame(() => {
+      restorePageScroll();
+      requestAnimationFrame(restorePageScroll);
     });
   };
 
@@ -85,7 +93,7 @@ function createTxtEditor(textarea, host) {
       const to = clampPosition(end, length);
       const anchor = direction === 'backward' ? to : from;
       const head = direction === 'backward' ? from : to;
-      dispatchSilently({ selection: { anchor, head }, scrollIntoView: true });
+      dispatchSilently({ selection: { anchor, head } });
     }
   });
   define('setRangeText', {
@@ -110,7 +118,10 @@ function createTxtEditor(textarea, host) {
     value: position => {
       if (!view) return;
       const at = clampPosition(position, view.state.doc.length);
-      view.dispatch({ effects: EditorView.scrollIntoView(at, { y: 'center' }) });
+      const editorHeight = view.dom.getBoundingClientRect().height;
+      const preferredMargin = Math.round(window.innerHeight * 0.32);
+      const yMargin = Math.max(5, Math.min(preferredMargin, Math.max(5, Math.floor(editorHeight / 2) - 1)));
+      view.dispatch({ effects: EditorView.scrollIntoView(at, { y: 'start', yMargin }) });
     }
   });
 
