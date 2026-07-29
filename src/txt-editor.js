@@ -269,7 +269,19 @@ function createTxtEditor(textarea, host, options = {}) {
     set: value => { if (view) view.scrollDOM.scrollTop = Number(value) || 0; }
   });
 
-  define('focus', { value: () => view?.focus() });
+  define('focus', {
+    value: () => {
+      if (!view) return;
+      try {
+        view.contentDOM.focus({ preventScroll: true });
+      } catch {
+        const pageX = window.scrollX;
+        const pageY = window.scrollY;
+        view.focus();
+        window.scrollTo(pageX, pageY);
+      }
+    }
+  });
   define('setSelectionRange', {
     value: (start, end = start, direction = 'forward') => {
       if (!view) return;
