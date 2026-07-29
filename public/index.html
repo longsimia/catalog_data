@@ -2053,7 +2053,16 @@ function cUrl(url = '', collectionOverride = '') {
   const collection = collectionOverride
     ? (String(collectionOverride).trim().toLowerCase() || 'scenario')
     : sanitizeCollectionKey(S.collection);
-  return `${url}${url.includes('?') ? '&' : '?'}c=${encodeURIComponent(collection)}`;
+  const encodedCollection = encodeURIComponent(collection);
+  const collectionParam = /([?&])c=[^&#]*/i;
+  if (collectionParam.test(url)) {
+    // Server-generated file URLs already identify their collection. Keep that
+    // value unless the caller explicitly asks to replace it.
+    return collectionOverride
+      ? url.replace(collectionParam, `$1c=${encodedCollection}`)
+      : url;
+  }
+  return `${url}${url.includes('?') ? '&' : '?'}c=${encodedCollection}`;
 }
 
 function getShareUrlState() {

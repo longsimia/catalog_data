@@ -986,12 +986,18 @@ function withCollection(url, collection = 'scenario') {
 }
 
 function getC(req) {
-  return sanitizeCollectionKey(
+  const requested =
     req?.query?.c ||
     req?.body?.c ||
     req?.params?.c ||
-    req?.headers?.['x-catalog-collection']
-  );
+    req?.headers?.['x-catalog-collection'];
+  // Express returns repeated query parameters as an array. Older clients could
+  // send `?c=image&c=image`; keep the server-generated first value instead of
+  // coercing the array to the invalid key "image,image".
+  const collection = Array.isArray(requested)
+    ? requested.find(value => String(value || '').trim())
+    : requested;
+  return sanitizeCollectionKey(collection);
 }
 
 function normalizeItemSharedFields(item) {
