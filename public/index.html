@@ -5379,6 +5379,22 @@ function getDownloadFilenameFromHeader(header) {
 async function downloadItemFile(itemId, fallbackName) {
   await downloadFromUrl(`/api/download/${itemId}`, fallbackName);
 }
+function triggerBlobDownload(blob, filename) {
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+
+  // Do not release the object URL in the same task as the click. Some browsers
+  // still need it while starting small (especially empty TXT) downloads.
+  setTimeout(() => {
+    a.remove();
+    URL.revokeObjectURL(blobUrl);
+  }, 60_000);
+}
 async function downloadFromUrl(url, fallbackName) {
   if (!url) return;
   const internalApi = /^\/api\//.test(url);
@@ -5408,14 +5424,7 @@ async function downloadFromUrl(url, fallbackName) {
     }
     const blob = await resp.blob();
     const filename = getDownloadFilenameFromHeader(resp.headers.get('Content-Disposition')) || fallbackName || 'download';
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(blobUrl);
+    triggerBlobDownload(blob, filename);
     hideLdg();
   } catch (e) {
     hideLdg();
