@@ -6372,10 +6372,16 @@ app.post('/api/items/:id/file', auth, upload.fields([
     }
 
     const keptKeySet = new Set(nextFiles.filter(file => existingMap.has(file.key)).map(file => file.key));
+    const protectedPreviewKeys = new Set([
+      it.coverKey,
+      ...(Array.isArray(it.previewKeys) ? it.previewKeys : [])
+    ].filter(Boolean));
     const removedExisting = existingFiles.filter(file => !keptKeySet.has(file.key));
 
-    removedExisting.forEach(file => removeStoredFile(file.key));
-    if (it.downloadKey && !keptKeySet.has(it.downloadKey)) {
+    removedExisting.forEach(file => {
+      if (!protectedPreviewKeys.has(file.key)) removeStoredFile(file.key);
+    });
+    if (it.downloadKey && !keptKeySet.has(it.downloadKey) && !protectedPreviewKeys.has(it.downloadKey)) {
       removeStoredFile(it.downloadKey);
     }
 

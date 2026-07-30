@@ -9810,10 +9810,23 @@ async function doUp() {
         if (S.up.attachmentPrevs.size && createdItem) {
           const dlFiles = getItemDownloadFiles(createdItem);
           const attachKeyMap = new Map();
+          const unresolvedAttachmentPreviews = [];
           S.up.attachmentPrevs.forEach(f => {
-            const match = dlFiles.find(df => df.name === f.name && df.size === f.size);
-            if (match?.key) attachKeyMap.set(f, match.key);
+            const relativePath = normalizeEntryRelativePath(getRelativeFilePath(f), f.name || 'preview');
+            const mappedKey = uploadKeyMap.get(makeUploadFileKey(f));
+            const fallbackMatch = mappedKey ? null : dlFiles.find(df => (
+              normalizeEntryRelativePath(df.relativePath, df.name || '') === relativePath &&
+              Number(df.size) === Number(f.size)
+            ));
+            const storedKey = mappedKey || fallbackMatch?.key || '';
+            if (storedKey) attachKeyMap.set(f, storedKey);
+            else unresolvedAttachmentPreviews.push(relativePath);
           });
+          if (unresolvedAttachmentPreviews.length) {
+            const labels = unresolvedAttachmentPreviews.slice(0, 3).join('、');
+            const more = unresolvedAttachmentPreviews.length > 3 ? ` 等 ${unresolvedAttachmentPreviews.length} 個檔案` : '';
+            throw new Error(`無法將預覽圖「${labels}」對應到已上傳附件${more}；項目已建立，請重新整理後到項目編輯中設定預覽圖`);
+          }
           if (attachKeyMap.size) {
             const phase1Keys = [...(createdItem.previewKeys || [])];
             let p1Idx = 0;
