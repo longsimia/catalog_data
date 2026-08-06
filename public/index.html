@@ -5039,7 +5039,7 @@ function renderManTagFilter() {
 function renderCategoryFilter() {
   const all = getGalleryCategoryFilterOptions();
   S.F.cats = (S.F.cats || []).filter(c => c === PRIVATE_CATEGORY_FILTER_KEY ? all.includes(PRIVATE_CATEGORY_FILTER_KEY) : all.includes(c));
-  const label = S.F.cats.length ? `已選 ${S.F.cats.length} 個類別` : '類型篩選';
+  const label = S.F.cats.length ? `已選 ${S.F.cats.length} 個類別` : '類別篩選';
   document.getElementById('cat-filter').innerHTML =
     `<button class="btn btn-out tf-btn" type="button" onclick="toggleCategoryFilter(event)">
       <span class="lab">${esc(label)}</span>
@@ -5060,7 +5060,7 @@ function renderManCategoryFilter() {
   if (!wrap) return;
   const all = getGalleryCategoryFilterOptions();
   S.MF.cats = (S.MF.cats || []).filter(c => c === PRIVATE_CATEGORY_FILTER_KEY ? all.includes(PRIVATE_CATEGORY_FILTER_KEY) : all.includes(c));
-  const label = S.MF.cats.length ? `已選 ${S.MF.cats.length} 個類別` : '類型篩選';
+  const label = S.MF.cats.length ? `已選 ${S.MF.cats.length} 個類別` : '類別篩選';
   wrap.innerHTML =
     `<button class="btn btn-out tf-btn" type="button" onclick="toggleManCategoryFilter(event)">
       <span class="lab">${esc(label)}</span>
