@@ -3729,7 +3729,10 @@ function normalizePreviewShareLinks(existingLinks = {}, cfg = null) {
     if (seenTargets.has(targetKey)) continue;
 
     if (!catCache.has(share.collection)) {
-      catCache.set(share.collection, readCat(share.collection));
+  catCache.set(
+    share.collection,
+    readCat(share.collection, { syncFiles: false })
+  );
     }
     const cat = catCache.get(share.collection);
     const item = (cat?.items || []).find(candidate => candidate.id === share.itemId);
