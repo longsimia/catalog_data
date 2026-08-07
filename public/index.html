@@ -1969,12 +1969,23 @@ S.tagOps = [];
 // ════════════════════════════════════════════════════
 const getToken = () => localStorage.getItem('adm-token') || '';
 const setToken = t  => localStorage.setItem('adm-token', t);
+function getStoredAuthUserId() {
+  const currentId = String(S.currentAuthUser?.id || '').trim();
+  if (currentId) return currentId;
+  try {
+    const body = getToken().split('.')[0] || '';
+    const base64 = body.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(body.length / 4) * 4, '=');
+    return String(JSON.parse(atob(base64))?.uid || '').trim();
+  } catch {
+    return '';
+  }
+}
 const getAuthUsername = () => localStorage.getItem('adm-user') || '';
 const setAuthUsername = v => localStorage.setItem('adm-user', v || '');
 const getTheme = () => localStorage.getItem('theme-mode') || 'light';
 const setTheme = theme => localStorage.setItem('theme-mode', theme);
 function getGalleryPreferenceStorageKey(name, collection = S.collection) {
-  const userId = String(S.currentAuthUser?.id || 'guest').trim() || 'guest';
+  const userId = getStoredAuthUserId() || 'guest';
   return `${name}:${encodeURIComponent(userId)}:${sanitizeCollectionKey(collection)}`;
 }
 function getGalleryViewStorage(collection = S.collection) {
@@ -2904,8 +2915,10 @@ async function saveManageDiscOrder() {
   }
 }
 
-async function loadUiPreferences() {
-  if (!getToken() || !S.currentAuthUser?.id) {
+async function loadUiPreferences(prefetchedRequest = null) {
+  const previousView = document.body.dataset.galleryView || 'grid';
+  const previousSortDir = S.gallerySortDir;
+  if (!getToken()) {
     S.manageDiscOrderByCollection = {};
     S.galleryViewByCollection = {};
     S.gallerySortDirByCollection = {};
@@ -2914,7 +2927,10 @@ async function loadUiPreferences() {
     return;
   }
   try {
-    const data = await api('GET', '/api/ui-preferences');
+    const prefetched = prefetchedRequest ? await prefetchedRequest : null;
+    if (prefetched?.error) throw prefetched.error;
+    const data = prefetchedRequest ? prefetched?.data : await api('GET', '/api/ui-preferences');
+    S.currentAuthUser = data?.currentUser || S.currentAuthUser;
     const prefs = data?.uiPreferences || {};
     S.manageDiscOrderByCollection = prefs.manageDiscOrderByCollection && typeof prefs.manageDiscOrderByCollection === 'object'
       ? prefs.manageDiscOrderByCollection
@@ -2943,7 +2959,10 @@ async function loadUiPreferences() {
     applyGallerySortDir(getGallerySortStorage());
   }
   applyManageDisclosureOrder();
-  if (S.catalogIndexLoaded) applyLocalCatalogView();
+  const currentView = document.body.dataset.galleryView || 'grid';
+  if (S.catalogIndexLoaded && (currentView !== previousView || S.gallerySortDir !== previousSortDir)) {
+    applyLocalCatalogView();
+  }
 }
 
 function applyManageDisclosureOrder() {
@@ -4810,12 +4829,16 @@ async function init() {
   try { sessionStorage.removeItem('catalog-public-page-cache-v1'); } catch {}
   showLdg('載入中…');
   const prefetchedInitialCatalog = api('GET', buildCatalogIndexRequestUrl(), undefined, { collection: initialCollection }).catch(() => null);
+  const prefetchedUiPreferences = getToken()
+    ? api('GET', '/api/ui-preferences').then(data => ({ data })).catch(error => ({ error }))
+    : null;
   const [cfgPublic] = await Promise.all([
     api('GET', '/api/cfg-public').catch(() => ({})),
     loadCollections()
   ]);
   window.UPLOAD_ORIGIN = String(cfgPublic.uploadOrigin || '').trim().replace(/\/+$/, '');
   applyCollectionUI();
+  if (prefetchedUiPreferences) await loadUiPreferences(prefetchedUiPreferences);
   const savedView = getCatalogViewState(S.collection);
   if (savedView?.page) S.F.page = savedView.page;
   ensureConnBadge();
@@ -4851,10 +4874,8 @@ window.addEventListener('offline', () => setConnState('offline'));
     focusItem: initialFocusItem,
     indexCatalogPromise: S.collection === initialCollection ? prefetchedInitialCatalog : null
   });
-  const accountPreferencesRequest = getToken()
-    ? (async () => { await loadRoleConfig(); await loadUiPreferences(); })()
-    : Promise.resolve();
-  await Promise.all([initialCatalogRequest, accountPreferencesRequest]);
+  if (getToken()) void loadRoleConfig();
+  await initialCatalogRequest;
   await openSharedLightboxFromUrl();
 }
 
@@ -6375,6 +6396,7 @@ async function doLogin() {
     setToken(token);
     setAuthUsername(user?.username || '');
     S.currentAuthUser = user || null;
+    await loadUiPreferences();
     await loadCatalog(true, { focusItem: getShareUrlState().itemId });
     showAdmBody();
     await openSharedLightboxFromUrl();
@@ -6414,6 +6436,7 @@ async function handleGoogleCredential(response) {
     setToken(token);
     setAuthUsername(user?.username || '');
     S.currentAuthUser = user || null;
+    await loadUiPreferences();
     await loadCatalog(true, { focusItem: getShareUrlState().itemId });
     showAdmBody();
     await openSharedLightboxFromUrl();
@@ -6431,6 +6454,7 @@ async function skipLogin() {
     setToken(token);
     setAuthUsername(user?.username || '');
     S.currentAuthUser = user || null;
+    await loadUiPreferences();
     await loadCatalog(true, { focusItem: getShareUrlState().itemId });
     showAdmBody();
     await openSharedLightboxFromUrl();

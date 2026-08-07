@@ -5809,6 +5809,11 @@ app.get('/api/ui-preferences', auth, (req, res) => {
     const allPrefs = getUserUiPrefs(cfg);
     const userId = req.authUser?.id || '';
     res.json({
+      currentUser: req.authUser ? {
+        id: req.authUser.id,
+        username: req.authUser.username,
+        role: req.authUser.role
+      } : null,
       uiPreferences: allPrefs[userId] || {
         manageDiscOrderByCollection: {},
         galleryViewByCollection: {},
