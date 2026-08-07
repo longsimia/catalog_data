@@ -1102,7 +1102,29 @@ function normalizeUserUiPrefs(rawPrefs = {}) {
         manageDiscOrderByCollection[safeKey] = ids;
       });
     }
-    normalized[userId.trim()] = { manageDiscOrderByCollection };
+    const galleryViewByCollection = {};
+    const rawGalleryViews = prefs?.galleryViewByCollection;
+    if (rawGalleryViews && typeof rawGalleryViews === 'object') {
+      Object.entries(rawGalleryViews).forEach(([collectionKey, view]) => {
+        if (view !== 'grid' && view !== 'list') return;
+        galleryViewByCollection[sanitizeCollectionKey(collectionKey)] = view;
+      });
+    }
+    const gallerySortDirByCollection = {};
+    const rawGallerySortDirs = prefs?.gallerySortDirByCollection;
+    if (rawGallerySortDirs && typeof rawGallerySortDirs === 'object') {
+      Object.entries(rawGallerySortDirs).forEach(([collectionKey, dir]) => {
+        if (dir !== 'asc' && dir !== 'desc') return;
+        gallerySortDirByCollection[sanitizeCollectionKey(collectionKey)] = dir;
+      });
+    }
+    const gallerySortDir = prefs?.gallerySortDir === 'desc' ? 'desc' : 'asc';
+    normalized[userId.trim()] = {
+      manageDiscOrderByCollection,
+      galleryViewByCollection,
+      gallerySortDirByCollection,
+      gallerySortDir
+    };
   });
   return normalized;
 }
@@ -5787,7 +5809,12 @@ app.get('/api/ui-preferences', auth, (req, res) => {
     const allPrefs = getUserUiPrefs(cfg);
     const userId = req.authUser?.id || '';
     res.json({
-      uiPreferences: allPrefs[userId] || { manageDiscOrderByCollection: {} }
+      uiPreferences: allPrefs[userId] || {
+        manageDiscOrderByCollection: {},
+        galleryViewByCollection: {},
+        gallerySortDirByCollection: {},
+        gallerySortDir: 'asc'
+      }
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -5799,8 +5826,13 @@ app.put('/api/ui-preferences', auth, (req, res) => {
     const userId = req.authUser?.id || '';
     if (!userId) return res.status(400).json({ error: '找不到目前登入帳號' });
     const incoming = req.body?.uiPreferences || {};
-    const next = normalizeUserUiPrefs({ [userId]: incoming });
-    allPrefs[userId] = next[userId] || { manageDiscOrderByCollection: {} };
+    const next = normalizeUserUiPrefs({ [userId]: { ...(allPrefs[userId] || {}), ...incoming } });
+    allPrefs[userId] = next[userId] || {
+      manageDiscOrderByCollection: {},
+      galleryViewByCollection: {},
+      gallerySortDirByCollection: {},
+      gallerySortDir: 'asc'
+    };
     cfg.userUiPrefs = allPrefs;
     saveCfg(cfg);
     res.json({ ok: true, uiPreferences: allPrefs[userId] });

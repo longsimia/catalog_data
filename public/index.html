@@ -1131,6 +1131,7 @@ footer{text-align:center;padding:1.8rem 1rem;font-size:.78rem;
   <div class="pills tf" id="pills"></div>
   <div class="ctrl-mobile-row">
     <button class="theme-btn ctrl-view-btn" id="gallery-view-btn" type="button" onclick="toggleGalleryView()" aria-label="切換檢視模式"></button>
+    <button class="theme-btn ctrl-view-btn" id="gallery-sort-btn" type="button" onclick="toggleGallerySortDir()" aria-label="切換卡片顯示順序"></button>
     <label class="pgsel">
       <span>每頁顯示</span>
       <select class="fs" id="page-size" onchange="setPageSize(this.value)">
@@ -1849,6 +1850,9 @@ const S = {
   catalogIndexLoaded: false,
   catalogIndexDirty: false,
   adminCatalogLoaded: false,
+  galleryViewByCollection: {},
+  gallerySortDirByCollection: {},
+  gallerySortDir: 'asc',
   collections: [
     { key:'scenario', label:'資料庫', mode:'scenario', permission:'public' },
     { key:'image', label:'圖庫', mode:'image', permission:'public' }
@@ -1969,8 +1973,32 @@ const getAuthUsername = () => localStorage.getItem('adm-user') || '';
 const setAuthUsername = v => localStorage.setItem('adm-user', v || '');
 const getTheme = () => localStorage.getItem('theme-mode') || 'light';
 const setTheme = theme => localStorage.setItem('theme-mode', theme);
-const getGalleryView = () => localStorage.getItem('gallery-view') === 'list' ? 'list' : 'grid';
-const setGalleryViewStorage = view => localStorage.setItem('gallery-view', view === 'list' ? 'list' : 'grid');
+function getGalleryPreferenceStorageKey(name, collection = S.collection) {
+  const userId = String(S.currentAuthUser?.id || 'guest').trim() || 'guest';
+  return `${name}:${encodeURIComponent(userId)}:${sanitizeCollectionKey(collection)}`;
+}
+function getGalleryViewStorage(collection = S.collection) {
+  return localStorage.getItem(getGalleryPreferenceStorageKey('gallery-view', collection)) === 'list' ? 'list' : 'grid';
+}
+function setGalleryViewStorage(view, collection = S.collection) {
+  localStorage.setItem(getGalleryPreferenceStorageKey('gallery-view', collection), view === 'list' ? 'list' : 'grid');
+}
+function getGallerySortStorage(collection = S.collection) {
+  return localStorage.getItem(getGalleryPreferenceStorageKey('gallery-sort-dir', collection)) === 'desc' ? 'desc' : 'asc';
+}
+function setGallerySortStorage(dir, collection = S.collection) {
+  localStorage.setItem(getGalleryPreferenceStorageKey('gallery-sort-dir', collection), dir === 'desc' ? 'desc' : 'asc');
+}
+function getGalleryViewPreference(collection = S.collection) {
+  const key = sanitizeCollectionKey(collection);
+  const saved = S.galleryViewByCollection?.[key];
+  return saved === 'list' || saved === 'grid' ? saved : getGalleryViewStorage(key);
+}
+function getGallerySortPreference(collection = S.collection) {
+  const key = sanitizeCollectionKey(collection);
+  const saved = S.gallerySortDirByCollection?.[key];
+  return saved === 'desc' || saved === 'asc' ? saved : getGallerySortStorage(key);
+}
 const setCollectionStorage = value => localStorage.setItem('catalog-coll', value || 'scenario');
 const CATALOG_VIEW_STATE_KEY = 'catalog-view-state';
 
@@ -2148,6 +2176,8 @@ function icon(name) {
     trash: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/><path d="M10 11v6M14 11v6"/></svg></span>',
     back: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8 5 12l4 4"/><path d="M5 12h8a6 6 0 0 0 6-6"/></svg></span>',
     chevronDown: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>',
+    arrowUp: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m6.5 10.5 5.5-5.5 5.5 5.5"/></svg></span>',
+    arrowDown: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m6.5 13.5 5.5 5.5 5.5-5.5"/></svg></span>',
     chevronLeft: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></span>',
     chevronRight: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>',
     empty: '<span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/><path d="M8 9h8M8 13h5"/></svg></span>',
@@ -2541,6 +2571,7 @@ function decorateStaticIcons() {
   setHtml('#lb-preview-share', icon('share'));
   setHtml('.si', icon('search'));
   setHtml('#gallery-view-btn', icon('layoutList'));
+  setHtml('#gallery-sort-btn', icon('arrowUp'));
 }
 
 let _connTimer = null;
@@ -2835,7 +2866,8 @@ function ensureManageDisclosure() {
 }
 
 function getManageDiscStorageKey() {
-  return `manage-disc-order:${sanitizeCollectionKey(S.collection)}`;
+  const userKey = encodeURIComponent(String(S.currentAuthUser?.id || 'anonymous'));
+  return `manage-disc-order:${userKey}:${sanitizeCollectionKey(S.collection)}`;
 }
 
 function getManageDiscOrder() {
@@ -2875,6 +2907,10 @@ async function saveManageDiscOrder() {
 async function loadUiPreferences() {
   if (!getToken() || !S.currentAuthUser?.id) {
     S.manageDiscOrderByCollection = {};
+    S.galleryViewByCollection = {};
+    S.gallerySortDirByCollection = {};
+    applyGalleryView(getGalleryViewPreference());
+    applyGallerySortDir(getGallerySortPreference());
     return;
   }
   try {
@@ -2883,10 +2919,31 @@ async function loadUiPreferences() {
     S.manageDiscOrderByCollection = prefs.manageDiscOrderByCollection && typeof prefs.manageDiscOrderByCollection === 'object'
       ? prefs.manageDiscOrderByCollection
       : {};
+    S.galleryViewByCollection = prefs.galleryViewByCollection && typeof prefs.galleryViewByCollection === 'object'
+      ? prefs.galleryViewByCollection
+      : {};
+    S.gallerySortDirByCollection = prefs.gallerySortDirByCollection && typeof prefs.gallerySortDirByCollection === 'object'
+      ? prefs.gallerySortDirByCollection
+      : {};
+    if (!Object.keys(S.gallerySortDirByCollection).length && prefs.gallerySortDir === 'desc') {
+      (S.collections || []).forEach(entry => {
+        const key = sanitizeCollectionKey(entry?.key);
+        S.gallerySortDirByCollection[key] = 'desc';
+      });
+    }
+    applyGalleryView(getGalleryViewPreference());
+    applyGallerySortDir(getGallerySortPreference());
+    setGalleryViewStorage(document.body.dataset.galleryView || 'grid');
+    setGallerySortStorage(S.gallerySortDir);
   } catch (e) {
     S.manageDiscOrderByCollection = {};
+    S.galleryViewByCollection = {};
+    S.gallerySortDirByCollection = {};
+    applyGalleryView(getGalleryViewStorage());
+    applyGallerySortDir(getGallerySortStorage());
   }
   applyManageDisclosureOrder();
+  if (S.catalogIndexLoaded) applyLocalCatalogView();
 }
 
 function applyManageDisclosureOrder() {
@@ -2904,7 +2961,7 @@ function applyManageDisclosureOrder() {
 function applyManageDisclosureVisibility() {
   const tab = document.getElementById('tab-man');
   if (!tab) return;
-  const isOwner = S.currentAuthUser?.role === 'owner';
+  const canReorder = canAccessAdminManageTab();
   const visibleIds = new Set(getAdminManageDisclosureIds());
   ['cat-disc', 'tag-disc', 'item-list-disc'].forEach(id => {
     const disc = document.getElementById(id);
@@ -2912,7 +2969,7 @@ function applyManageDisclosureVisibility() {
     disc.style.display = visibleIds.has(id) ? '' : 'none';
   });
   document.querySelectorAll('#tab-man > details.disc[data-disc-id] > summary').forEach(summary => {
-    summary.draggable = !!isOwner;
+    summary.draggable = canReorder;
   });
   if (!visibleIds.has('item-list-disc') && S.manPageOpen) closeManageListPage();
 }
@@ -2924,7 +2981,7 @@ function clearManageDiscDropState() {
 }
 
 function manageDiscDragStart(e, discId) {
-  if (S.currentAuthUser?.role !== 'owner') {
+  if (!canAccessAdminManageTab()) {
     e.preventDefault();
     return;
   }
@@ -2934,7 +2991,7 @@ function manageDiscDragStart(e, discId) {
 }
 
 function manageDiscDragOver(e, discId) {
-  if (S.currentAuthUser?.role !== 'owner') return;
+  if (!canAccessAdminManageTab()) return;
   e.preventDefault();
   if (!S.manageDiscDragId) return;
   const rect = e.currentTarget.getBoundingClientRect();
@@ -2947,7 +3004,7 @@ function manageDiscDragOver(e, discId) {
 }
 
 function manageDiscDrop(e, discId) {
-  if (S.currentAuthUser?.role !== 'owner') return;
+  if (!canAccessAdminManageTab()) return;
   e.preventDefault();
   if (!S.manageDiscDragId) return;
   const tab = document.getElementById('tab-man');
@@ -2968,7 +3025,7 @@ function manageDiscDrop(e, discId) {
 }
 
 function manageDiscDragEnd(e) {
-  if (S.currentAuthUser?.role !== 'owner') return;
+  if (!canAccessAdminManageTab()) return;
   document.querySelectorAll('#tab-man > details.disc').forEach(el => el.classList.remove('drag', 'drop-before', 'drop-after'));
   S.manageDiscDragId = '';
   clearManageDiscDropState();
@@ -3186,8 +3243,55 @@ function applyGalleryView(view) {
 function toggleGalleryView() {
   const next = (document.body.dataset.galleryView || 'grid') === 'list' ? 'grid' : 'list';
   applyGalleryView(next);
-  setGalleryViewStorage(next);
+  const collectionKey = sanitizeCollectionKey(S.collection);
+  S.galleryViewByCollection[collectionKey] = next;
   renderGallery();
+  void saveGalleryDisplayPreferences();
+}
+
+function applyGallerySortDir(dir) {
+  const mode = dir === 'desc' ? 'desc' : 'asc';
+  S.gallerySortDir = mode;
+  const btn = document.getElementById('gallery-sort-btn');
+  if (btn) {
+    const isDesc = mode === 'desc';
+    btn.innerHTML = icon(isDesc ? 'arrowDown' : 'arrowUp');
+    btn.setAttribute('title', isDesc ? '目前為倒序；切換為正序' : '目前為正序；切換為倒序');
+    btn.setAttribute('aria-label', isDesc ? '目前為倒序，切換為正序' : '目前為正序，切換為倒序');
+  }
+}
+
+async function saveGalleryDisplayPreferences() {
+  const collectionKey = sanitizeCollectionKey(S.collection);
+  const galleryView = document.body.dataset.galleryView === 'list' ? 'list' : 'grid';
+  S.galleryViewByCollection[collectionKey] = galleryView;
+  S.gallerySortDirByCollection[collectionKey] = S.gallerySortDir;
+  setGalleryViewStorage(galleryView, collectionKey);
+  setGallerySortStorage(S.gallerySortDir, collectionKey);
+  if (!getToken() || !S.currentAuthUser?.id) return;
+  try {
+    await api('PUT', '/api/ui-preferences', {
+      uiPreferences: {
+        galleryViewByCollection: S.galleryViewByCollection,
+        gallerySortDirByCollection: S.gallerySortDirByCollection
+      }
+    });
+  } catch (e) {
+    console.warn('saveGalleryDisplayPreferences failed', e);
+    toast('頁籤顯示設定未能永久儲存，請稍後再試', 'err');
+  }
+}
+
+function toggleGallerySortDir() {
+  const next = S.gallerySortDir === 'desc' ? 'asc' : 'desc';
+  applyGallerySortDir(next);
+  const collectionKey = sanitizeCollectionKey(S.collection);
+  S.gallerySortDirByCollection[collectionKey] = next;
+  S.F.page = 1;
+  saveCatalogViewState({ page: 1, scrollY: 0 });
+  if (S.catalogIndexLoaded) applyLocalCatalogView();
+  else renderGallery();
+  void saveGalleryDisplayPreferences();
 }
 
 async function api(method, url, body, options = {}) {
@@ -4523,6 +4627,7 @@ function getLocallyFilteredCatalogItems() {
       return catMatch || tagMatch;
     });
   }
+  if (S.gallerySortDir === 'desc') items = [...items].reverse();
   return items;
 }
 function refreshLocalCatalogFilterOptions() {
@@ -4674,6 +4779,8 @@ async function setCollection(next, options = {}) {
   resetUploadFormState();
   const search = document.getElementById('search-in');
   if (search) search.value = '';
+  applyGalleryView(getGalleryViewPreference(target));
+  applyGallerySortDir(getGallerySortPreference(target));
   applyCollectionUI();
   await loadCatalog(true, { loadAll: S.manPageOpen && !!getToken(), focusItem: options.focusItem || '' });
   if (getToken()) await loadRoleConfig();
@@ -4690,7 +4797,8 @@ async function init() {
   initTextareaImeGuards();
   initTextareaTabIndent();
   decorateStaticIcons();
-  applyGalleryView(getGalleryView());
+  applyGalleryView(getGalleryViewPreference());
+  applyGallerySortDir(getGallerySortPreference());
   refreshDescriptionTextareas();
   syncMobileCtrlHeight();
   mobileCtrlLastY = Math.max(window.scrollY || window.pageYOffset || 0, 0);
@@ -4743,8 +4851,10 @@ window.addEventListener('offline', () => setConnState('offline'));
     focusItem: initialFocusItem,
     indexCatalogPromise: S.collection === initialCollection ? prefetchedInitialCatalog : null
   });
-  if (getToken()) void loadRoleConfig();
-  await initialCatalogRequest;
+  const accountPreferencesRequest = getToken()
+    ? (async () => { await loadRoleConfig(); await loadUiPreferences(); })()
+    : Promise.resolve();
+  await Promise.all([initialCatalogRequest, accountPreferencesRequest]);
   await openSharedLightboxFromUrl();
 }
 
