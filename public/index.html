@@ -2581,8 +2581,8 @@ function decorateStaticIcons() {
   setLabeled('#btn-create-edit-folder', 'folder', '建立資料夾');
   setHtml('#lb-preview-share', icon('share'));
   setHtml('.si', icon('search'));
-  setHtml('#gallery-view-btn', icon('layoutList'));
-  setHtml('#gallery-sort-btn', icon('arrowUp'));
+  setHtml('#gallery-view-btn', icon('grid'));
+  setHtml('#gallery-sort-btn', icon('arrowDown'));
 }
 
 let _connTimer = null;
@@ -3253,7 +3253,7 @@ function applyGalleryView(view) {
   document.body.dataset.galleryView = mode;
   const btn = document.getElementById('gallery-view-btn');
   if (btn) {
-    btn.innerHTML = mode === 'list' ? icon('grid') : icon('layoutList');
+    btn.innerHTML = mode === 'list' ? icon('layoutList') : icon('grid');
     btn.setAttribute('title', mode === 'list' ? '切換為格狀檢視' : '切換為清單檢視');
     btn.setAttribute('aria-label', mode === 'list' ? '切換為格狀檢視' : '切換為清單檢視');
   }
@@ -3274,9 +3274,9 @@ function applyGallerySortDir(dir) {
   const btn = document.getElementById('gallery-sort-btn');
   if (btn) {
     const isDesc = mode === 'desc';
-    btn.innerHTML = icon(isDesc ? 'arrowDown' : 'arrowUp');
-    btn.setAttribute('title', isDesc ? '目前為倒序；切換為正序' : '目前為正序；切換為倒序');
-    btn.setAttribute('aria-label', isDesc ? '目前為倒序，切換為正序' : '目前為正序，切換為倒序');
+    btn.innerHTML = icon(isDesc ? 'arrowUp' : 'arrowDown');
+    btn.setAttribute('title', isDesc ? '切換為正序檢視' : '切換為倒序檢視');
+    btn.setAttribute('aria-label', isDesc ? '切換為正序檢視' : '切換為倒序檢視');
   }
 }
 
