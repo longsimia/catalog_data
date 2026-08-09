@@ -109,6 +109,8 @@ function createTxtEditor(textarea, host, options = {}) {
   const trackedTocAnchors = new Map();
 
   const readTocState = () => {
+    const liveState = window.getTxtTocState?.();
+    if (liveState) return liveState;
     if (!tocStorageKey) return null;
     try { return JSON.parse(localStorage.getItem(tocStorageKey) || 'null'); } catch { return null; }
   };
@@ -127,9 +129,16 @@ function createTxtEditor(textarea, host, options = {}) {
         anchorBefore: String(entry.anchorBefore || ''),
         anchorAfter: String(entry.anchorAfter || ''),
         liveMapped: false,
-        removed: false
+        removed: !!entry.removed
       });
     });
+  };
+
+  const refreshTrackedTocAnchors = state => {
+    trackedTocAnchors.clear();
+    addTrackedEntries(state?.tocEntries);
+    addTrackedEntries(state?.manualTocEntries);
+    tocAnchorsInitialized = !!state;
   };
 
   const ensureTrackedTocAnchors = (force = false) => {
@@ -220,6 +229,7 @@ function createTxtEditor(textarea, host, options = {}) {
     mergeEntries(latest.manualTocEntries);
     latest.savedAt = Date.now();
     try { localStorage.setItem(tocStorageKey, JSON.stringify(latest)); } catch {}
+    window.updateTxtTocAnchors?.(latest);
   };
 
   const scheduleTocPersist = (delay = 250) => {
@@ -457,6 +467,7 @@ function createTxtEditor(textarea, host, options = {}) {
   textarea.tabIndex = -1;
   host.hidden = false;
   textarea.codeMirrorView = view;
+  textarea.refreshTocAnchors = refreshTrackedTocAnchors;
   reconcileTrackedTocAnchors(initialValue);
   if (trackedTocAnchors.size) scheduleTocPersist(0);
 
