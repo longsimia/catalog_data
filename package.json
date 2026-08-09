@@ -9,6 +9,7 @@
     "build:txt-editor": "esbuild src/txt-editor.js --bundle --minify --format=iife --outfile=public/vendor/txt-editor.js"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.10.4",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
     "cors": "^2.8.5",

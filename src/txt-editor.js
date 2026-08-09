@@ -1,5 +1,8 @@
 import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { insertNewline } from '@codemirror/commands';
+import { EditorView, keymap } from '@codemirror/view';
+
+const PARAGRAPH_INDENT = '\u3000\u3000';
 
 function clampPosition(value, length) {
   const number = Number(value);
@@ -48,6 +51,48 @@ function paragraphFingerprint(text) {
   if (!normalized) return '';
   return normalized.length <= 240 ? normalized : `${normalized.slice(0, 120)}\u0000${normalized.slice(-120)}`;
 }
+
+function shouldContinueParagraphIndent(state, from, to, text, composing) {
+  if (composing || text !== '\n' || from !== to) return false;
+  const line = state.doc.lineAt(from);
+  return state.sliceDoc(line.from, from).startsWith(PARAGRAPH_INDENT);
+}
+
+function insertContinuedParagraphIndent(view) {
+  const selection = view.state.selection.main;
+  if (!shouldContinueParagraphIndent(view.state, selection.from, selection.to, '\n', view.composing)) {
+    return false;
+  }
+  const insert = `\n${PARAGRAPH_INDENT}`;
+  view.dispatch({
+    changes: { from: selection.from, to: selection.to, insert },
+    selection: { anchor: selection.from + insert.length },
+    scrollIntoView: true,
+    userEvent: 'input.type'
+  });
+  return true;
+}
+
+function insertParagraphBreak(view) {
+  if (view.composing) return false;
+  return insertContinuedParagraphIndent(view) || insertNewline(view);
+}
+
+function insertPlainParagraphBreak(view) {
+  return view.composing ? false : insertNewline(view);
+}
+
+const paragraphIndentInputHandler = EditorView.inputHandler.of((view, from, to, text) => {
+  if (!shouldContinueParagraphIndent(view.state, from, to, text, view.composing)) return false;
+  const insert = `\n${PARAGRAPH_INDENT}`;
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: from + insert.length },
+    scrollIntoView: true,
+    userEvent: 'input.type'
+  });
+  return true;
+});
 
 function createTxtEditor(textarea, host, options = {}) {
   if (!textarea || !host) return null;
@@ -355,7 +400,12 @@ function createTxtEditor(textarea, host, options = {}) {
   view = new EditorView({
     state: EditorState.create({
       doc: initialValue,
-      extensions: [EditorView.lineWrapping, updateListener]
+      extensions: [
+        EditorView.lineWrapping,
+        keymap.of([{ key: 'Enter', run: insertParagraphBreak, shift: insertPlainParagraphBreak }]),
+        paragraphIndentInputHandler,
+        updateListener
+      ]
     }),
     parent: host
   });
