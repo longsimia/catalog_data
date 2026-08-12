@@ -2808,14 +2808,11 @@ function pruneExpiredTextHistoryFiles(now = Date.now()) {
 }
 
 function formatReadOnlyMeta(options = {}) {
-  const label = escapeXml(options.label || '');
   const createdAtLabel = escapeXml(String(options.createdAtLabel || '').trim().slice(0, 10));
   const updatedAtLabel = escapeXml(options.updatedAtLabel || '');
   const updatedByLabel = escapeXml(options.updatedByLabel || '');
-  if (!label && !updatedAtLabel && !updatedByLabel) return '';
+  if (!updatedAtLabel && !updatedByLabel) return '';
   return `<div class="meta-times">
-    <span id="metaLabelWrap"${label ? '' : ' style="display:none"'}><span id="metaLabelText">${label}</span></span>
-    <span class="meta-dot" id="metaDotPrimary"${label && updatedAtLabel ? '' : ' style="display:none"'} aria-hidden="true"></span>
     <time id="updatedAtText"${createdAtLabel ? ` data-created-at="建立時間：${createdAtLabel}"` : ''}>${updatedAtLabel}</time>
     <span class="meta-dot" id="updatedDot"${updatedAtLabel && updatedByLabel ? '' : ' style="display:none"'} aria-hidden="true"></span>
     <span id="updatedByWrap"${updatedByLabel ? '' : ' style="display:none"'}><span id="updatedByText">${updatedByLabel}</span></span>
@@ -3144,7 +3141,6 @@ function renderTextPreviewPage(item, file, text, options = {}) {
   const previewLabel = getPreviewLabel(file);
   const fileNameRaw = String(file?.name || path.basename(file?.key || 'document'));
   const txtMainTitleRaw = path.parse(fileNameRaw).name || previewLabel;
-  const txtMetaTitleRaw = item?.translatedTitle || item?.title || txtMainTitleRaw;
   const pageTitle = escapeXml(isTxt ? txtMainTitleRaw : previewLabel);
   const normalizedText = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const rawBody = escapeXml(normalizedText);
@@ -3159,7 +3155,6 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     targetSelector: ''
   });
   const metaHtml = formatReadOnlyMeta({
-    label: txtMetaTitleRaw,
     createdAtLabel: canEditTxt ? (options.createdAtLabel || '') : '',
     updatedAtLabel: options.updatedAtLabel || '',
     updatedByLabel: options.updatedByLabel || ''
@@ -3244,7 +3239,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .title{margin:0;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em}
     .filename-input{width:100%;margin:0;padding:0;border:none;background:transparent;color:var(--text);font:inherit;font-size:28px;line-height:1.32;font-weight:700;letter-spacing:.01em;outline:none}
     .meta-times{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;font-size:15px;color:var(--muted)}
-    .meta-times time,.meta-times #metaLabelWrap,.meta-times #metaLabelText,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
+    .meta-times time,.meta-times #updatedByWrap,.meta-times #updatedByText{display:inline;white-space:nowrap}
     .meta-dot{width:3px;height:3px;border-radius:999px;background:currentColor;opacity:.55}
     @media (min-width: 721px){
       #updatedAtText[data-created-at]{position:relative;cursor:help}
