@@ -1863,7 +1863,7 @@ const S = {
   MF:     { cats:[], tags:[] },
   up:     { prevs:[], files:[], tags:[], categories:[], mode:'up', attachmentPrevs: new Set() },
   eTags:  [], eCatsPicked: [], eId: null, ePrevs: [], eDownloadEntries: [],
-  authUsers: [], currentAuthUser: null, roleConfig: null, allRoleConfig: null, adminTab: 'up', adminTabSyncing: false, previewShareAdminPageOpen: false,
+  authUsers: [], currentAuthUser: null, roleConfig: null, allRoleConfig: null, catalogRoleLabels: {}, adminTab: 'up', adminTabSyncing: false, previewShareAdminPageOpen: false,
   savedRoleLabels: null, savedRolePerms: null,
   previewShareAdmin: [],
   previewShareAdminLoading: false,
@@ -2300,7 +2300,10 @@ function handleGalleryCardClick(event, id) {
   openLb(id);
 }
 function getRoleLabel(role) {
-  return S.allRoleConfig?.[role]?.label || S.roleConfig?.[role]?.label || (role === 'owner' ? '站主' : String(role || ''));
+  return S.allRoleConfig?.[role]?.label
+    || S.roleConfig?.[role]?.label
+    || S.catalogRoleLabels?.[role]
+    || (role === 'owner' ? '站主' : String(role || ''));
 }
 function getRoleKeys() {
   const keys = Object.keys(S.allRoleConfig || S.roleConfig || {});
@@ -4700,6 +4703,9 @@ function applyLocalCatalogView(options = {}) {
   }
 }
 function applyCatalogIndex(indexCatalog, fullCatalog = null, options = {}) {
+  S.catalogRoleLabels = indexCatalog?.roleLabels && typeof indexCatalog.roleLabels === 'object'
+    ? { ...indexCatalog.roleLabels }
+    : {};
   if (fullCatalog && Array.isArray(fullCatalog.items) && Array.isArray(indexCatalog?.items)) {
     const availabilityById = new Map(indexCatalog.items.map(item => [String(item?.id || ''), {
       hasDownloadFiles: item?.hasDownloadFiles,

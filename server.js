@@ -1329,6 +1329,15 @@ function getVisibleRoleConfig(cfg, collection = 'scenario') {
   return filtered;
 }
 
+function getVisibleRoleLabels(cfg, collection = 'scenario') {
+  return Object.fromEntries(
+    Object.entries(getVisibleRoleConfig(cfg, collection)).map(([role, entry]) => [
+      role,
+      String(entry?.label || role).trim() || role
+    ])
+  );
+}
+
 function canAccessItemByRole(item, role = 'public') {
   const permission = normalizeItemPermission(item?.permission);
   if (role === 'owner') return true;
@@ -4522,7 +4531,10 @@ app.get('/api/catalog-index', (req, res) => {
   const cfg = readCfg();
   if (!canAccessCollectionByRole(collection, role, cfg)) return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
   const cat = readCat(collection, { syncFiles: false });
-  return res.json(compactCatalogForIndex(filterCatalogForViewer(cat, role), collection));
+  return res.json({
+    ...compactCatalogForIndex(filterCatalogForViewer(cat, role), collection),
+    roleLabels: role === 'public' ? {} : getVisibleRoleLabels(cfg, collection)
+  });
 });
 
 // 匿名索引使用可快取路徑；登入後資料不會進入共享快取。
