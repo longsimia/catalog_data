@@ -335,7 +335,7 @@ function normalizeDownloadEntries(item) {
   return ordered;
 }
 
-function listStoredScenarioFiles(collection = 'scenario', itemId = '') {
+function listStoredItemFiles(collection = 'scenario', itemId = '') {
   const dir = collUploadDir(collection, itemId);
   if (!itemId || !fs.existsSync(dir)) return [];
   const results = [];
@@ -377,9 +377,9 @@ function listStoredScenarioFiles(collection = 'scenario', itemId = '') {
   return results;
 }
 
-function syncScenarioDownloadFiles(item, collection = 'scenario', mode = 'scenario') {
-  if (!item || mode !== 'scenario' || !item.id) return item;
-  const diskFiles = listStoredScenarioFiles(collection, item.id);
+function syncStoredItemFiles(item, collection = 'scenario', mode = 'scenario') {
+  if (!item || !VALID_COLLECTION_MODES.has(mode) || !item.id) return item;
+  const diskFiles = listStoredItemFiles(collection, item.id);
   const existingEntries = normalizeDownloadEntries(item);
   if (!diskFiles.length) {
     return existingEntries.length
@@ -1061,7 +1061,7 @@ const readCat = (collection = 'scenario', options = {}) => {
   cat.items = (cat.items || []).map(item => {
     const syncedItem = options.syncFiles === false
       ? item
-      : syncScenarioDownloadFiles(item, cfg.key, cfg.mode);
+      : syncStoredItemFiles(item, cfg.key, cfg.mode);
     const downloadFiles = normalizeDownloadFiles(syncedItem);
     const categories = normalizeItemCategories(item);
     return {
@@ -4508,7 +4508,8 @@ app.get('/api/catalog', (req, res) => {
   const role = getViewerRole(req);
   const cfg = readCfg();
   if (!canAccessCollectionByRole(collection, role, cfg)) return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
-  const cat = readCat(collection, { syncFiles: false });
+  const shouldSyncFiles = req.query?.all === '1' && role !== 'public';
+  const cat = readCat(collection, { syncFiles: shouldSyncFiles });
   const visibleCatalog = filterCatalogForViewer(cat, role);
   if (req.query?.all === '1' && role !== 'public') return res.json(visibleCatalog);
   res.json(paginateCatalogForRequest(visibleCatalog, req.query || {}));
@@ -4746,9 +4747,12 @@ app.get('/api/items/:id/catalog-detail', (req, res) => {
     const cfg = readCfg();
     if (!canAccessCollectionByRole(collection, role, cfg)) return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
     const cat = readCat(collection, { syncFiles: false });
-    const item = (cat.items || []).find(entry => entry.id === req.params.id);
-    if (!item) return res.status(404).json({ error: '項目不存在' });
-    if (!canAccessItemByRole(item, role)) return res.status(403).json({ error: '你沒有權限查看這個項目' });
+    const storedItem = (cat.items || []).find(entry => entry.id === req.params.id);
+    if (!storedItem) return res.status(404).json({ error: '項目不存在' });
+    if (!canAccessItemByRole(storedItem, role)) return res.status(403).json({ error: '你沒有權限查看這個項目' });
+    const item = role === 'public'
+      ? storedItem
+      : syncStoredItemFiles(storedItem, collection, getCollectionConfig(collection, cfg).mode);
     const visibleItem = role === 'public'
       ? sanitizeCatalogForPublic({ items:[item] }).items[0]
       : item;
@@ -4841,7 +4845,10 @@ app.get('/api/lightbox-lists', auth, (req, res) => {
     if (!ids.length) return res.json({ items: [] });
     const cat = readCat(collection, { syncFiles: false });
     const mode = getCollectionConfig(collection, cfg).mode;
-    const itemById = new Map((cat.items || []).map(item => [String(item.id), item]));
+    const itemById = new Map((cat.items || []).map(item => [
+      String(item.id),
+      ids.includes(String(item.id)) ? syncStoredItemFiles(item, collection, mode) : item
+    ]));
     const canDownload = hasRolePermission(req.authUser, 'downloadFiles', collection);
     const canPreview = hasRolePermission(req.authUser, 'onlinePreview', collection);
     const items = ids.flatMap(id => {
@@ -4866,9 +4873,10 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
   if (!hasRolePermission(req.authUser, 'downloadFiles', collection)) return res.status(403).json({ error: '你沒有下載檔案的權限。' });
   const cat = readCat(collection, { syncFiles: false });
   const collCfg = getCollectionConfig(collection);
-  const item = (cat.items || []).find(i => i.id === req.params.id);
-  if (!item) return res.status(404).json({ error: '找不到項目。' });
-  if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+  const storedItem = (cat.items || []).find(i => i.id === req.params.id);
+  if (!storedItem) return res.status(404).json({ error: '找不到項目。' });
+  if (!canAccessItemByRole(storedItem, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+  const item = syncStoredItemFiles(storedItem, collection, collCfg.mode);
   return res.json(buildDownloadListData(item, collection, collCfg.mode));
 });
 
@@ -4879,9 +4887,10 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
     if (collectionDenied) return res.status(403).json(collectionDenied);
     if (!hasRolePermission(req.authUser, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限使用線上閱覽。' });
     const cat = readCat(collection, { syncFiles: false });
-    const item = (cat.items || []).find(i => i.id === req.params.id);
-    if (!item) return res.status(404).json({ error: '找不到項目。' });
-    if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+    const storedItem = (cat.items || []).find(i => i.id === req.params.id);
+    if (!storedItem) return res.status(404).json({ error: '找不到項目。' });
+    if (!canAccessItemByRole(storedItem, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+    const item = syncStoredItemFiles(storedItem, collection, getCollectionConfig(collection).mode);
     return res.json(buildPreviewListData(item, collection));
   } catch (e) {
     return res.status(500).json({ error: e.message });
