@@ -2468,9 +2468,19 @@ function getPermissionMeta(permission) {
   return { label: '', cls: '' };
 }
 function permissionBadgeHtml(permission) {
-  const meta = getPermissionMeta(permission);
+  const value = normalizePermissionValue(permission || 'public');
+  const meta = getPermissionMeta(value);
   if (!meta.label) return '';
-  return `<span class="perm-badge ${meta.cls}" title="${esc(meta.label)}">${esc(meta.label)}</span>`;
+  return `<span class="perm-badge ${meta.cls}" data-permission="${esc(value)}" title="${esc(meta.label)}">${esc(meta.label)}</span>`;
+}
+function refreshPermissionBadges() {
+  document.querySelectorAll('.perm-badge[data-permission]').forEach(badge => {
+    const meta = getPermissionMeta(badge.dataset.permission || 'public');
+    badge.classList.remove('owner', 'admin');
+    if (meta.cls) badge.classList.add(meta.cls);
+    badge.textContent = meta.label;
+    badge.title = meta.label;
+  });
 }
 function coverPermissionBadgeHtml(permission) {
   const badge = permissionBadgeHtml(permission);
@@ -6834,6 +6844,7 @@ function applyRoleLabels() {
   renderPermissionSelectOptions('collection-new-permission', newCollPerm?.value || 'public');
   document.querySelectorAll('[data-owner-label]').forEach(el => { el.textContent = getRoleLabel('owner'); });
   document.querySelectorAll('[data-admin-label]').forEach(el => { el.textContent = getRoleLabel('admin'); });
+  refreshPermissionBadges();
   renderCollectionConfigPanel();
 }
 
