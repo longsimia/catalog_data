@@ -29,6 +29,7 @@ const TEXT_TOC_MAX_ENTRIES = 2000;
 const TEXT_TOC_MAX_TEXT_LENGTH = 2000;
 const TEXT_HISTORY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const APP_TIME_ZONE = 'Asia/Taipei';
+const DEFAULT_PUBLIC_SHARE_ORIGIN = 'https://share.rikastudio.com';
 const THUMB_MAX_EDGE = 400;
 const THUMB_QUALITY = 80;
 const SCENARIO_LIGHTBOX_PREVIEW_MAX_EDGE = 1600;
@@ -1394,12 +1395,14 @@ const readCfg = () => {
     cfg.uploadOrigin = normalizedUploadOrigin;
     dirty = true;
   }
-  const normalizedPublicShareOrigin = normalizeHttpOrigin(cfg.publicShareOrigin);
+  const normalizedPublicShareOrigin = normalizeHttpOrigin(cfg.publicShareOrigin)
+    || normalizeHttpOrigin(process.env.PUBLIC_SHARE_ORIGIN);
   if (cfg.publicShareOrigin !== normalizedPublicShareOrigin) {
     cfg.publicShareOrigin = normalizedPublicShareOrigin;
     dirty = true;
   }
-  const normalizedPublicShareSiteSlug = normalizePublicShareSiteSlug(cfg.publicShareSiteSlug);
+  const normalizedPublicShareSiteSlug = normalizePublicShareSiteSlug(cfg.publicShareSiteSlug)
+    || normalizePublicShareSiteSlug(process.env.PUBLIC_SHARE_SITE_SLUG);
   if (cfg.publicShareSiteSlug !== normalizedPublicShareSiteSlug) {
     cfg.publicShareSiteSlug = normalizedPublicShareSiteSlug;
     dirty = true;
@@ -3871,7 +3874,9 @@ function cleanupPreviewShareLinksInConfig(cfg = null) {
 }
 
 function getPublicShareOrigin(cfg = null) {
-  return normalizeHttpOrigin(process.env.PUBLIC_SHARE_ORIGIN) || normalizeHttpOrigin(cfg?.publicShareOrigin);
+  const configuredOrigin = normalizeHttpOrigin(process.env.PUBLIC_SHARE_ORIGIN) || normalizeHttpOrigin(cfg?.publicShareOrigin);
+  if (configuredOrigin) return configuredOrigin;
+  return getPublicShareSiteSlug(cfg) ? DEFAULT_PUBLIC_SHARE_ORIGIN : '';
 }
 
 function getPublicShareSiteSlug(cfg = null) {
@@ -4025,6 +4030,45 @@ function findExistingPreviewShareToken(existingLinks = {}, target = {}) {
     }
   }
   return '';
+}
+
+function remapPreviewShareFileLocations(cfg, collection = 'scenario', itemId = '', moves = []) {
+  if (!cfg || typeof cfg !== 'object' || !itemId || !Array.isArray(moves) || !moves.length) return false;
+  const links = cfg.previewShareLinks && typeof cfg.previewShareLinks === 'object' ? cfg.previewShareLinks : {};
+  const normalizedCollection = sanitizeCollectionKey(collection, { collections: getCollectionsConfig(cfg) });
+  const byFileKey = new Map();
+  const byRelativePath = new Map();
+
+  moves.forEach(move => {
+    const fromFileKey = String(move?.fromFileKey || '').trim();
+    const fromRelativePath = String(move?.fromRelativePath || '').replace(/\\/g, '/').trim();
+    const toFileKey = String(move?.toFileKey || '').trim();
+    const toRelativePath = String(move?.toRelativePath || '').replace(/\\/g, '/').trim();
+    if ((!fromFileKey && !fromRelativePath) || (!toFileKey && !toRelativePath)) return;
+    const normalizedMove = { toFileKey, toRelativePath };
+    if (fromFileKey) byFileKey.set(fromFileKey, normalizedMove);
+    if (fromRelativePath) byRelativePath.set(fromRelativePath, normalizedMove);
+  });
+
+  let changed = false;
+  Object.entries(links).forEach(([token, rawEntry]) => {
+    if (!rawEntry || typeof rawEntry !== 'object') return;
+    const entryCollection = sanitizeCollectionKey(rawEntry.collection || 'scenario', { collections: getCollectionsConfig(cfg) });
+    if (entryCollection !== normalizedCollection || String(rawEntry.itemId || '').trim() !== String(itemId).trim()) return;
+    const entryFileKey = String(rawEntry.fileKey || '').trim();
+    const entryRelativePath = String(rawEntry.relativePath || '').replace(/\\/g, '/').trim();
+    const move = (entryFileKey && byFileKey.get(entryFileKey)) || (entryRelativePath && byRelativePath.get(entryRelativePath));
+    if (!move) return;
+    links[token] = {
+      ...rawEntry,
+      fileKey: move.toFileKey,
+      relativePath: move.toRelativePath
+    };
+    changed = true;
+  });
+
+  if (changed) cfg.previewShareLinks = links;
+  return changed;
 }
 
 function createPreviewShareToken(existingLinks = {}) {
@@ -6572,6 +6616,17 @@ app.post('/api/items/:id/file', auth, upload.fields([
       removeStoredFile(it.downloadKey);
     }
 
+    const previousFileLocations = nextFiles.map(file => {
+      const originalFile = existingMap.get(file?.key);
+      return {
+        fileKey: String(originalFile?.key || file?.key || '').trim(),
+        relativePath: String(originalFile?.relativePath || originalFile?.name || file?.relativePath || file?.name || '').replace(/\\/g, '/').trim()
+      };
+    });
+    // Capture the share registry while the old file paths still resolve. readCfg()
+    // prunes broken shares, so reading it after the physical move would lose the
+    // very entries that need to be remapped.
+    const shareCfg = readCfg();
     const download = persistDownloadFiles(
       req.params.id,
       nextFiles,
@@ -6589,7 +6644,22 @@ app.post('/api/items/:id/file', auth, upload.fields([
     enqueueLightboxPreviewsForKeys(derivedImageKeys, { collection });
 
     saveCat(cat, collection);
-    cleanupPreviewShareLinksInConfig();
+    const persistedFiles = normalizeDownloadFiles({ downloadFiles: download.downloadFiles });
+    const shareFileMoves = previousFileLocations.map((previous, index) => {
+      const persisted = persistedFiles[index];
+      if (!persisted) return null;
+      const toFileKey = String(persisted.key || '').trim();
+      const toRelativePath = String(persisted.relativePath || persisted.name || '').replace(/\\/g, '/').trim();
+      if (previous.fileKey === toFileKey && previous.relativePath === toRelativePath) return null;
+      return {
+        fromFileKey: previous.fileKey,
+        fromRelativePath: previous.relativePath,
+        toFileKey,
+        toRelativePath
+      };
+    }).filter(Boolean);
+    if (remapPreviewShareFileLocations(shareCfg, collection, req.params.id, shareFileMoves)) writeJSON(CFG_FILE, shareCfg);
+    cleanupPreviewShareLinksInConfig(shareCfg);
     res.json({ ok: true, item: it });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
