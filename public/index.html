@@ -11673,7 +11673,6 @@ async function openEdit(id) {
   if (S.editAdminWasOpen) {
     document.getElementById('adm')?.classList.add('on');
     document.getElementById('ovbg')?.classList.add('on');
-    if (getToken()) showAdmBody();
   }
   if (S.editManagePageWasOpen) {
     S.manPageOpen = true;
@@ -11685,6 +11684,7 @@ async function openEdit(id) {
 }
 
 function closeEdit() {
+  const returnToManagePage = S.editManagePageWasOpen;
   document.getElementById('edit-mo').classList.remove('on');
   document.getElementById('e-fi-p').value = '';
   document.getElementById('e-pg').innerHTML = '';
@@ -11696,6 +11696,14 @@ function closeEdit() {
   S.ePrevs = [];
   S.eCatsPicked = [];
   closePickPreviewPanels();
+  if (returnToManagePage) {
+    S.manPageOpen = true;
+    document.getElementById('adm')?.classList.add('on');
+    document.getElementById('ovbg')?.classList.add('on');
+    document.getElementById('man-page')?.classList.add('on');
+    syncAdminOverlayScrollLock();
+    renderManVirtual();
+  }
   S.editAdminWasOpen = false;
   S.editManagePageWasOpen = false;
 }
