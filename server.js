@@ -3874,9 +3874,7 @@ function cleanupPreviewShareLinksInConfig(cfg = null) {
 }
 
 function getPublicShareOrigin(cfg = null) {
-  const configuredOrigin = normalizeHttpOrigin(process.env.PUBLIC_SHARE_ORIGIN) || normalizeHttpOrigin(cfg?.publicShareOrigin);
-  if (configuredOrigin) return configuredOrigin;
-  return getPublicShareSiteSlug(cfg) ? DEFAULT_PUBLIC_SHARE_ORIGIN : '';
+  return DEFAULT_PUBLIC_SHARE_ORIGIN;
 }
 
 function getPublicShareSiteSlug(cfg = null) {

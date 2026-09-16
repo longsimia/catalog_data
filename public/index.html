@@ -5952,14 +5952,33 @@ async function downloadModalFile(index) {
   await downloadFromUrl(file.url, file.name || 'download');
 }
 
+const PUBLIC_PREVIEW_SHARE_ORIGIN = 'https://share.rikastudio.com';
+function getCanonicalPreviewShareUrl(source = {}) {
+  const raw = typeof source === 'string'
+    ? source
+    : String(source?.shareUrl || source?.sharePath || (source?.token ? `/preview-share/${encodeURIComponent(source.token)}` : '')).trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    return new URL(`${parsed.pathname}${parsed.search}${parsed.hash}`, `${PUBLIC_PREVIEW_SHARE_ORIGIN}/`).toString();
+  } catch {
+    return '';
+  }
+}
+function normalizePreviewShareRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).map(share => ({
+    ...share,
+    shareUrl: getCanonicalPreviewShareUrl(share)
+  }));
+}
+
 async function sharePreviewFile(index) {
   const data = S.previewModalState?.data;
   const itemId = String(data?.itemId || '').trim();
   if (!itemId) { toast('找不到可分享的附件', 'err'); return; }
   try {
     const resp = await api('POST', `/api/items/${encodeURIComponent(itemId)}/preview-share`, { index: Number(index) || 0 });
-    const sharePath = String(resp?.sharePath || '').trim();
-    const shareUrl = String(resp?.shareUrl || '').trim() || (sharePath ? new URL(sharePath, window.location.origin).toString() : '');
+    const shareUrl = getCanonicalPreviewShareUrl(resp);
     if (!shareUrl) throw new Error('分享連結建立失敗');
     if (S.currentAuthUser?.role === 'owner') loadPreviewShareAdminList().catch(() => {});
     window.open(shareUrl, '_blank', 'noopener');
@@ -5973,8 +5992,7 @@ async function sharePreviewFileDirect(itemId, index) {
   if (!safeItemId) { toast('找不到可分享的附件', 'err'); return; }
   try {
     const resp = await api('POST', `/api/items/${encodeURIComponent(safeItemId)}/preview-share`, { index: Number(index) || 0 });
-    const sharePath = String(resp?.sharePath || '').trim();
-    const shareUrl = String(resp?.shareUrl || '').trim() || (sharePath ? new URL(sharePath, window.location.origin).toString() : '');
+    const shareUrl = getCanonicalPreviewShareUrl(resp);
     if (!shareUrl) throw new Error('分享連結建立失敗');
     if (S.currentAuthUser?.role === 'owner') loadPreviewShareAdminList().catch(() => {});
     window.open(shareUrl, '_blank', 'noopener');
@@ -7498,7 +7516,7 @@ async function loadPreviewShareAdminList() {
   renderPreviewShareAdminPanel();
   try {
     const data = await api('GET', '/api/preview-share-links');
-    S.previewShareAdmin = Array.isArray(data?.shares) ? data.shares : [];
+    S.previewShareAdmin = normalizePreviewShareRows(data?.shares);
   } catch (e) {
     S.previewShareAdmin = [];
     toast(e.message || '讀取公開連結失敗', 'err');
@@ -7510,7 +7528,7 @@ async function loadPreviewShareAdminList() {
 
 async function syncPreviewShareAdmin(url, method, body, successMessage) {
   const data = await api(method, url, body);
-  S.previewShareAdmin = Array.isArray(data?.shares) ? data.shares : [];
+  S.previewShareAdmin = normalizePreviewShareRows(data?.shares);
   S.previewShareAdminLoading = false;
   renderPreviewShareAdminPanel();
   if (successMessage) toast(successMessage, 'ok');
@@ -7550,10 +7568,11 @@ async function runPreviewShareAdminBatch(tokens = [], worker, options = {}) {
 
 async function copyPreviewShareLink(token) {
   const share = (S.previewShareAdmin || []).find(entry => entry.token === token);
-  if (!share?.shareUrl) { toast('找不到可複製的網址', 'err'); return; }
-  try { window.open(share.shareUrl, '_blank', 'noopener'); } catch {}
+  const shareUrl = getCanonicalPreviewShareUrl(share);
+  if (!shareUrl) { toast('找不到可複製的網址', 'err'); return; }
+  try { window.open(shareUrl, '_blank', 'noopener'); } catch {}
   try {
-    await copyText(share.shareUrl);
+    await copyText(shareUrl);
     toast('已複製公開網址', 'ok');
   } catch (e) {
     toast(e.message || '複製網址失敗', 'err');
