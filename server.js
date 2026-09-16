@@ -28,6 +28,7 @@ const TEXT_HISTORY_RETENTION_MS = 72 * 60 * 60 * 1000;
 const TEXT_TOC_MAX_ENTRIES = 2000;
 const TEXT_TOC_MAX_TEXT_LENGTH = 2000;
 const TEXT_HISTORY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+const PREVIEW_STREAM_TICKET_TTL_MS = 1000 * 60 * 60 * 12;
 const APP_TIME_ZONE = 'Asia/Taipei';
 const DEFAULT_PUBLIC_SHARE_ORIGIN = 'https://share.rikastudio.com';
 const THUMB_MAX_EDGE = 400;
@@ -1517,6 +1518,44 @@ function verifyToken(token) {
   }
 }
 
+function makePreviewStreamTicket(user, itemId, previewIndex, collection, fileKey) {
+  const cfg = readCfg();
+  const body = Buffer.from(JSON.stringify({
+    iat: Date.now(),
+    rnd: crypto.randomBytes(8).toString('hex'),
+    uid: user?.id || '',
+    username: user?.username || '',
+    itemId: String(itemId || ''),
+    previewIndex: Number(previewIndex) || 0,
+    collection: sanitizeCollectionKey(collection),
+    fileKey: String(fileKey || '')
+  })).toString('base64url');
+  return `${body}.${sign(body, cfg.authSecret)}`;
+}
+
+function verifyPreviewStreamTicket(token) {
+  if (!token || !token.includes('.')) return null;
+  const [body, sig] = String(token).split('.');
+  if (!body || !sig) return null;
+  const cfg = readCfg();
+  if (!safeEq(sig, sign(body, cfg.authSecret))) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (!(Number(payload.iat) > 0 && (Date.now() - Number(payload.iat)) <= PREVIEW_STREAM_TICKET_TTL_MS)) return null;
+    const user = getAuthUserById(cfg, payload.uid) || getAuthUserByUsername(cfg, payload.username);
+    if (!user) return null;
+    return {
+      user,
+      itemId: String(payload.itemId || ''),
+      previewIndex: Number(payload.previewIndex) || 0,
+      collection: sanitizeCollectionKey(payload.collection),
+      fileKey: String(payload.fileKey || '')
+    };
+  } catch {
+    return null;
+  }
+}
+
 function getTokenFromReq(req) {
   const h = req.headers['authorization'] || '';
   return h.startsWith('Bearer ')
@@ -1837,8 +1876,8 @@ function decodeXmlEntities(str) {
     .replace(/&amp;/g, '&');
 }
 
-function getZipEntryBuffer(zipPath, entryName) {
-  const buf = fs.readFileSync(zipPath);
+function getZipEntryBuffer(zipPath, entryName, archiveBuffer = null) {
+  const buf = Buffer.isBuffer(archiveBuffer) ? archiveBuffer : fs.readFileSync(zipPath);
   const centralSig = 0x02014b50;
   const localSig = 0x04034b50;
   const endSig = 0x06054b50;
@@ -1914,9 +1953,9 @@ function getDocxMimeType(target) {
   return 'application/octet-stream';
 }
 
-function getDocxRelationships(absPath) {
+function getDocxRelationships(absPath, archiveBuffer = null) {
   try {
-    const xml = getZipEntryBuffer(absPath, 'word/_rels/document.xml.rels').toString('utf8');
+    const xml = getZipEntryBuffer(absPath, 'word/_rels/document.xml.rels', archiveBuffer).toString('utf8');
     const rels = {};
     const re = /<Relationship\b[^>]*Id="([^"]+)"[^>]*Type="([^"]+)"[^>]*Target="([^"]+)"(?:[^>]*TargetMode="([^"]+)")?[^>]*\/>/g;
     let match;
@@ -1933,14 +1972,14 @@ function getDocxRelationships(absPath) {
   }
 }
 
-function getDocxMediaMap(absPath, rels) {
+function getDocxMediaMap(absPath, rels, archiveBuffer = null) {
   const images = {};
   Object.entries(rels || {}).forEach(([id, target]) => {
     if (!/media\//i.test(target?.target || '')) return;
     const normalized = target.target.replace(/^\/+/, '').replace(/^word\//, '');
     const entryName = `word/${normalized}`;
     try {
-      const buf = getZipEntryBuffer(absPath, entryName);
+      const buf = getZipEntryBuffer(absPath, entryName, archiveBuffer);
       images[id] = `data:${getDocxMimeType(target.target)};base64,${buf.toString('base64')}`;
     } catch {}
   });
@@ -2282,9 +2321,10 @@ function detectDocxLayoutMode(blocks) {
 }
 
 function extractDocxHtmlBlocks(absPath) {
-  const documentXml = getZipEntryBuffer(absPath, 'word/document.xml').toString('utf8');
-  const rels = getDocxRelationships(absPath);
-  const mediaMap = getDocxMediaMap(absPath, rels);
+  const archiveBuffer = fs.readFileSync(absPath);
+  const documentXml = getZipEntryBuffer(absPath, 'word/document.xml', archiveBuffer).toString('utf8');
+  const rels = getDocxRelationships(absPath, archiveBuffer);
+  const mediaMap = getDocxMediaMap(absPath, rels, archiveBuffer);
   const blocks = [];
   const diagnostics = [];
 
@@ -2312,6 +2352,27 @@ function extractDocxHtmlBlocks(absPath) {
     layoutMode: detectDocxLayoutMode(blocks),
     diagnostics
   };
+}
+
+const docxPreviewCache = new Map();
+const DOCX_PREVIEW_CACHE_MAX_ENTRIES = 12;
+
+function getCachedDocxHtmlBlocks(absPath) {
+  const stat = fs.statSync(absPath);
+  const version = `${stat.size}:${stat.mtimeMs}`;
+  const cached = docxPreviewCache.get(absPath);
+  if (cached?.version === version) {
+    docxPreviewCache.delete(absPath);
+    docxPreviewCache.set(absPath, cached);
+    return cached.preview;
+  }
+  const preview = extractDocxHtmlBlocks(absPath);
+  docxPreviewCache.set(absPath, { version, preview });
+  while (docxPreviewCache.size > DOCX_PREVIEW_CACHE_MAX_ENTRIES) {
+    const oldestKey = docxPreviewCache.keys().next().value;
+    docxPreviewCache.delete(oldestKey);
+  }
+  return preview;
 }
 
 async function extractLegacyDocHtmlBlocks(absPath) {
@@ -3715,7 +3776,7 @@ function resolvePreview(item, previewIndex = 0, collection = 'scenario', preferr
     };
   }
   if (file.ext === '.docx') {
-    const docxPreview = extractDocxHtmlBlocks(file.abs);
+    const docxPreview = getCachedDocxHtmlBlocks(file.abs);
     return {
       type: 'html',
       filename: `${path.parse(file.name).name}.html`,
@@ -5176,10 +5237,57 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
         document.documentElement.style.background = '#111118';
         document.body.style.background = '#111118';
       }
+      function mountStreamPreview(type, streamUrl) {
+        const mimeType = String(type || '').toLowerCase();
+        if (mimeType.includes('application/pdf')) {
+          const embed = document.createElement('embed');
+          embed.src = streamUrl;
+          embed.type = 'application/pdf';
+          document.body.innerHTML = '';
+          document.body.appendChild(embed);
+          return true;
+        }
+        if (!mimeType.startsWith('audio/') && !mimeType.startsWith('video/') && !mimeType.startsWith('image/')) return false;
+        const wrap = document.createElement('div');
+        wrap.className = 'media-wrap';
+        applyMediaViewerTheme();
+        let media;
+        if (mimeType.startsWith('audio/')) {
+          media = document.createElement('audio');
+          media.controls = true;
+          media.autoplay = true;
+          media.preload = 'metadata';
+        } else if (mimeType.startsWith('video/')) {
+          media = document.createElement('video');
+          media.controls = true;
+          media.autoplay = true;
+          media.playsInline = true;
+          media.preload = 'metadata';
+        } else {
+          media = document.createElement('img');
+          media.alt = '';
+        }
+        media.src = streamUrl;
+        document.body.innerHTML = '';
+        wrap.appendChild(media);
+        document.body.appendChild(wrap);
+        return true;
+      }
       const params = new URLSearchParams(window.location.search);
       if (collection !== 'scenario') params.set('c', collection); else params.delete('c');
       const queryString = params.toString();
-      const url = '/api/preview/' + encodeURIComponent(itemId) + '/' + encodeURIComponent(previewIndex) + (queryString ? ('?' + queryString) : '');
+      const apiPath = '/api/preview/' + encodeURIComponent(itemId) + '/' + encodeURIComponent(previewIndex);
+      const url = apiPath + (queryString ? ('?' + queryString) : '');
+      const ticketUrl = apiPath + '/stream-ticket' + (queryString ? ('?' + queryString) : '');
+      try {
+        const ticketResp = await fetch(ticketUrl, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        if (ticketResp.ok) {
+          const ticketData = await ticketResp.json().catch(() => ({}));
+          if (ticketData.streamable && ticketData.streamUrl && mountStreamPreview(ticketData.mimeType, ticketData.streamUrl)) return;
+        }
+      } catch {}
       const resp = await fetch(url, {
         headers: { Authorization: 'Bearer ' + token }
       });
@@ -5593,6 +5701,71 @@ app.get('/api/preview-share/:token', async (req, res) => {
       canEditTxt: false,
       disableContextMenu: true
     });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/preview/:id/:index/stream-ticket', auth, (req, res) => {
+  try {
+    const collection = getC(req);
+    const cfg = readCfg();
+    const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, cfg);
+    if (collectionDenied) return res.status(403).json(collectionDenied);
+    if (!hasRolePermission(req.authUser, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限使用線上閱覽。' });
+    const cat = readCat(collection);
+    const item = (cat.items || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: '找不到項目。' });
+    if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+    const previewIndex = Number(req.params.index) || 0;
+    const files = getPreviewableFiles(item, collection);
+    const file = files[previewIndex];
+    if (!file || !fs.existsSync(file.abs)) return res.status(415).json({ error: '這個檔案類型不支援線上閱覽。' });
+    const streamable = file.ext === '.pdf' || !!PREVIEWABLE_MEDIA_MIME[file.ext];
+    if (!streamable) return res.json({ streamable: false });
+    const ticket = makePreviewStreamTicket(req.authUser, item.id, previewIndex, collection, file.key);
+    const streamPath = `/api/preview-stream/${encodeURIComponent(item.id)}/${previewIndex}?ticket=${encodeURIComponent(ticket)}`;
+    return res.json({
+      streamable: true,
+      mimeType: file.ext === '.pdf' ? 'application/pdf' : getPreviewMediaMimeType(file.ext),
+      streamUrl: withCollection(streamPath, collection)
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/preview-stream/:id/:index', (req, res) => {
+  try {
+    const ticketState = verifyPreviewStreamTicket(String(req.query?.ticket || ''));
+    if (!ticketState) return res.status(401).json({ error: '閱覽授權已失效，請重新開啟檔案。' });
+    const collection = getC(req);
+    const previewIndex = Number(req.params.index) || 0;
+    if (
+      ticketState.collection !== collection ||
+      ticketState.itemId !== req.params.id ||
+      ticketState.previewIndex !== previewIndex
+    ) return res.status(403).json({ error: '閱覽授權與檔案不符。' });
+    const cfg = readCfg();
+    const collectionDenied = ensureCollectionAccessOrNull(collection, ticketState.user?.role, cfg);
+    if (collectionDenied) return res.status(403).json(collectionDenied);
+    if (!hasRolePermission(ticketState.user, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限使用線上閱覽。' });
+    const cat = readCat(collection);
+    const item = (cat.items || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: '找不到項目。' });
+    if (!canAccessItemByRole(item, ticketState.user?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+    const file = getPreviewableFiles(item, collection)[previewIndex];
+    if (!file || !fs.existsSync(file.abs) || String(file.key || '') !== ticketState.fileKey) {
+      return res.status(404).json({ error: '找不到可閱覽的檔案。' });
+    }
+    if (file.ext !== '.pdf' && !PREVIEWABLE_MEDIA_MIME[file.ext]) {
+      return res.status(415).json({ error: '這個檔案不支援串流閱覽。' });
+    }
+    res.setHeader('Cache-Control', 'private, max-age=300, no-transform');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (file.ext === '.pdf') setInlinePdfHeaders(res, file.name);
+    else res.type(getPreviewMediaMimeType(file.ext));
+    return res.sendFile(file.abs);
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
