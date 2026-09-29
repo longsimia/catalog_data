@@ -4183,7 +4183,8 @@ function getPreviewShareMeta(req, cfg, resolved) {
   const preview = resolved?.preview || {};
   const token = String(resolved?.share?.token || '').trim();
   const itemTitle = item.translatedTitle || item.title || preview.label || preview.filename || '公開閱覽';
-  const fileLabel = preview.label || preview.filename || '附件';
+  const rawFileLabel = String(preview.label || preview.filename || '附件');
+  const fileLabel = rawFileLabel.replace(/\.txt$/i, '') || rawFileLabel;
   const url = buildAbsoluteUrl(req, buildPreviewSharePath(token, cfg), cfg);
   const imagePath = getPreviewShareEmbedImagePath(item, preview, token);
   const imageUrl = imagePath ? buildAbsoluteUrl(req, imagePath, cfg) : '';
