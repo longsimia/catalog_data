@@ -3355,7 +3355,8 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     .editor-host .cm-scroller{height:auto;overflow:visible!important;font-family:inherit;line-height:inherit}
     .editor-host .cm-content{min-height:1.92em;padding:0;caret-color:var(--text);font-family:inherit;line-height:inherit}
     .editor-host .cm-line{padding:0}
-    .status{min-height:22px;margin-top:20px;color:var(--muted);font-size:14px}
+    .status{display:inline-flex;align-items:center;height:30px;margin:0;color:var(--muted);font-size:14px;line-height:1;white-space:nowrap}
+    .status:empty{display:none}
     .status[data-state="error"]{color:#a33d2d}
     .status[data-state="success"]{color:#2d7a54}
     .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:60}
@@ -3482,6 +3483,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
         </div>
         <div class="meta-side${isTxt && canEditTxt ? ' meta-side-editable' : ''}">
           <div class="actions${isTxt && canEditTxt ? ' editable-actions' : ''}">
+            ${isTxt && canEditTxt ? `<div class="status" id="saveStatus" aria-live="polite"></div>` : ''}
             ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="redoBtn" title="重做（Ctrl+Shift+Z）" style="display:none">重做</button>` : ''}
             ${isTxt && canEditTxt ? `<button type="button" class="action-btn" id="undoBtn" title="復原（Ctrl+Z）" style="display:none">復原</button>` : ''}
             ${isTxt && canEditTxt ? `<span id="historySlot"></span>` : ''}
@@ -3495,7 +3497,7 @@ function renderTextPreviewPage(item, file, text, options = {}) {
     </header>
     <div class="divider" aria-hidden="true"></div>
     <article class="article">
-      ${isTxt ? (canEditTxt ? `<textarea id="editor" class="editor" spellcheck="false">${rawBody}</textarea><div id="editorHost" class="editor-host" hidden></div><div class="status" id="saveStatus" aria-live="polite"></div>` : `<div class="article-body txt-body" id="txtBody">${txtReadOnlyBlocksHtml || displayBody}</div>`) : `<pre class="article-body">${displayBody}</pre>`}
+      ${isTxt ? (canEditTxt ? `<textarea id="editor" class="editor" spellcheck="false">${rawBody}</textarea><div id="editorHost" class="editor-host" hidden></div>` : `<div class="article-body txt-body" id="txtBody">${txtReadOnlyBlocksHtml || displayBody}</div>`) : `<pre class="article-body">${displayBody}</pre>`}
     </article>
     <div class="footer">${canEditTxt ? 'Editable preview.' : 'Read-only preview.'}</div>
   </main>
