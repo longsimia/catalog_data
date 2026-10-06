@@ -1,6 +1,8 @@
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState, StateField } from '@codemirror/state';
 import { insertNewline } from '@codemirror/commands';
-import { EditorView, keymap } from '@codemirror/view';
+import { Decoration, EditorView, keymap } from '@codemirror/view';
+import TxtFormat from './txt-format.js';
+import { createFormattingUI } from './txt-formatting-ui.js';
 
 const PARAGRAPH_INDENT = '\u3000\u3000';
 
@@ -105,8 +107,115 @@ function createTxtEditor(textarea, host, options = {}) {
   let pendingNavigationPosition = null;
   let tocPersistTimer = 0;
   let tocAnchorsInitialized = false;
+  let formattingUI = null;
+  let displayMode = 'markdown';
+  const modeCompartment = new Compartment();
   const tocStorageKey = String(options.tocStorageKey || '');
+  const modeStorageKey = 'preview-txt-display-mode:' + tocStorageKey;
+  try { if (sessionStorage.getItem(modeStorageKey) === 'plain') displayMode = 'plain'; } catch {}
   const trackedTocAnchors = new Map();
+
+  function buildFormatting(state) {
+    const model = TxtFormat.parse(state.doc.toString());
+    const decorations = [], atomic = [];
+    for (const range of model.hidden) {
+      const hidden = Decoration.replace({ inclusive: false }).range(range.from, range.to);
+      decorations.push(hidden); atomic.push(hidden);
+    }
+    for (const range of model.formats) {
+      if (range.from < range.to) decorations.push(Decoration.mark({
+        class: range.marks.map(mark => 'txt-format-' + mark).join(' ')
+      }).range(range.from, range.to));
+    }
+    for (const link of model.links) {
+      if (link.contentFrom < link.contentTo) decorations.push(Decoration.mark({
+        tagName: 'a', class: 'txt-format-link',
+        attributes: { href: link.href, target: '_blank', rel: 'noopener noreferrer' }
+      }).range(link.contentFrom, link.contentTo));
+    }
+    for (const line of model.lines) {
+      if (line.quote) decorations.push(Decoration.line({ class: 'txt-format-quote' }).range(line.from));
+    }
+    return { model, decorations: Decoration.set(decorations, true), atomic: Decoration.set(atomic, true) };
+  }
+  const formattingField = StateField.define({
+    create: buildFormatting,
+    update(value, transaction) { return transaction.docChanged ? buildFormatting(transaction.state) : value; },
+    provide: field => [
+      EditorView.decorations.from(field, value => value.decorations),
+      EditorView.atomicRanges.of(editorView => editorView.state.field(field).atomic)
+    ]
+  });
+  const getFormatModel = () => view?.state.field(formattingField, false)?.model || TxtFormat.parse(textarea.value);
+
+  function changeFormattedText(result) {
+    if (!result || !result.changes.length || result.text === textarea.value) return false;
+    textarea.dispatchEvent(new CustomEvent('txt-format-beforechange', { bubbles: false }));
+    view.dispatch({
+      changes: result.changes,
+      selection: { anchor: result.from, head: result.to },
+      scrollIntoView: false, userEvent: 'input.format'
+    });
+    view.focus();
+    return true;
+  }
+
+  function markdownParagraphBreak(editorView, plainBreak = false) {
+    if (editorView.composing) return false;
+    const selection = editorView.state.selection.main;
+    const model = getFormatModel();
+    const line = model.lines[editorView.state.doc.lineAt(selection.head).number - 1];
+    if (!line) return false;
+    if (line.quote && selection.empty && !line.text.trim()) {
+      editorView.dispatch({
+        changes: { from: line.from, to: line.bodyStart, insert: '' },
+        selection: { anchor: Math.max(line.from, selection.head - line.prefix.length) },
+        userEvent: 'input.type', scrollIntoView: true
+      });
+      return true;
+    }
+    const visibleFrom = TxtFormat.visibleAt(model, selection.from);
+    const visibleTo = TxtFormat.visibleAt(model, selection.to);
+    const beforeCaret = model.text.slice(line.visibleFrom, visibleFrom);
+    const indentation = !plainBreak && beforeCaret.startsWith(PARAGRAPH_INDENT) ? PARAGRAPH_INDENT : '';
+    changeFormattedText(TxtFormat.replaceVisible(model.source, visibleFrom, visibleTo, '\n' + indentation));
+    return true;
+  }
+
+  function deleteFormattedText(editorView, direction) {
+    if (displayMode !== 'markdown' || editorView.composing) return false;
+    const selection = editorView.state.selection.main, model = getFormatModel();
+    let from = TxtFormat.visibleAt(model, selection.from), to = TxtFormat.visibleAt(model, selection.to);
+    const line = model.lines[editorView.state.doc.lineAt(selection.head).number - 1];
+    if (selection.empty && direction < 0 && line.quote && from === line.visibleFrom) {
+      return changeFormattedText({
+        text: TxtFormat.applyChanges(model.source, [{ from: line.from, to: line.bodyStart, insert: '' }]),
+        changes: [{ from: line.from, to: line.bodyStart, insert: '' }],
+        from: line.from, to: line.from
+      });
+    }
+    if (from === to) {
+      if (direction < 0) {
+        if (from === 0) return true;
+        const before = model.text.slice(0, from);
+        if (typeof Intl.Segmenter === 'function') {
+          from = new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(before).containing(before.length - 1).index;
+        } else {
+          const last = before.charCodeAt(before.length - 1), previous = before.charCodeAt(before.length - 2);
+          from -= last >= 0xdc00 && last <= 0xdfff && previous >= 0xd800 && previous <= 0xdbff ? 2 : 1;
+        }
+      } else {
+        if (to === model.text.length) return true;
+        const after = model.text.slice(to);
+        const first = typeof Intl.Segmenter === 'function'
+          ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(after)[Symbol.iterator]().next().value.segment
+          : Array.from(after)[0];
+        to += first.length;
+      }
+    }
+    changeFormattedText(TxtFormat.replaceVisible(model.source, from, to, ''));
+    return true;
+  }
 
   const readTocState = () => {
     const liveState = window.getTxtTocState?.();
@@ -355,12 +464,28 @@ function createTxtEditor(textarea, host, options = {}) {
       const from = clampPosition(start, length);
       const to = Math.max(from, clampPosition(end, length));
       const inserted = String(replacement ?? '');
+      if (displayMode === 'markdown' && to > from) {
+        const model = getFormatModel();
+        const visibleFrom = TxtFormat.visibleAt(model, from), visibleTo = TxtFormat.visibleAt(model, to);
+        const result = TxtFormat.replaceVisible(model.source, visibleFrom, visibleTo, inserted);
+        const updatedModel = TxtFormat.parse(result.text);
+        const range = TxtFormat.sourceRange(updatedModel, visibleFrom, visibleFrom + inserted.length);
+        let selection = null;
+        if (selectionMode === 'select') selection = { anchor: range.from, head: range.to };
+        else if (selectionMode === 'start') selection = { anchor: range.from };
+        else if (selectionMode === 'end') selection = { anchor: range.to };
+        mapTocAnchorsThroughChanges(view.state.changes(result.changes));
+        dispatchSilently({ changes: result.changes, ...(selection ? { selection } : {}) });
+        return;
+      }
       const insertedEnd = from + inserted.length;
       let selection = null;
       if (selectionMode === 'select') selection = { anchor: from, head: insertedEnd };
       else if (selectionMode === 'start') selection = { anchor: from };
       else if (selectionMode === 'end') selection = { anchor: insertedEnd };
-      dispatchSilently({ changes: { from, to, insert: inserted }, ...(selection ? { selection } : {}) });
+      const change = { from, to, insert: inserted };
+      mapTocAnchorsThroughChanges(view.state.changes(change));
+      dispatchSilently({ changes: change, ...(selection ? { selection } : {}) });
     }
   });
   define('getBoundingClientRect', {
@@ -396,6 +521,7 @@ function createTxtEditor(textarea, host, options = {}) {
   });
 
   const updateListener = EditorView.updateListener.of(update => {
+    if (update.docChanged || update.selectionSet) formattingUI?.handleUpdate(update);
     if (!update.docChanged) return;
     if (!suppressInput) mapTocAnchorsThroughChanges(update.changes);
     if (suppressInput) return;
@@ -412,7 +538,30 @@ function createTxtEditor(textarea, host, options = {}) {
       doc: initialValue,
       extensions: [
         EditorView.lineWrapping,
-        keymap.of([{ key: 'Enter', run: insertParagraphBreak, shift: insertPlainParagraphBreak }]),
+        modeCompartment.of(displayMode === 'markdown' ? [formattingField] : []),
+        keymap.of([
+          {
+            key: 'Enter',
+            run: editorView => displayMode === 'markdown' ? markdownParagraphBreak(editorView) : insertParagraphBreak(editorView),
+            shift: editorView => displayMode === 'markdown' ? markdownParagraphBreak(editorView, true) : insertPlainParagraphBreak(editorView)
+          },
+          { key: 'Backspace', run: editorView => deleteFormattedText(editorView, -1) },
+          { key: 'Delete', run: editorView => deleteFormattedText(editorView, 1) }
+        ]),
+        EditorView.inputHandler.of((editorView, from, to, text) => {
+          if (displayMode !== 'markdown' || editorView.composing) return false;
+          if (text === '\n' && from === to && getFormatModel().lines[editorView.state.doc.lineAt(from).number - 1]?.quote) {
+            return markdownParagraphBreak(editorView);
+          }
+          if (from >= to) return false;
+          const model = getFormatModel();
+          const result = TxtFormat.replaceVisible(model.source, TxtFormat.visibleAt(model, from), TxtFormat.visibleAt(model, to), text);
+          editorView.dispatch({
+            changes: result.changes, selection: { anchor: result.to },
+            userEvent: 'input.type', scrollIntoView: true
+          });
+          return true;
+        }),
         paragraphIndentInputHandler,
         updateListener
       ]
@@ -468,6 +617,84 @@ function createTxtEditor(textarea, host, options = {}) {
   host.hidden = false;
   textarea.codeMirrorView = view;
   textarea.refreshTocAnchors = refreshTrackedTocAnchors;
+  textarea.getDisplayMode = () => displayMode;
+  textarea.getFormatModel = getFormatModel;
+  textarea.getVisibleText = () => displayMode === 'plain' ? textarea.value : getFormatModel().text;
+  textarea.getVisibleSelection = () => {
+    const selection = view.state.selection.main;
+    if (displayMode === 'plain') return { from: selection.from, to: selection.to };
+    const model = getFormatModel();
+    return { from: TxtFormat.visibleAt(model, selection.from), to: TxtFormat.visibleAt(model, selection.to) };
+  };
+  textarea.visibleRangeToSource = (from, to) => displayMode === 'plain' ? { from, to } : TxtFormat.sourceRange(getFormatModel(), from, to);
+  textarea.replaceAllVisibleMatches = (needle, replacement) => {
+    if (displayMode === 'plain') return textarea.value.split(needle).join(replacement);
+    const haystack = getFormatModel().text, matches = [];
+    for (let at = 0; at <= haystack.length - needle.length;) {
+      const found = haystack.indexOf(needle, at);
+      if (found < 0) break;
+      matches.push(found); at = found + needle.length;
+    }
+    let result = textarea.value;
+    for (let i = matches.length - 1; i >= 0; i--) result = TxtFormat.replaceVisible(result, matches[i], matches[i] + needle.length, replacement).text;
+    return result;
+  };
+  const controller = {
+    view, host, getModel: getFormatModel, getMode: () => displayMode,
+    select: (from, to) => textarea.setSelectionRange(from, to),
+    setMode(next) {
+      const normalized = next === 'plain' ? 'plain' : 'markdown';
+      if (normalized === displayMode) return;
+      let selection = null;
+      if (normalized === 'markdown') {
+        const current = view.state.selection.main;
+        const model = getFormatModel();
+        if (model.hidden.some(range =>
+          (current.from > range.from && current.from < range.to) ||
+          (current.to > range.from && current.to < range.to)
+        )) {
+          const mapped = TxtFormat.sourceRange(model, TxtFormat.visibleAt(model, current.from), TxtFormat.visibleAt(model, current.to));
+          selection = current.anchor > current.head ? { anchor: mapped.to, head: mapped.from } : { anchor: mapped.from, head: mapped.to };
+        }
+      }
+      displayMode = normalized;
+      view.dispatch({
+        effects: modeCompartment.reconfigure(displayMode === 'markdown' ? [formattingField] : []),
+        ...(selection ? { selection } : {})
+      });
+      host.classList.toggle('txt-markdown-mode', displayMode === 'markdown');
+      try { sessionStorage.setItem(modeStorageKey, displayMode); } catch {}
+      formattingUI?.scheduleUpdate();
+      window.dispatchEvent(new Event('txt-display-mode-change'));
+    },
+    format(command, href = null) {
+      if (displayMode !== 'markdown' || view.composing) return;
+      const selection = view.state.selection.main;
+      const result = command === 'quote'
+        ? TxtFormat.quoteSelection(textarea.value, selection.from, selection.to)
+        : TxtFormat.formatSelection(textarea.value, selection.from, selection.to, command, href);
+      changeFormattedText(result);
+    }
+  };
+  host.classList.toggle('txt-markdown-mode', displayMode === 'markdown');
+  formattingUI = createFormattingUI(controller);
+  view.contentDOM.addEventListener('copy', event => {
+    if (displayMode !== 'markdown' || !event.clipboardData) return;
+    const selection = textarea.getVisibleSelection();
+    if (selection.from === selection.to) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    event.clipboardData.setData('text/plain', getFormatModel().text.slice(selection.from, selection.to));
+  }, true);
+  view.contentDOM.addEventListener('cut', event => {
+    if (displayMode !== 'markdown' || !event.clipboardData || view.composing) return;
+    const selection = textarea.getVisibleSelection();
+    if (selection.from === selection.to) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    event.clipboardData.setData('text/plain', getFormatModel().text.slice(selection.from, selection.to));
+    changeFormattedText(TxtFormat.replaceVisible(textarea.value, selection.from, selection.to, ''));
+  }, true);
   reconcileTrackedTocAnchors(initialValue);
   if (trackedTocAnchors.size) scheduleTocPersist(0);
 
@@ -495,3 +722,4 @@ function createTxtEditor(textarea, host, options = {}) {
 }
 
 window.createTxtEditor = createTxtEditor;
+window.TxtFormat = TxtFormat;
