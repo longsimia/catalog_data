@@ -723,3 +723,4 @@ function createTxtEditor(textarea, host, options = {}) {
 
 window.createTxtEditor = createTxtEditor;
 window.TxtFormat = TxtFormat;
+createTxtEditor.formattingVersion = 1;
