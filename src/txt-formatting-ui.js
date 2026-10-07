@@ -252,11 +252,13 @@ export function createFormattingUI(controller) {
       }
       hide(); preview.hidden = true;
     }
-    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.isComposing ||
+    const alternate = event.ctrlKey && event.altKey && !event.metaKey && !event.getModifierState?.('AltGraph');
+    if (!(event.ctrlKey || event.metaKey) || (event.altKey && !alternate) || event.shiftKey || event.isComposing ||
         !view.hasFocus || controller.getMode() !== 'markdown') return;
     const command = { b: 'bold', i: 'italic', u: 'underline', k: 'link' }[event.key.toLowerCase()];
     if (!command) return;
     event.preventDefault();
+    event.stopPropagation();
     const selection = view.state.selection.main;
     if (selection.empty) return;
     savedSelection = { from: selection.from, to: selection.to };
