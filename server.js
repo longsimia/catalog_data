@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 const express = require('express');
 const multer  = require('multer');
 const cors    = require('cors');
@@ -7187,4 +7187,3 @@ app.listen(PORT, '0.0.0.0', () => {
     })();
   }, 0);
 });
-
