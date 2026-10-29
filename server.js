@@ -5612,7 +5612,7 @@ function renderPreviewShareShell(token = '', options = {}) {
       }
       const url = '/api/preview-share/' + encodeURIComponent(token);
       const headers = accessToken ? { 'x-preview-share-access': accessToken } : {};
-      const resp = await fetch(url, { headers });
+      const resp = await fetch(url + '?mediaInfo=1', { headers });
       if (!resp.ok) {
         let text = '無法載入檔案';
         try {
@@ -5629,35 +5629,26 @@ function renderPreviewShareShell(token = '', options = {}) {
         return;
       }
       const type = (resp.headers.get('content-type') || '').toLowerCase();
-      if (type.startsWith('audio/')) {
-        const blob = await resp.blob();
-        const mediaUrl = URL.createObjectURL(blob);
+      if (type.includes('application/json')) {
+        const mediaInfo = await resp.json();
+        const mimeType = String(mediaInfo.mimeType || '').toLowerCase();
+        if (!mediaInfo.streamable || (!mimeType.startsWith('audio/') && !mimeType.startsWith('video/'))) {
+          throw new Error('Invalid media stream response');
+        }
+        const streamUrl = new URL(url, window.location.href);
+        if (accessToken) streamUrl.searchParams.set('access', accessToken);
         const wrap = document.createElement('div');
         wrap.className = 'media-wrap';
         applyMediaViewerTheme();
-        const audio = document.createElement('audio');
-        audio.src = mediaUrl;
-        audio.controls = true;
-        audio.autoplay = true;
+        const media = document.createElement(mimeType.startsWith('audio/') ? 'audio' : 'video');
+        media.controls = true;
+        media.autoplay = true;
+        media.preload = 'metadata';
+        if (mimeType.startsWith('video/')) media.playsInline = true;
+        media.src = streamUrl.toString();
         document.body.innerHTML = '';
+        wrap.appendChild(media);
         document.body.appendChild(wrap);
-        wrap.appendChild(audio);
-        return;
-      }
-      if (type.startsWith('video/')) {
-        const blob = await resp.blob();
-        const mediaUrl = URL.createObjectURL(blob);
-        const wrap = document.createElement('div');
-        wrap.className = 'media-wrap';
-        applyMediaViewerTheme();
-        const video = document.createElement('video');
-        video.src = mediaUrl;
-        video.controls = true;
-        video.autoplay = true;
-        video.playsInline = true;
-        document.body.innerHTML = '';
-        document.body.appendChild(wrap);
-        wrap.appendChild(video);
         return;
       }
       if (type.startsWith('image/')) {
@@ -5822,6 +5813,15 @@ app.get('/api/preview-share/:token', async (req, res) => {
         error: accessState.error || '無法存取這個公開連結',
         requiresPassword: !!accessState.requiresPassword
       });
+    }
+    const mimeType = String(resolved.preview.mimeType || '').toLowerCase();
+    const isAudioVideo = resolved.preview.type === 'media'
+      && (mimeType.startsWith('audio/') || mimeType.startsWith('video/'));
+    if (isAudioVideo) {
+      // Recheck share permissions on every media request, including range requests.
+      res.setHeader('Cache-Control', 'private, no-store, no-transform');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (req.query.mediaInfo === '1') return res.json({ streamable: true, mimeType });
     }
     return await sendResolvedPreview(res, resolved.item, resolved.preview, resolved.previewIndex, {
       collection: resolved.share.collection,
