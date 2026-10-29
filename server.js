@@ -5612,9 +5612,9 @@ function renderPreviewShareShell(token = '', options = {}) {
       }
       const url = '/api/preview-share/' + encodeURIComponent(token);
       const headers = accessToken ? { 'x-preview-share-access': accessToken } : {};
-      const resp = await fetch(url + '?mediaInfo=1', { headers });
+      const resp = await fetch(url, { headers });
       if (!resp.ok) {
-        let text = '無法載入檔案';
+        let text = '無法載入檔案（HTTP ' + resp.status + '）';
         try {
           const data = await resp.json();
           if (resp.status === 401 && data.requiresPassword) {
@@ -5629,22 +5629,19 @@ function renderPreviewShareShell(token = '', options = {}) {
         return;
       }
       const type = (resp.headers.get('content-type') || '').toLowerCase();
-      if (type.includes('application/json')) {
-        const mediaInfo = await resp.json();
-        const mimeType = String(mediaInfo.mimeType || '').toLowerCase();
-        if (!mediaInfo.streamable || (!mimeType.startsWith('audio/') && !mimeType.startsWith('video/'))) {
-          throw new Error('Invalid media stream response');
-        }
+      if (type.startsWith('audio/') || type.startsWith('video/')) {
+        // Only inspect response headers; let the player request byte ranges itself.
+        if (resp.body) await resp.body.cancel().catch(() => {});
         const streamUrl = new URL(url, window.location.href);
         if (accessToken) streamUrl.searchParams.set('access', accessToken);
         const wrap = document.createElement('div');
         wrap.className = 'media-wrap';
         applyMediaViewerTheme();
-        const media = document.createElement(mimeType.startsWith('audio/') ? 'audio' : 'video');
+        const media = document.createElement(type.startsWith('audio/') ? 'audio' : 'video');
         media.controls = true;
         media.autoplay = true;
         media.preload = 'metadata';
-        if (mimeType.startsWith('video/')) media.playsInline = true;
+        if (type.startsWith('video/')) media.playsInline = true;
         media.src = streamUrl.toString();
         document.body.innerHTML = '';
         wrap.appendChild(media);
@@ -5821,7 +5818,6 @@ app.get('/api/preview-share/:token', async (req, res) => {
       // Recheck share permissions on every media request, including range requests.
       res.setHeader('Cache-Control', 'private, no-store, no-transform');
       res.setHeader('X-Content-Type-Options', 'nosniff');
-      if (req.query.mediaInfo === '1') return res.json({ streamable: true, mimeType });
     }
     return await sendResolvedPreview(res, resolved.item, resolved.preview, resolved.previewIndex, {
       collection: resolved.share.collection,
