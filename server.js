@@ -5661,7 +5661,12 @@ function renderPreviewShareShell(token = '', options = {}) {
         frame.title = '角色網站';
         frame.setAttribute('sandbox', 'allow-scripts allow-popups');
         frame.referrerPolicy = 'no-referrer';
-        frame.src = url + '/site/' + encodeURIComponent(accessToken || '-') + '/index.html' + location.hash;
+        const assetOrigin = resp.headers.get('x-ockit-site-origin');
+        const previewUrl = new URL(url, location.origin);
+        const assetUrl = assetOrigin ? new URL(previewUrl.pathname, assetOrigin) : previewUrl;
+        assetUrl.pathname += '/site/' + encodeURIComponent(accessToken || '-') + '/index.html';
+        assetUrl.hash = location.hash;
+        frame.src = assetUrl.href;
         document.body.replaceChildren(frame);
         return;
       }
@@ -5965,7 +5970,8 @@ app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProje
     fs.renameSync(next, destination);
     installed = true;
     const revision = crypto.randomUUID();
-    item.ockitSite = { revision, paths };
+    const origin = normalizeHttpOrigin(req.get('origin')) || item.ockitSite?.origin;
+    item.ockitSite = { revision, paths, origin };
     catalog.items[catalog.items.indexOf(item)] = syncStoredItemFiles(item, collection, getCollectionConfig(collection).mode);
     const stagedCatalog = path.join(staging, 'catalog.json');
     writeJSON(stagedCatalog, catalog);
@@ -6016,7 +6022,6 @@ function sendOckitEditorHost(req, res, cfg) {
 
 app.get('/api/preview-share/:token/site/:access/*', (req, res) => {
   const cfg = readCfg();
-  if (!ensureTrustedPublicShareRequest(req, res, cfg)) return;
   const share = getPreviewShareEntry(cfg, req.params.token);
   if (!share || share.relativePath !== OCKIT_FOLDER + '/index.html') return res.sendStatus(404);
   if (!share.enabled) return res.sendStatus(403);
@@ -6051,6 +6056,8 @@ app.get('/api/preview-share/:token', async (req, res) => {
     }
     if (isOckitIndex(resolved)) {
       res.setHeader('X-Ockit-Site', '1');
+      const origin = normalizeHttpOrigin(resolved.item.ockitSite?.origin);
+      if (origin) res.setHeader('X-Ockit-Site-Origin', origin);
       res.setHeader('Cache-Control', 'no-store');
       return res.status(204).end();
     }
