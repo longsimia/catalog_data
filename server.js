@@ -32,6 +32,7 @@ const TEXT_HISTORY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const PREVIEW_STREAM_TICKET_TTL_MS = 1000 * 60 * 60 * 12;
 const APP_TIME_ZONE = 'Asia/Taipei';
 const DEFAULT_PUBLIC_SHARE_ORIGIN = 'https://share.rikastudio.com';
+const OCKIT_EDITOR_ORIGIN = normalizeHttpOrigin(process.env.OCKIT_EDITOR_ORIGIN) || DEFAULT_PUBLIC_SHARE_ORIGIN;
 const THUMB_MAX_EDGE = 400;
 const THUMB_QUALITY = 80;
 const SCENARIO_LIGHTBOX_PREVIEW_MAX_EDGE = 1600;
@@ -3979,7 +3980,7 @@ function resolveSharedPreview(cfg, token = '') {
   const previewIndex = resolvePreviewFileIndexByShare(item, share);
   if (previewIndex < 0) return null;
   const preview = resolvePreview(item, previewIndex, share.collection);
-  if (!preview) return null;
+  if (!preview || isOckitEditor(preview)) return null;
   return { share, item, preview, previewIndex };
 }
 
@@ -4679,9 +4680,10 @@ const storage = multer.diskStorage({
   }
 });
 
+const ATTACHMENT_SIZE_LIMIT = 2 * 1024 * 1024 * 1024;
 const upload = multer({
   storage,
-  limits: { fileSize: 2 * 1024 * 1024 * 1024 } // 2 GB 上限
+  limits: { fileSize: ATTACHMENT_SIZE_LIMIT }
 });
 function removeStoredFile(key) {
   if (!key) return;
@@ -4700,7 +4702,13 @@ app.use(express.static(path.join(ROOT, 'public')));
 app.use('/vendor/opencc-js', express.static(path.join(ROOT, 'node_modules', 'opencc-js', 'dist', 'umd')));
 app.use('/uploads',
   (req, res, next) => {
-    if (path.basename(req.path).startsWith('dl.')) {
+    const relativePath = decodeURIComponent(req.path);
+    const segments = relativePath.toLowerCase().split('/');
+    const editorPath = path.resolve(UPLOADS, '.' + relativePath);
+    if (segments.includes('ockit-site') || (segments.at(-1) === 'editor.html' &&
+        isSubPath(editorPath, UPLOADS) && fs.existsSync(editorPath) &&
+        isOckitEditor({ type: 'html-file', filename: 'editor.html', text: readTextFile(editorPath).text })) ||
+        path.basename(req.path).startsWith('dl.')) {
       return res.status(403).json({ error: 'Direct upload access is not allowed here.' });
     }
     next();
@@ -4708,6 +4716,7 @@ app.use('/uploads',
   express.static(UPLOADS, { maxAge: '7d' })
 );
 app.get('/thumbs/*', async (req, res) => {
+  if (req.params[0].toLowerCase().split('/').includes('ockit-site')) return res.sendStatus(404);
   const sourceKey = resolveThumbSourceFromRequestPath(req.params[0] || '');
   if (!sourceKey || path.basename(sourceKey).startsWith('dl.')) {
     return res.status(404).end();
@@ -4722,6 +4731,7 @@ app.get('/thumbs/*', async (req, res) => {
 });
 
 app.get('/lightbox-previews/*', async (req, res) => {
+  if (req.params[0].toLowerCase().split('/').includes('ockit-site')) return res.sendStatus(404);
   const sourceKey = resolveLightboxPreviewSourceFromRequestPath(req.params[0] || '');
   if (!sourceKey || path.basename(sourceKey).startsWith('dl.')) {
     return res.status(404).end();
@@ -5155,6 +5165,9 @@ app.post('/api/items/:id/preview-share', auth, (req, res) => {
     const previewIndex = Number(req.body?.index);
     const file = files[previewIndex];
     if (!file) return res.status(404).json({ error: '找不到可預覽的檔案。' });
+    if (file.name.toLowerCase() === 'editor.html' && isOckitEditor(resolvePreview(item, previewIndex, collection))) {
+      return res.status(403).json({ error: '編輯器請透過項目的線上閱覽開啟。' });
+    }
     cfg.previewShareLinks = cfg.previewShareLinks && typeof cfg.previewShareLinks === 'object' ? cfg.previewShareLinks : {};
     const shareEntry = {
       collection,
@@ -5340,6 +5353,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
       <p id="msg">正在載入檔案...</p>
     </div>
   </div>
+  <script src="/ockit-host.js"></script>
   <script>
     (() => {
       const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
@@ -5415,7 +5429,9 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
           if (ticketData.streamable && ticketData.streamUrl && mountStreamPreview(ticketData.mimeType, ticketData.streamUrl)) return;
         }
       } catch {}
-      const resp = await fetch(url, {
+      const editorPreviewUrl = new URL(url, location.origin);
+      editorPreviewUrl.searchParams.set('ockitOrigin', location.origin);
+      const resp = await fetch(editorPreviewUrl, {
         headers: { Authorization: 'Bearer ' + token }
       });
       if (!resp.ok) {
@@ -5484,6 +5500,16 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
         return;
       }
       const html = await resp.text();
+      if (resp.headers.get('x-ockit-published-file') === '1') {
+        msg.textContent = '請在編輯器內預覽，或對此檔案使用公開閱覽。';
+        return;
+      }
+      if (resp.headers.get('x-ockit-editor') === '1') {
+        const editorUrl = '/api/items/' + encodeURIComponent(itemId) + '/ockit-site';
+        window.mountOckitEditor(html, editorUrl + (queryString ? '?' + queryString : ''), token,
+          ${JSON.stringify(OCKIT_EDITOR_ORIGIN)}, resp.headers.get('x-ockit-host-ticket'));
+        return;
+      }
       document.open();
       document.write(html);
       document.close();
@@ -5629,6 +5655,15 @@ function renderPreviewShareShell(token = '', options = {}) {
         return;
       }
       const type = (resp.headers.get('content-type') || '').toLowerCase();
+      if (resp.headers.get('x-ockit-site') === '1') {
+        const frame = document.createElement('iframe');
+        frame.title = '角色網站';
+        frame.setAttribute('sandbox', 'allow-scripts allow-popups');
+        frame.referrerPolicy = 'no-referrer';
+        frame.src = url + '/site/' + encodeURIComponent(accessToken || '-') + '/index.html' + location.hash;
+        document.body.replaceChildren(frame);
+        return;
+      }
       if (type.startsWith('audio/') || type.startsWith('video/')) {
         // Only inspect response headers; let the player request byte ranges itself.
         if (resp.body) await resp.body.cancel().catch(() => {});
@@ -5798,6 +5833,207 @@ app.get('/preview-share/:token', (req, res) => {
   }
 });
 
+const OCKIT_FOLDER = 'ockit-site';
+const OCKIT_REQUIRED = ['index.html', 'style.css', 'data.js'];
+const OCKIT_ASSET = /\.(?:html?|css|js|mjs|json|png|jpe?g|gif|webp|svg|avif|bmp|ico|mp3|wav|ogg|oga|m4a|aac|mp4|m4v|webm|ogv|mov|woff2?|ttf|otf)$/i;
+
+function isOckitEditor(preview) {
+  return preview?.type === 'html-file' && /^editor\.html$/i.test(preview.filename)
+    && preview.text.includes('name="ockit-project-editor"');
+}
+
+function isOckitIndex(resolved) {
+  return resolved.preview.file?.relativePath === OCKIT_FOLDER + '/index.html'
+    && Array.isArray(resolved.item.ockitSite?.paths);
+}
+
+function ockitRelativePath(value) {
+  if (typeof value !== 'string' || value !== normalizeRelativePath(value, '') ||
+      value.split('/').some(part => !part || part.startsWith('.')) ||
+      /(^|\/)editor\.html$/i.test(value) || !OCKIT_ASSET.test(value)) {
+    throw new Error('網站附件路徑無效');
+  }
+  return value;
+}
+
+function ockitProject(req, res, next) {
+  const collection = getC(req);
+  const denied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
+  if (denied) return res.status(403).json(denied);
+  if (!hasRolePermission(req.authUser, 'onlinePreview', collection) ||
+      !hasRolePermission(req.authUser, 'editItemInfo', collection)) return res.sendStatus(403);
+  const catalog = readCat(collection);
+  const item = catalog.items.find(entry => entry.id === req.params.id);
+  if (!item) return res.sendStatus(404);
+  if (!canAccessItemByRole(item, req.authUser?.role)) return res.sendStatus(403);
+  req.ockitProject = { collection, catalog, item };
+  next();
+}
+
+function ockitProjectFiles(item) {
+  const files = new Map();
+  const attachments = normalizeDownloadFiles(item);
+  for (const file of attachments) {
+    const name = file.relativePath || file.name;
+    if (!name.startsWith(OCKIT_FOLDER + '/')) files.set(name, { ...file, saved: false });
+  }
+  for (const file of attachments) {
+    if (file.relativePath?.startsWith(OCKIT_FOLDER + '/')) {
+      files.set(file.relativePath.slice(OCKIT_FOLDER.length + 1), { ...file, saved: true });
+    }
+  }
+  for (const name of files.keys()) {
+    try { ockitRelativePath(name); }
+    catch { files.delete(name); }
+  }
+  return files;
+}
+
+app.get('/api/items/:id/ockit-site', auth, ockitProject, (req, res) => {
+  const { item } = req.ockitProject;
+  const files = ockitProjectFiles(item);
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.query.file !== undefined) {
+    const file = files.get(req.query.file);
+    if (!file) return res.sendStatus(404);
+    res.setHeader('Content-Security-Policy', 'sandbox');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.sendFile(file.key, { root: UPLOADS });
+  }
+  return res.json({
+    revision: item.ockitSite?.revision || '',
+    files: [...files].map(([path, file]) => ({ path, saved: file.saved }))
+  });
+});
+
+const ockitUpload = multer({
+  dest: DATA,
+  limits: { fileSize: ATTACHMENT_SIZE_LIMIT, files: 500, fields: 502 }
+}).array('files', 500);
+
+app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProject, (req, res) => {
+  const { collection, catalog, item } = req.ockitProject;
+  let staging;
+  let backup;
+  let installed = false;
+  let committed = false;
+  const destination = path.join(collUploadDir(collection, item.id), OCKIT_FOLDER);
+  try {
+    if (req.body.revision !== (item.ockitSite?.revision || '')) {
+      return res.status(409).json({ error: '項目已有新版，請重新開啟編輯器後再儲存。' });
+    }
+    const paths = [...new Set(JSON.parse(req.body.paths).map(ockitRelativePath))];
+    const names = [req.body.relativePaths].flat().map(ockitRelativePath);
+    if (names.length !== req.files.length || new Set(names.map(name => name.toLowerCase())).size !== names.length ||
+        new Set(paths.map(name => name.toLowerCase())).size !== paths.length ||
+        !OCKIT_REQUIRED.every(name => paths.includes(name)) ||
+        !names.every(name => paths.includes(name))) {
+      return res.status(400).json({ error: '網站附件清單不完整或有重複路徑。' });
+    }
+    const uploads = new Map(names.map((name, index) => [name, req.files[index].path]));
+    const existing = ockitProjectFiles(item);
+    staging = fs.mkdtempSync(path.join(DATA, 'ockit-'));
+    const next = path.join(staging, 'next');
+    fs.mkdirSync(next);
+    if (fs.existsSync(destination)) fs.cpSync(destination, next, { recursive: true });
+    const nextPaths = new Set(paths);
+    for (const name of item.ockitSite?.paths || []) {
+      if (!nextPaths.has(name)) {
+        fs.rmSync(resolveUploadTargetPath(next, ockitRelativePath(name)), { force: true });
+      }
+    }
+    for (const name of paths) {
+      const existingFile = existing.get(name);
+      if (!uploads.has(name) && existingFile?.saved) continue;
+      const source = uploads.get(name) || (existingFile && path.join(UPLOADS, existingFile.key));
+      if (!source || !fs.existsSync(source)) {
+        return res.status(400).json({ error: '找不到網站附件：' + name });
+      }
+      const target = resolveUploadTargetPath(next, name);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(source, target);
+    }
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    if (fs.existsSync(destination)) {
+      backup = path.join(staging, 'previous');
+      fs.renameSync(destination, backup);
+    }
+    fs.renameSync(next, destination);
+    installed = true;
+    const revision = crypto.randomUUID();
+    item.ockitSite = { revision, paths };
+    catalog.items[catalog.items.indexOf(item)] = syncStoredItemFiles(item, collection, getCollectionConfig(collection).mode);
+    const stagedCatalog = path.join(staging, 'catalog.json');
+    writeJSON(stagedCatalog, catalog);
+    fs.renameSync(stagedCatalog, collFile(collection));
+    catalogSnapshotCache.delete(collection);
+    committed = true;
+    return res.json({ revision });
+  } catch (error) {
+    return res.status(400).json({ error: error.message || '儲存網站失敗' });
+  } finally {
+    try {
+      if (!committed && installed) fs.renameSync(destination, path.join(staging, 'failed'));
+      if (!committed && backup && fs.existsSync(backup)) fs.renameSync(backup, destination);
+      if (staging) fs.rmSync(staging, { recursive: true, force: true });
+    } finally {
+      for (const file of req.files) fs.rmSync(file.path, { force: true });
+    }
+  }
+});
+
+app.get('/api/preview-share/editor-host', (req, res) => {
+  const cfg = readCfg();
+  if (!ensureTrustedPublicShareRequest(req, res, cfg)) return;
+  const [body, signature] = String(req.query.ticket || '').split('.');
+  if (!body || !signature || !safeEq(sign(body, cfg.authSecret), signature)) return res.sendStatus(403);
+  let parentOrigin;
+  try {
+    const ticket = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    parentOrigin = normalizeHttpOrigin(ticket.origin);
+    if (ticket.scope !== 'ockit-editor' || !parentOrigin || Date.now() >= ticket.expires) return res.sendStatus(403);
+  } catch { return res.sendStatus(403); }
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Content-Security-Policy', 'frame-ancestors ' + parentOrigin);
+  return res.type('html').send(`<!doctype html><meta charset="utf-8"><script>
+    const editorParentOrigin = ${JSON.stringify(parentOrigin)};
+    addEventListener('message', function init(event) {
+      if (event.source !== parent || event.origin !== editorParentOrigin || event.origin === location.origin ||
+          event.data?.type !== 'ockit-init' || typeof event.data.html !== 'string') return;
+      removeEventListener('message', init);
+      const html = event.data.html
+        .replace('<script src="data.js"><' + '/script>', '')
+        .replace(/<head\\b[^>]*>/i, head =>
+          head + '<meta name="ockit-host" content="' + encodeURIComponent(event.origin) + '">');
+      document.open(); document.write(html); document.close();
+    });
+    if (parent !== window) parent.postMessage({ type: 'ockit-ready' }, editorParentOrigin);
+  </script>`);
+});
+
+app.get('/api/preview-share/:token/site/:access/*', (req, res) => {
+  const cfg = readCfg();
+  if (!ensureTrustedPublicShareRequest(req, res, cfg)) return;
+  const share = getPreviewShareEntry(cfg, req.params.token);
+  if (!share || share.relativePath !== OCKIT_FOLDER + '/index.html') return res.sendStatus(404);
+  if (!share.enabled) return res.sendStatus(403);
+  if (share.passwordHash && !verifyPreviewShareAccessToken(cfg, share, req.params.access)) {
+    return res.sendStatus(401);
+  }
+  const catalog = readCat(share.collection, { syncFiles: false });
+  const item = catalog.items.find(entry => entry.id === share.itemId);
+  if (!item) return res.sendStatus(404);
+  const root = path.join(collUploadDir(share.collection, item.id), OCKIT_FOLDER);
+  const name = req.params[0];
+  if (!item.ockitSite?.paths?.includes(name) || !fs.existsSync(path.join(root, 'index.html'))) return res.sendStatus(404);
+  res.setHeader('Cache-Control', 'private, no-store, no-transform');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', 'sandbox allow-scripts allow-popups');
+  return res.sendFile(name, { root });
+});
+
 app.get('/api/preview-share/:token', async (req, res) => {
   try {
     const cfg = readCfg();
@@ -5810,6 +6046,11 @@ app.get('/api/preview-share/:token', async (req, res) => {
         error: accessState.error || '無法存取這個公開連結',
         requiresPassword: !!accessState.requiresPassword
       });
+    }
+    if (isOckitIndex(resolved)) {
+      res.setHeader('X-Ockit-Site', '1');
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(204).end();
     }
     const mimeType = String(resolved.preview.mimeType || '').toLowerCase();
     const isAudioVideo = resolved.preview.type === 'media'
@@ -5907,6 +6148,20 @@ app.get('/api/preview/:id/:index', auth, async (req, res) => {
     const previewIndex = Number(req.params.index) || 0;
     const preview = resolvePreview(item, previewIndex, collection, req.query?.encoding);
     if (!preview) return res.status(415).json({ error: '這個檔案類型不支援線上閱覽。' });
+    if (isOckitEditor(preview)) {
+      if (!hasRolePermission(req.authUser, 'editItemInfo', collection)) return res.sendStatus(403);
+      const origin = normalizeHttpOrigin(req.query.ockitOrigin);
+      if (!origin || origin === OCKIT_EDITOR_ORIGIN) return res.sendStatus(400);
+      const cfg = readCfg();
+      const ticket = Buffer.from(JSON.stringify({ scope: 'ockit-editor', origin, expires: Date.now() + 60000 })).toString('base64url');
+      res.setHeader('X-Ockit-Editor', '1');
+      res.setHeader('X-Ockit-Host-Ticket', ticket + '.' + sign(ticket, cfg.authSecret));
+      res.setHeader('Content-Security-Policy', 'sandbox');
+      res.setHeader('Cache-Control', 'no-store');
+    } else if (preview.type === 'html-file' && preview.file?.relativePath?.startsWith(OCKIT_FOLDER + '/')) {
+      res.setHeader('X-Ockit-Published-File', '1');
+      res.setHeader('Content-Security-Policy', 'sandbox');
+    }
     return await sendResolvedPreview(res, item, preview, previewIndex, {
       collection,
       canEditTxt: preview.file?.ext === '.txt' && canEditTxtPreview(req.authUser, collection)
