@@ -5386,7 +5386,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
       <p id="msg">正在載入檔案...</p>
     </div>
   </div>
-  <script src="/ockit-host.js?v=3"></script>
+  <script src="/ockit-host.js?v=4"></script>
   <script>
     (() => {
       const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
@@ -5702,6 +5702,14 @@ function renderPreviewShareShell(token = '', options = {}) {
         if (site?.revision) assetUrl.searchParams.set('rev', site.revision);
         assetUrl.hash = location.hash;
         frame.src = assetUrl.href;
+        if (site?.favicon) {
+          const icon = document.createElement('link');
+          icon.rel = 'icon';
+          const iconUrl = new URL(site.favicon.split('/').map(encodeURIComponent).join('/'), assetUrl);
+          if (site.revision) iconUrl.searchParams.set('rev', site.revision);
+          icon.href = iconUrl.href;
+          document.head.appendChild(icon);
+        }
         document.body.replaceChildren(frame);
         return;
       }
@@ -5869,7 +5877,11 @@ app.get('/preview-share/:token', (req, res) => {
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).send('找不到分享的線上閱覽檔案');
     const site = isOckitIndex(resolved)
-      ? { origin: normalizeHttpOrigin(resolved.item.ockitSite.origin), revision: getOckitRevision(resolved.item) }
+      ? {
+          origin: normalizeHttpOrigin(resolved.item.ockitSite.origin),
+          revision: getOckitRevision(resolved.item),
+          favicon: resolved.item.ockitSite.favicon || ''
+        }
       : null;
     if (site) res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -5967,7 +5979,7 @@ app.get('/api/items/:id/ockit-site', auth, ockitProject, (req, res) => {
 
 const ockitUpload = multer({
   dest: DATA,
-  limits: { fileSize: ATTACHMENT_SIZE_LIMIT, files: 500, fields: 504 }
+  limits: { fileSize: ATTACHMENT_SIZE_LIMIT, files: 500, fields: 505 }
 }).array('files', 500);
 
 app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProject, (req, res) => {
@@ -5985,6 +5997,12 @@ app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProje
     const names = [req.body.relativePaths].flat().map(ockitRelativePath);
     const entry = ockitRelativePath(req.body.entry ?? 'index.html');
     const title = typeof req.body.title === 'string' ? req.body.title.trim().slice(0, 200) : (item.ockitSite?.title || '');
+    const favicon = req.body.favicon === undefined
+      ? paths.includes(item.ockitSite?.favicon) ? item.ockitSite.favicon : ''
+      : req.body.favicon;
+    if (favicon && (favicon !== ockitRelativePath(favicon) || !paths.includes(favicon) || !/\.(?:ico|png|svg|webp|gif|jpe?g)$/i.test(favicon))) {
+      return res.status(400).json({ error: '分頁圖示必須是本次儲存的圖片附件。' });
+    }
     if (names.length !== req.files.length || new Set(names.map(name => name.toLowerCase())).size !== names.length ||
         new Set(paths.map(name => name.toLowerCase())).size !== paths.length ||
         entry.includes('/') || !/\.html$/i.test(entry) ||
@@ -6025,7 +6043,7 @@ app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProje
     installed = true;
     const revision = crypto.randomUUID();
     const origin = normalizeHttpOrigin(req.get('origin')) || normalizeHttpOrigin(req.get('referer')) || item.ockitSite?.origin;
-    item.ockitSite = { revision, paths, origin, entry, title };
+    item.ockitSite = { revision, paths, origin, entry, title, favicon };
     catalog.items[catalog.items.indexOf(item)] = syncStoredItemFiles(item, collection, getCollectionConfig(collection).mode);
     const stagedCatalog = path.join(staging, 'catalog.json');
     writeJSON(stagedCatalog, catalog);

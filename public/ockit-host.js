@@ -18,6 +18,7 @@
         options.body.set('paths', JSON.stringify(message.paths));
         if (typeof message.entry === 'string') options.body.set('entry', message.entry);
         if (typeof message.title === 'string') options.body.set('title', message.title);
+        if (typeof message.favicon === 'string') options.body.set('favicon', message.favicon);
         for (const entry of message.files) {
           options.body.append('relativePaths', entry.path);
           options.body.append('files', entry.blob, 'attachment');
