@@ -5526,6 +5526,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
 
 function renderPreviewShareShell(token = '', options = {}) {
   const meta = options.meta || {};
+  const site = options.site || null;
   const safePageTitle = escapeMetaContent(meta.pageTitle || meta.title || '公開閱覽');
   const safeTitle = escapeMetaContent(meta.title || meta.pageTitle || '公開閱覽');
   const safeDescription = escapeMetaContent(meta.description || '');
@@ -5656,12 +5657,13 @@ function renderPreviewShareShell(token = '', options = {}) {
         return;
       }
       const type = (resp.headers.get('content-type') || '').toLowerCase();
-      if (resp.headers.get('x-ockit-site') === '1') {
+      const site = ${JSON.stringify(site)};
+      if (site || resp.headers.get('x-ockit-site') === '1') {
         const frame = document.createElement('iframe');
         frame.title = '角色網站';
         frame.setAttribute('sandbox', 'allow-scripts allow-popups');
         frame.referrerPolicy = 'no-referrer';
-        const assetOrigin = resp.headers.get('x-ockit-site-origin');
+        const assetOrigin = site?.origin || resp.headers.get('x-ockit-site-origin');
         const previewUrl = new URL(url, location.origin);
         const assetUrl = assetOrigin ? new URL(previewUrl.pathname, assetOrigin) : previewUrl;
         assetUrl.pathname += '/site/' + encodeURIComponent(accessToken || '-') + '/index.html';
@@ -5833,9 +5835,14 @@ app.get('/preview-share/:token', (req, res) => {
     }
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).send('找不到分享的線上閱覽檔案');
+    const site = isOckitIndex(resolved)
+      ? { origin: normalizeHttpOrigin(resolved.item.ockitSite.origin) }
+      : null;
+    if (site) res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(renderPreviewShareShell(req.params.token, {
-      meta: getPreviewShareMeta(req, cfg, resolved)
+      meta: getPreviewShareMeta(req, cfg, resolved),
+      site
     }));
   } catch (e) {
     return res.status(500).send(e.message);
@@ -5970,7 +5977,7 @@ app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProje
     fs.renameSync(next, destination);
     installed = true;
     const revision = crypto.randomUUID();
-    const origin = normalizeHttpOrigin(req.get('origin')) || item.ockitSite?.origin;
+    const origin = normalizeHttpOrigin(req.get('origin')) || normalizeHttpOrigin(req.get('referer')) || item.ockitSite?.origin;
     item.ockitSite = { revision, paths, origin };
     catalog.items[catalog.items.indexOf(item)] = syncStoredItemFiles(item, collection, getCollectionConfig(collection).mode);
     const stagedCatalog = path.join(staging, 'catalog.json');
