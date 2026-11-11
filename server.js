@@ -3959,6 +3959,10 @@ function resolvePreview(item, previewIndex = 0, collection = 'scenario', preferr
 
 function resolvePreviewFileIndexByShare(item, share = {}) {
   const files = getPreviewableFiles(item, share.collection || 'scenario');
+  if (item.ockitSite && share.relativePath === OCKIT_SHARE_PATH) {
+    const entryPath = OCKIT_FOLDER + '/' + getOckitEntry(item);
+    return files.findIndex(file => file.relativePath === entryPath);
+  }
   const idx = files.findIndex(file => {
     if (share.fileKey && file?.key === share.fileKey) return true;
     if (share.relativePath && String(file?.relativePath || '').replace(/\\/g, '/') === share.relativePath) return true;
@@ -4324,7 +4328,9 @@ function getPreviewShareMeta(req, cfg, resolved) {
   const token = String(resolved?.share?.token || '').trim();
   const itemTitle = item.translatedTitle || item.title || preview.label || preview.filename || '公開閱覽';
   const rawFileLabel = String(preview.label || preview.filename || '附件');
-  const fileLabel = rawFileLabel.replace(/\.txt$/i, '') || rawFileLabel;
+  const fileLabel = isOckitIndex(resolved)
+    ? (String(item.ockitSite.title || '').trim() || itemTitle)
+    : rawFileLabel.replace(/\.txt$/i, '') || rawFileLabel;
   const url = buildAbsoluteUrl(req, buildPreviewSharePath(token, cfg), cfg);
   const imagePath = getPreviewShareEmbedImagePath(item, preview, token);
   const imageUrl = imagePath ? buildAbsoluteUrl(req, imagePath, cfg) : '';
@@ -5195,11 +5201,12 @@ app.post('/api/items/:id/preview-share', auth, (req, res) => {
       return res.status(403).json({ error: '編輯器請透過項目的線上閱覽開啟。' });
     }
     cfg.previewShareLinks = cfg.previewShareLinks && typeof cfg.previewShareLinks === 'object' ? cfg.previewShareLinks : {};
+    const isSite = isOckitIndex({ item, preview: { file } });
     const shareEntry = {
       collection,
       itemId: item.id,
-      fileKey: String(file.key || '').trim(),
-      relativePath: String(file.relativePath || file.name || '').replace(/\\/g, '/').trim(),
+      fileKey: isSite ? '' : String(file.key || '').trim(),
+      relativePath: isSite ? OCKIT_SHARE_PATH : String(file.relativePath || file.name || '').replace(/\\/g, '/').trim(),
       createdAt: Date.now(),
       enabled: true,
       passwordHash: ''
@@ -5379,7 +5386,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
       <p id="msg">正在載入檔案...</p>
     </div>
   </div>
-  <script src="/ockit-host.js?v=2"></script>
+  <script src="/ockit-host.js?v=3"></script>
   <script>
     (() => {
       const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
@@ -5876,7 +5883,7 @@ app.get('/preview-share/:token', (req, res) => {
 });
 
 const OCKIT_FOLDER = 'ockit-site';
-const OCKIT_REQUIRED = ['index.html', 'style.css', 'data.js'];
+const OCKIT_SHARE_PATH = OCKIT_FOLDER + '/index.html';
 const OCKIT_ASSET = /\.(?:html?|css|js|mjs|json|png|jpe?g|gif|webp|svg|avif|bmp|ico|mp3|wav|ogg|oga|m4a|aac|mp4|m4v|webm|ogv|mov|woff2?|ttf|otf)$/i;
 
 function isOckitEditor(preview) {
@@ -5885,8 +5892,12 @@ function isOckitEditor(preview) {
 }
 
 function isOckitIndex(resolved) {
-  return resolved.preview.file?.relativePath === OCKIT_FOLDER + '/index.html'
-    && Array.isArray(resolved.item.ockitSite?.paths);
+  return Array.isArray(resolved?.item?.ockitSite?.paths)
+    && resolved.preview?.file?.relativePath === OCKIT_FOLDER + '/' + getOckitEntry(resolved.item);
+}
+
+function getOckitEntry(item) {
+  return item.ockitSite?.entry || 'index.html';
 }
 
 function getOckitRevision(item) {
@@ -5949,13 +5960,14 @@ app.get('/api/items/:id/ockit-site', auth, ockitProject, (req, res) => {
   }
   return res.json({
     revision: item.ockitSite?.revision || '',
+    entry: getOckitEntry(item),
     files: [...files].map(([path, file]) => ({ path, saved: file.saved }))
   });
 });
 
 const ockitUpload = multer({
   dest: DATA,
-  limits: { fileSize: ATTACHMENT_SIZE_LIMIT, files: 500, fields: 502 }
+  limits: { fileSize: ATTACHMENT_SIZE_LIMIT, files: 500, fields: 504 }
 }).array('files', 500);
 
 app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProject, (req, res) => {
@@ -5971,9 +5983,13 @@ app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProje
     }
     const paths = [...new Set(JSON.parse(req.body.paths).map(ockitRelativePath))];
     const names = [req.body.relativePaths].flat().map(ockitRelativePath);
+    const entry = ockitRelativePath(req.body.entry ?? 'index.html');
+    const title = typeof req.body.title === 'string' ? req.body.title.trim().slice(0, 200) : (item.ockitSite?.title || '');
     if (names.length !== req.files.length || new Set(names.map(name => name.toLowerCase())).size !== names.length ||
         new Set(paths.map(name => name.toLowerCase())).size !== paths.length ||
-        !OCKIT_REQUIRED.every(name => paths.includes(name)) ||
+        entry.includes('/') || !/\.html$/i.test(entry) ||
+        ![entry, 'style.css', 'data.js'].every(name => paths.includes(name)) ||
+        (entry !== 'index.html' && paths.includes('index.html')) ||
         !names.every(name => paths.includes(name))) {
       return res.status(400).json({ error: '網站附件清單不完整或有重複路徑。' });
     }
@@ -6009,7 +6025,7 @@ app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProje
     installed = true;
     const revision = crypto.randomUUID();
     const origin = normalizeHttpOrigin(req.get('origin')) || normalizeHttpOrigin(req.get('referer')) || item.ockitSite?.origin;
-    item.ockitSite = { revision, paths, origin };
+    item.ockitSite = { revision, paths, origin, entry, title };
     catalog.items[catalog.items.indexOf(item)] = syncStoredItemFiles(item, collection, getCollectionConfig(collection).mode);
     const stagedCatalog = path.join(staging, 'catalog.json');
     writeJSON(stagedCatalog, catalog);
@@ -6061,7 +6077,7 @@ function sendOckitEditorHost(req, res, cfg) {
 app.get('/api/preview-share/:token/site/:access/*', async (req, res, next) => {
   const cfg = readCfg();
   const share = getPreviewShareEntry(cfg, req.params.token);
-  if (!share || share.relativePath !== OCKIT_FOLDER + '/index.html') return res.sendStatus(404);
+  if (!share || share.relativePath !== OCKIT_SHARE_PATH) return res.sendStatus(404);
   if (!share.enabled) return res.sendStatus(403);
   if (share.passwordHash && !verifyPreviewShareAccessToken(cfg, share, req.params.access)) {
     return res.sendStatus(401);
@@ -6070,8 +6086,9 @@ app.get('/api/preview-share/:token/site/:access/*', async (req, res, next) => {
   const item = catalog.items.find(entry => entry.id === share.itemId);
   if (!item) return res.sendStatus(404);
   const root = path.join(collUploadDir(share.collection, item.id), OCKIT_FOLDER);
-  const name = req.params[0];
-  if (!item.ockitSite?.paths?.includes(name) || !fs.existsSync(path.join(root, 'index.html'))) return res.sendStatus(404);
+  const entry = getOckitEntry(item);
+  const name = req.params[0] === 'index.html' ? entry : req.params[0];
+  if (!item.ockitSite?.paths?.includes(name) || !fs.existsSync(path.join(root, entry))) return res.sendStatus(404);
   const isImage = getPreviewMediaMimeType(getExt(name)).startsWith('image/');
   const revision = getOckitRevision(item);
   const freshImage = isImage && revision && req.query.rev === revision && !share.passwordHash;

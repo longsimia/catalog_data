@@ -16,6 +16,8 @@
         options.body = new FormData();
         options.body.set('revision', message.revision);
         options.body.set('paths', JSON.stringify(message.paths));
+        if (typeof message.entry === 'string') options.body.set('entry', message.entry);
+        if (typeof message.title === 'string') options.body.set('title', message.title);
         for (const entry of message.files) {
           options.body.append('relativePaths', entry.path);
           options.body.append('files', entry.blob, 'attachment');
