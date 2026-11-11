@@ -5692,6 +5692,7 @@ function renderPreviewShareShell(token = '', options = {}) {
         const previewUrl = new URL(url, location.origin);
         const assetUrl = assetOrigin ? new URL(previewUrl.pathname, assetOrigin) : previewUrl;
         assetUrl.pathname += '/site/' + encodeURIComponent(accessToken || '-') + '/index.html';
+        if (site?.revision) assetUrl.searchParams.set('rev', site.revision);
         assetUrl.hash = location.hash;
         frame.src = assetUrl.href;
         document.body.replaceChildren(frame);
@@ -5861,7 +5862,7 @@ app.get('/preview-share/:token', (req, res) => {
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).send('找不到分享的線上閱覽檔案');
     const site = isOckitIndex(resolved)
-      ? { origin: normalizeHttpOrigin(resolved.item.ockitSite.origin) }
+      ? { origin: normalizeHttpOrigin(resolved.item.ockitSite.origin), revision: getOckitRevision(resolved.item) }
       : null;
     if (site) res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -5886,6 +5887,11 @@ function isOckitEditor(preview) {
 function isOckitIndex(resolved) {
   return resolved.preview.file?.relativePath === OCKIT_FOLDER + '/index.html'
     && Array.isArray(resolved.item.ockitSite?.paths);
+}
+
+function getOckitRevision(item) {
+  const revision = item.ockitSite?.revision;
+  return typeof revision === 'string' && /^[\da-f-]{36}$/i.test(revision) ? revision : '';
 }
 
 function ockitRelativePath(value) {
@@ -6067,9 +6073,12 @@ app.get('/api/preview-share/:token/site/:access/*', async (req, res, next) => {
   const name = req.params[0];
   if (!item.ockitSite?.paths?.includes(name) || !fs.existsSync(path.join(root, 'index.html'))) return res.sendStatus(404);
   const isImage = getPreviewMediaMimeType(getExt(name)).startsWith('image/');
-  res.setHeader('Cache-Control', isImage ? 'private, no-cache, no-transform' : 'private, no-store, no-transform');
-  if (isImage && /^[\da-f-]{36}$/i.test(item.ockitSite.revision)) {
-    res.setHeader('ETag', `W/"${item.ockitSite.revision}"`);
+  const revision = getOckitRevision(item);
+  const freshImage = isImage && revision && req.query.rev === revision && !share.passwordHash;
+  const cache = freshImage ? 'max-age=300' : isImage ? 'no-cache' : 'no-store';
+  res.setHeader('Cache-Control', `private, ${cache}, no-transform`);
+  if (isImage && revision) {
+    res.setHeader('ETag', `W/"${revision}"`);
   }
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Content-Type-Options', 'nosniff');
