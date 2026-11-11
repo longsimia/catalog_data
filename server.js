@@ -33,6 +33,7 @@ const PREVIEW_STREAM_TICKET_TTL_MS = 1000 * 60 * 60 * 12;
 const APP_TIME_ZONE = 'Asia/Taipei';
 const DEFAULT_PUBLIC_SHARE_ORIGIN = 'https://share.rikastudio.com';
 const OCKIT_EDITOR_ORIGIN = normalizeHttpOrigin(process.env.OCKIT_EDITOR_ORIGIN) || DEFAULT_PUBLIC_SHARE_ORIGIN;
+const OCKIT_EDITOR_SHARE_TOKEN = 'ockitEd1';
 const THUMB_MAX_EDGE = 400;
 const THUMB_QUALITY = 80;
 const SCENARIO_LIGHTBOX_PREVIEW_MAX_EDGE = 1600;
@@ -4263,7 +4264,7 @@ function createPreviewShareToken(existingLinks = {}) {
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/g, '');
-    if (token && !existingLinks[token]) return token;
+    if (token && token !== OCKIT_EDITOR_SHARE_TOKEN && !existingLinks[token]) return token;
   }
   return crypto.randomBytes(12).toString('hex');
 }
@@ -5353,7 +5354,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
       <p id="msg">正在載入檔案...</p>
     </div>
   </div>
-  <script src="/ockit-host.js"></script>
+  <script src="/ockit-host.js?v=2"></script>
   <script>
     (() => {
       const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
@@ -5507,7 +5508,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
       if (resp.headers.get('x-ockit-editor') === '1') {
         const editorUrl = '/api/items/' + encodeURIComponent(itemId) + '/ockit-site';
         window.mountOckitEditor(html, editorUrl + (queryString ? '?' + queryString : ''), token,
-          ${JSON.stringify(OCKIT_EDITOR_ORIGIN)}, resp.headers.get('x-ockit-host-ticket'));
+          resp.headers.get('x-ockit-host-url'));
         return;
       }
       document.open();
@@ -5822,6 +5823,9 @@ app.get('/preview-share/:token', (req, res) => {
   try {
     const cfg = readCfg();
     if (!ensureTrustedPublicShareRequest(req, res, cfg)) return;
+    if (req.params.token === OCKIT_EDITOR_SHARE_TOKEN && req.query.ticket !== undefined) {
+      return sendOckitEditorHost(req, res, cfg);
+    }
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).send('找不到分享的線上閱覽檔案');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -5982,9 +5986,7 @@ app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProje
   }
 });
 
-app.get('/api/preview-share/editor-host', (req, res) => {
-  const cfg = readCfg();
-  if (!ensureTrustedPublicShareRequest(req, res, cfg)) return;
+function sendOckitEditorHost(req, res, cfg) {
   const [body, signature] = String(req.query.ticket || '').split('.');
   if (!body || !signature || !safeEq(sign(body, cfg.authSecret), signature)) return res.sendStatus(403);
   let parentOrigin;
@@ -6010,7 +6012,7 @@ app.get('/api/preview-share/editor-host', (req, res) => {
     });
     if (parent !== window) parent.postMessage({ type: 'ockit-ready' }, editorParentOrigin);
   </script>`);
-});
+}
 
 app.get('/api/preview-share/:token/site/:access/*', (req, res) => {
   const cfg = readCfg();
@@ -6155,7 +6157,9 @@ app.get('/api/preview/:id/:index', auth, async (req, res) => {
       const cfg = readCfg();
       const ticket = Buffer.from(JSON.stringify({ scope: 'ockit-editor', origin, expires: Date.now() + 60000 })).toString('base64url');
       res.setHeader('X-Ockit-Editor', '1');
-      res.setHeader('X-Ockit-Host-Ticket', ticket + '.' + sign(ticket, cfg.authSecret));
+      const hostUrl = new URL(buildPreviewSharePath(OCKIT_EDITOR_SHARE_TOKEN, cfg), OCKIT_EDITOR_ORIGIN);
+      hostUrl.searchParams.set('ticket', ticket + '.' + sign(ticket, cfg.authSecret));
+      res.setHeader('X-Ockit-Host-Url', hostUrl.href);
       res.setHeader('Content-Security-Policy', 'sandbox');
       res.setHeader('Cache-Control', 'no-store');
     } else if (preview.type === 'html-file' && preview.file?.relativePath?.startsWith(OCKIT_FOLDER + '/')) {

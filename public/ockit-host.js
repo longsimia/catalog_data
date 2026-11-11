@@ -1,5 +1,7 @@
 (() => {
-  window.mountOckitEditor = function (html, url, token, editorOrigin, ticket) {
+  window.mountOckitEditor = function (html, url, token, hostUrl) {
+    const host = new URL(hostUrl);
+    const editorOrigin = host.origin;
     if (editorOrigin === location.origin) throw new Error('編輯器需要使用獨立的閱覽網域');
     const frame = document.createElement('iframe');
     frame.title = '角色網站編輯器';
@@ -40,7 +42,7 @@
       catch (error) { reply.error = error.message; }
       frame.contentWindow.postMessage(reply, editorOrigin);
     });
-    frame.src = editorOrigin + '/api/preview-share/editor-host?ticket=' + encodeURIComponent(ticket);
+    frame.src = host.href;
     document.body.replaceChildren(frame);
   };
 })();
