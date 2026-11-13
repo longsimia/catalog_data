@@ -4346,10 +4346,10 @@ function getPreviewShareMeta(req, cfg, resolved) {
   };
 }
 
-function renderPreviewHubPageV2(item, previews, token, collection = 'scenario') {
+function renderPreviewHubPageV2(item, previews) {
   const safeTitle = escapeXml(item?.translatedTitle || item?.title || '線上閱覽');
-  const cards = previews.map((file, index) => {
-    const href = withCollection(`/preview-open/${item.id}/${index}`, collection);
+  const cards = previews.map(file => {
+    const href = escapeXml(file.url);
     const label = escapeXml(file?.name || path.basename(file?.key || 'document'));
     return `
       <a class="doc-card" href="${href}" target="_blank" rel="noopener">
@@ -5087,35 +5087,35 @@ function buildPreviewListData(item, collection, user, cfg) {
     .map((file, index) => ({ ...file, index }))
     .filter(file => fs.existsSync(file.abs));
   if (!files.length) return { supported: false, url: '', count: 0, files: [], itemId: item.id };
-  const url = files.length === 1
-    ? withCollection(`/preview-open/${item.id}/${files[0].index}`, collection)
-    : withCollection(`/preview-hub/${item.id}`, collection);
+  const previews = files.map(file => {
+    const { index } = file;
+    const isMedia = !!PREVIEWABLE_MEDIA_MIME[file.ext];
+    const streamUrl = isMedia && file.relativePath?.startsWith(OCKIT_FOLDER + '/')
+      ? getPreviewStreamUrl(user, item.id, index, collection, file.key, cfg)
+      : '';
+    const relativePath = file.relativePath || file.name || path.basename(file.key || 'document');
+    const openPath = `/preview-open/${encodeURIComponent(item.id)}/${index}`;
+    const ticket = makePreviewStreamTicket(user, item.id, index, collection, file.key, cfg);
+    return {
+      index,
+      name: path.posix.basename(String(relativePath).replace(/\\/g, '/')),
+      relativePath,
+      url: withCollection(`${openPath}?ticket=${encodeURIComponent(ticket)}`, collection),
+      mediaUrl: streamUrl || (isMedia
+        ? withCollection(`/uploads/${file.key}`, collection)
+        : withCollection(`/api/preview/${item.id}/${index}`, collection)),
+      thumbUrl: isMedia && isThumbEligibleImageKey(file.key)
+        ? (streamUrl ? streamUrl + '&thumb=1' : getThumbUrl(file.key))
+        : ''
+    };
+  });
   return {
     supported: true,
-    url,
-    count: files.length,
+    url: previews.length === 1 ? previews[0].url : withCollection(`/preview-hub/${item.id}`, collection),
+    count: previews.length,
     itemId: item.id,
     title: item.translatedTitle || item.title || '線上閱覽',
-    files: files.map(file => {
-      const { index } = file;
-      const isMedia = !!PREVIEWABLE_MEDIA_MIME[file.ext];
-      const streamUrl = isMedia && file.relativePath?.startsWith(OCKIT_FOLDER + '/')
-        ? getPreviewStreamUrl(user, item.id, index, collection, file.key, cfg)
-        : '';
-      const relativePath = file.relativePath || file.name || path.basename(file.key || 'document');
-      return {
-        index,
-        name: path.posix.basename(String(relativePath).replace(/\\/g, '/')),
-        relativePath,
-        url: withCollection(`/preview-open/${item.id}/${index}`, collection),
-        mediaUrl: streamUrl || (isMedia
-          ? withCollection(`/uploads/${file.key}`, collection)
-          : withCollection(`/api/preview/${item.id}/${index}`, collection)),
-        thumbUrl: isMedia && isThumbEligibleImageKey(file.key)
-          ? (streamUrl ? streamUrl + '&thumb=1' : getThumbUrl(file.key))
-          : ''
-      };
-    })
+    files: previews
   };
 }
 
@@ -5326,17 +5326,18 @@ app.get('/api/download/:id/files/:index', auth, (req, res) => {
 app.get('/preview-hub/:id', auth, (req, res) => {
   try {
     const collection = getC(req);
-    const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, readCfg());
+    const cfg = readCfg();
+    const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, cfg);
     if (collectionDenied) return res.status(403).send(collectionDenied.error);
     if (!hasRolePermission(req.authUser, 'onlinePreview', collection)) return res.status(403).send('你沒有權限使用線上閱覽。');
     const cat = readCat(collection);
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).send('Item not found');
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).send('Forbidden');
-    const files = getPreviewableFiles(item, collection).filter(file => fs.existsSync(file.abs));
+    const { files } = buildPreviewListData(item, collection, req.authUser, cfg);
     if (!files.length) return res.status(404).send('No previewable files');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(renderPreviewHubPageV2(item, files, getTokenFromReq(req), collection));
+    return res.send(renderPreviewHubPageV2(item, files));
   } catch (e) {
     return res.status(500).send(e.message);
   }
@@ -5381,10 +5382,10 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
   </style>
 </head>
 <body>
-  <div class="state" id="state">
+  <div class="state" id="state" style="display:none">
     <div class="card">
       <h1>線上閱覽</h1>
-      <p id="msg">正在載入檔案...</p>
+      <p id="msg" role="status"></p>
     </div>
   </div>
   <script src="/ockit-host.js?v=4"></script>
@@ -5401,9 +5402,14 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
     const msg = document.getElementById('msg');
     const state = document.getElementById('state');
 
+    function showError(message) {
+      msg.textContent = message;
+      state.style.display = '';
+    }
+
     async function openPreview() {
       if (!token) {
-        msg.textContent = '請先登入後再開啟線上閱覽。';
+        showError('請先登入後再開啟線上閱覽。');
         return;
       }
       function applyMediaViewerTheme() {
@@ -5449,6 +5455,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
         return true;
       }
       const params = new URLSearchParams(window.location.search);
+      params.delete('ticket');
       if (collection !== 'scenario') params.set('c', collection); else params.delete('c');
       const queryString = params.toString();
       const apiPath = '/api/preview/' + encodeURIComponent(itemId) + '/' + encodeURIComponent(previewIndex);
@@ -5474,7 +5481,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
           const data = await resp.json();
           text = data.error || text;
         } catch {}
-        msg.textContent = text;
+        showError(text);
         return;
       }
       const type = (resp.headers.get('content-type') || '').toLowerCase();
@@ -5535,7 +5542,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
       }
       const html = await resp.text();
       if (resp.headers.get('x-ockit-published-file') === '1') {
-        msg.textContent = '請在編輯器內預覽，或對此檔案使用公開閱覽。';
+        showError('請在編輯器內預覽，或對此檔案使用公開閱覽。');
         return;
       }
       if (resp.headers.get('x-ockit-editor') === '1') {
@@ -5550,7 +5557,7 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
     }
 
     openPreview().catch(() => {
-      msg.textContent = '載入預覽失敗，請稍後再試。';
+      showError('載入預覽失敗，請稍後再試。');
     });
   </script>
 </body>
@@ -5575,229 +5582,127 @@ function renderPreviewShareMetaTags(meta) {
   ${safeImageUrl ? `<meta name="twitter:image" content="${safeImageUrl}">` : ''}`;
 }
 
-function renderSharedHtmlPreview(html, meta) {
+function addPreviewShareMetadata(html, meta) {
   const title = /<title\b/i.test(html) ? '' : `<title>${escapeMetaContent(meta.pageTitle)}</title>`;
   const headContent = `${title}${renderPreviewShareMetaTags(meta)}`;
-  const body = applyNoContextMenuToHtml(html);
-  if (/<head\b[^>]*>/i.test(body)) {
-    return body.replace(/<head\b[^>]*>/i, head => `${head}${headContent}`);
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b[^>]*>/i, head => `${head}${headContent}`);
   }
   // Keep an existing doctype first, even for attachments without a head tag.
-  return body.replace(/^(\s*(?:<!doctype[^>]*>\s*)?(?:<html\b[^>]*>\s*)?)/i,
+  return html.replace(/^(\s*(?:<!doctype[^>]*>\s*)?(?:<html\b[^>]*>\s*)?)/i,
     prefix => `${prefix}<head>${headContent}</head>`);
 }
 
-function renderPreviewShareShell(token = '', options = {}) {
-  const meta = options.meta || {};
-  const site = options.site || null;
-  const safePageTitle = escapeMetaContent(meta.pageTitle || meta.title || '公開閱覽');
+function getPublicPreviewContentUrl(cfg, token, accessToken = '') {
+  const params = new URLSearchParams();
+  const site = getPublicShareSiteSlug(cfg);
+  if (site) params.set('site', site);
+  if (accessToken) params.set('access', accessToken);
+  const query = params.toString();
+  return `/api/preview-share/${encodeURIComponent(token)}${query ? '?' + query : ''}`;
+}
+
+function renderPreviewShareDocument(meta, styles, content) {
   return `<!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${safePageTitle}</title>
+  <title>${escapeMetaContent(meta.pageTitle || meta.title || '公開閱覽')}</title>
   ${renderPreviewShareMetaTags(meta)}
-  <style>
-    :root{--bg:#111118;--panel:#15151d;--text:#e8e2d6;--muted:#8e8a98;--border:#28283a;--gold:#c9a84c}
-    html{color-scheme:dark}
-    html[data-theme="light"],body[data-theme="light"]{
-      color-scheme:light;
-      --bg:#e6e6e6;--panel:#ffffff;--text:#3b342d;--muted:#9b9084;--border:#ece5db;--gold:#a18d79;
-    }
-    html[data-theme="light"] .pw-form button,body[data-theme="light"] .pw-form button{color:#5E4F36}
-    html[data-theme="light"] .pw-form button:hover,body[data-theme="light"] .pw-form button:hover{color:#140f00}
-    *{box-sizing:border-box}
-    body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif}
-    .state{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center}
-    .card{background:var(--panel);border:1px solid var(--border);padding:24px 28px;max-width:520px;width:100%}
-    h1{margin:0 0 10px;font-family:"Noto Serif TC",serif;font-size:1.25rem}
-    p{margin:0;color:var(--muted);line-height:1.7}
-    .pw-form{display:none;gap:10px;margin-top:16px}
-    .pw-form.on{display:grid}
-    .pw-form input{width:100%;min-height:44px;padding:0 14px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit;outline:none}
-    .pw-form button{min-height:44px;border:1px solid var(--gold);border-radius:7px;background:var(--gold);color:#140f00;font:inherit;font-weight:500;cursor:pointer;transition:all .2s ease;text-align:center}
-    .pw-form button:hover{background:#d5b45a;border-color:#d5b45a}
-    .pw-hint{display:none;margin-top:10px;color:#d98f7f}
-    .pw-hint.on{display:block}
-    iframe,embed{display:block;border:none;width:100%;height:100vh}
-    .media-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-    .media-wrap img,.media-wrap video{display:block;max-width:min(100%,1200px);max-height:calc(100vh - 40px);border:none}
-    .media-wrap audio{width:min(720px,100%)}
-  </style>
+  <style>${styles}</style>
 </head>
-<body>
-  <div class="state" id="state">
-    <div class="card">
-      <h1>公開閱覽</h1>
-      <p id="msg">正在載入檔案...</p>
-      <form class="pw-form" id="pw-form">
-        <input type="password" id="pw-input" placeholder="請輸入訪問密碼" autocomplete="current-password">
-        <button type="submit">送出密碼</button>
-      </form>
-      <p class="pw-hint" id="pw-hint"></p>
-    </div>
-  </div>
-  <script>
-    (() => {
-      const mode = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
-      document.documentElement.dataset.theme = mode;
-      document.body.dataset.theme = mode;
-    })();
-    document.addEventListener('contextmenu', event => event.preventDefault());
-    const token = ${JSON.stringify(String(token || '').trim())};
-    const msg = document.getElementById('msg');
-    const pwForm = document.getElementById('pw-form');
-    const pwInput = document.getElementById('pw-input');
-    const pwHint = document.getElementById('pw-hint');
-    let accessToken = '';
-
-    function showPasswordForm(text = '此公開連結需要密碼') {
-      msg.textContent = text;
-      pwForm.classList.add('on');
-      pwHint.classList.remove('on');
-      pwHint.textContent = '';
-      setTimeout(() => pwInput.focus(), 0);
-    }
-
-    function setPasswordHint(text = '') {
-      pwHint.textContent = text;
-      pwHint.classList.toggle('on', !!text);
-    }
-
-    async function submitPassword(password) {
-      const resp = await fetch('/api/preview-share/' + encodeURIComponent(token) + '/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data.error || '密碼驗證失敗');
-      accessToken = typeof data.accessToken === 'string' ? data.accessToken : '';
-      pwForm.classList.remove('on');
-      setPasswordHint('');
-      msg.textContent = '密碼驗證成功，正在載入檔案...';
-      return openPreview();
-    }
-
-    async function openPreview() {
-      function applyMediaViewerTheme() {
-        document.documentElement.dataset.theme = 'dark';
-        document.body.dataset.theme = 'dark';
-        document.documentElement.style.background = '#111118';
-        document.body.style.background = '#111118';
-      }
-      const url = '/api/preview-share/' + encodeURIComponent(token);
-      const headers = accessToken ? { 'x-preview-share-access': accessToken } : {};
-      const resp = await fetch(url, { headers });
-      if (!resp.ok) {
-        let text = '無法載入檔案（HTTP ' + resp.status + '）';
-        try {
-          const data = await resp.json();
-          if (resp.status === 401 && data.requiresPassword) {
-            showPasswordForm(data.error || '此公開連結需要密碼');
-            return;
-          }
-          pwForm.classList.remove('on');
-          text = data.error || text;
-        } catch {}
-        pwForm.classList.remove('on');
-        msg.textContent = text;
-        return;
-      }
-      const type = (resp.headers.get('content-type') || '').toLowerCase();
-      const site = ${JSON.stringify(site)};
-      if (site || resp.headers.get('x-ockit-site') === '1') {
-        const frame = document.createElement('iframe');
-        frame.title = '角色網站';
-        frame.setAttribute('sandbox', 'allow-scripts allow-popups');
-        frame.referrerPolicy = 'no-referrer';
-        const assetOrigin = site?.origin || resp.headers.get('x-ockit-site-origin');
-        const previewUrl = new URL(url, location.origin);
-        const assetUrl = assetOrigin ? new URL(previewUrl.pathname, assetOrigin) : previewUrl;
-        assetUrl.pathname += '/site/' + encodeURIComponent(accessToken || '-') + '/index.html';
-        if (site?.revision) assetUrl.searchParams.set('rev', site.revision);
-        assetUrl.hash = location.hash;
-        frame.src = assetUrl.href;
-        if (site?.favicon) {
-          const icon = document.createElement('link');
-          icon.rel = 'icon';
-          const iconUrl = new URL(site.favicon.split('/').map(encodeURIComponent).join('/'), assetUrl);
-          if (site.revision) iconUrl.searchParams.set('rev', site.revision);
-          icon.href = iconUrl.href;
-          document.head.appendChild(icon);
-        }
-        document.body.replaceChildren(frame);
-        return;
-      }
-      if (type.startsWith('audio/') || type.startsWith('video/')) {
-        // Only inspect response headers; let the player request byte ranges itself.
-        if (resp.body) await resp.body.cancel().catch(() => {});
-        const streamUrl = new URL(url, window.location.href);
-        if (accessToken) streamUrl.searchParams.set('access', accessToken);
-        const wrap = document.createElement('div');
-        wrap.className = 'media-wrap';
-        applyMediaViewerTheme();
-        const media = document.createElement(type.startsWith('audio/') ? 'audio' : 'video');
-        media.controls = true;
-        media.autoplay = true;
-        media.preload = 'metadata';
-        if (type.startsWith('video/')) media.playsInline = true;
-        media.src = streamUrl.toString();
-        document.body.innerHTML = '';
-        wrap.appendChild(media);
-        document.body.appendChild(wrap);
-        return;
-      }
-      if (type.startsWith('image/')) {
-        const blob = await resp.blob();
-        const mediaUrl = URL.createObjectURL(blob);
-        const wrap = document.createElement('div');
-        wrap.className = 'media-wrap';
-        applyMediaViewerTheme();
-        const img = document.createElement('img');
-        img.src = mediaUrl;
-        img.alt = '';
-        document.body.innerHTML = '';
-        document.body.appendChild(wrap);
-        wrap.appendChild(img);
-        return;
-      }
-      if (type.includes('application/pdf')) {
-        const blob = await resp.blob();
-        const mediaUrl = URL.createObjectURL(blob);
-        const embed = document.createElement('embed');
-        embed.src = mediaUrl;
-        embed.type = 'application/pdf';
-        document.body.innerHTML = '';
-        document.body.appendChild(embed);
-        return;
-      }
-      const html = await resp.text();
-      document.open();
-      document.write(html);
-      document.close();
-    }
-
-    pwForm.addEventListener('submit', event => {
-      event.preventDefault();
-      const password = pwInput.value || '';
-      if (!password) {
-        setPasswordHint('請先輸入密碼');
-        pwInput.focus();
-        return;
-      }
-      submitPassword(password).catch(err => {
-        setPasswordHint(err.message || '密碼驗證失敗');
-      });
-    });
-
-    openPreview().catch(() => {
-      msg.textContent = '載入預覽失敗，請稍後再試。';
-    });
-  </script>
-</body>
+<body>${content}${getNoContextMenuScript()}</body>
 </html>`;
+}
+
+function renderPreviewSharePassword(token, site, meta) {
+  const url = '/api/preview-share/' + encodeURIComponent(token) + '/auth';
+  const authUrl = site ? url + '?site=' + encodeURIComponent(site) : url;
+  return renderPreviewShareDocument(meta, `
+    :root{color-scheme:dark;--bg:#111118;--panel:#15151d;--text:#e8e2d6;--border:#28283a;--accent:#c9a84c}
+    :root[data-theme="light"]{color-scheme:light;--bg:#e6e6e6;--panel:#fff;--text:#3b342d;--border:#ece5db}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--bg);color:var(--text);font:16px "Microsoft JhengHei",sans-serif}
+    main{width:min(100%,520px);padding:24px 28px;border:1px solid var(--border);background:var(--panel)}
+    h1{margin:0 0 16px;font-size:1.25rem} form{display:grid;gap:10px}
+    input,button{min-height:44px;padding:0 12px;border:1px solid var(--border);border-radius:7px;font:inherit}
+    input{background:var(--bg);color:var(--text)} button{background:var(--accent);color:#140f00;cursor:pointer}
+    #hint:empty{display:none}
+  `, `<main>
+    <h1>此公開連結需要密碼</h1>
+    <form id="password-form" method="post" action="${escapeXml(authUrl)}">
+      <input name="password" type="password" aria-label="閱覽密碼" placeholder="請輸入閱覽密碼" autocomplete="current-password" required autofocus>
+      <button type="submit">送出密碼</button>
+    </form>
+    <p id="hint" role="status"></p>
+  </main>
+  <script>
+    document.documentElement.dataset.theme = localStorage.getItem('theme-mode') === 'dark' ? 'dark' : 'light';
+    const form = document.getElementById('password-form');
+    const button = form.querySelector('button');
+    const hint = document.getElementById('hint');
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      button.disabled = true;
+      hint.textContent = '';
+      try {
+        const response = await fetch(${JSON.stringify(authUrl)}, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: new FormData(form).get('password') })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || '密碼驗證失敗');
+        const target = new URL(location.href);
+        target.searchParams.delete('access');
+        if (data.accessToken) target.searchParams.set('access', data.accessToken);
+        location.replace(target.href);
+      } catch (error) {
+        hint.textContent = error.message || '密碼驗證失敗';
+        button.disabled = false;
+      }
+    });
+  </script>`);
+}
+
+function renderSharedMediaPreview(preview, meta, url) {
+  const src = escapeXml(url);
+  const type = String(preview.mimeType || '').toLowerCase();
+  let content;
+  if (preview.type === 'pdf') {
+    content = `<iframe src="${src}" title="PDF 閱覽"></iframe>`;
+  } else if (type.startsWith('audio/')) {
+    content = `<audio src="${src}" controls autoplay preload="metadata"></audio>`;
+  } else if (type.startsWith('video/')) {
+    content = `<video src="${src}" controls autoplay playsinline preload="metadata"></video>`;
+  } else {
+    content = `<img src="${src}" alt="${escapeXml(preview.label || preview.filename)}">`;
+  }
+  return renderPreviewShareDocument(meta, `
+    html{color-scheme:dark}
+    body{margin:0;background:#111118;min-height:100vh;display:grid;place-items:center}
+    img,video{display:block;max-width:min(calc(100vw - 40px),1200px);max-height:calc(100vh - 40px)}
+    audio{width:min(calc(100vw - 40px),720px)}
+    iframe{display:block;width:100%;height:100vh;border:0}
+  `, content);
+}
+
+function renderSharedOckitSite(cfg, resolved, meta, accessToken) {
+  const { item, share } = resolved;
+  const origin = normalizeHttpOrigin(item.ockitSite.origin) || getPublicShareOrigin(cfg);
+  const url = new URL(getPublicPreviewContentUrl(cfg, share.token), origin);
+  url.pathname += '/site/' + encodeURIComponent(accessToken || '-') + '/index.html';
+  const revision = getOckitRevision(item);
+  if (revision) url.searchParams.set('rev', revision);
+  const favicon = item.ockitSite.favicon;
+  const faviconUrl = favicon ? new URL(favicon.split('/').map(encodeURIComponent).join('/'), url) : null;
+  if (faviconUrl) faviconUrl.search = url.search;
+  const icon = faviconUrl ? `<link rel="icon" href="${escapeXml(faviconUrl.href)}">` : '';
+  const src = JSON.stringify(url.href).replace(/</g, '\\u003c');
+  return renderPreviewShareDocument(meta, 'body{margin:0}iframe{display:block;width:100%;height:100vh;border:0}',
+    `${icon}<iframe id="site" title="角色頁" sandbox="allow-scripts allow-popups" referrerpolicy="no-referrer"></iframe>
+    <script>document.getElementById('site').src = ${src} + location.hash;</script>`);
 }
 
 async function sendResolvedPreview(res, item, preview, previewIndex, options = {}) {
@@ -5808,6 +5713,10 @@ async function sendResolvedPreview(res, item, preview, previewIndex, options = {
   const tocMemoryKey = `${sanitizeCollectionKey(collection)}:${String(item?.id || '')}:${String(preview.file?.key || preview.file?.relativePath || preview.filename || preview.file?.name || preview.type || 'preview')}`;
   const previewSavePath = canEditTxt ? withCollection(`/api/preview/${encodeURIComponent(item.id)}/${previewIndex}`, collection) : '';
   if (preview.type === 'media') {
+    if (preview.file?.ext === '.svg') {
+      res.setHeader('Content-Security-Policy', 'sandbox');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    }
     res.type(preview.mimeType || getPreviewMediaMimeType(path.extname(preview.filename || '')));
     if (preview.abs) return res.sendFile(preview.abs);
   }
@@ -5858,7 +5767,7 @@ async function sendResolvedPreview(res, item, preview, previewIndex, options = {
         disableContextMenu
       });
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  return res.send(preview.html);
+  return res.send(options.shareMeta ? addPreviewShareMetadata(preview.html, options.shareMeta) : preview.html);
 }
 
 function sendTxtPreviewPayload(res, item, preview, options = {}) {
@@ -5876,15 +5785,61 @@ function sendTxtPreviewPayload(res, item, preview, options = {}) {
   });
 }
 
-app.get('/preview-open/:id/:index', (req, res) => {
+app.get('/preview-open/:id/:index', async (req, res) => {
   if (req.params.index === 'list') {
     return res.status(404).send('Not found');
   }
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  return res.send(renderPreviewOpenShell(req.params.id, req.params.index, getC(req)));
+  try {
+    const collection = getC(req);
+    const { id, index } = req.params;
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    const ticket = verifyPreviewStreamTicket(String(req.query.ticket || ''));
+    if (!ticket) return res.type('html').send(renderPreviewOpenShell(id, index, collection));
+
+    const previewIndex = Number(index);
+    if (ticket.collection !== collection || ticket.itemId !== id || ticket.previewIndex !== previewIndex) {
+      return res.sendStatus(403);
+    }
+    const cfg = readCfg();
+    const role = ticket.user?.role;
+    const denied = ensureCollectionAccessOrNull(collection, role, cfg);
+    if (denied) return res.status(403).send(denied.error);
+    if (!hasRolePermission(ticket.user, 'onlinePreview', collection)) return res.sendStatus(403);
+    const cat = readCat(collection, { syncFiles: false });
+    const storedItem = (cat.items || []).find(item => item.id === id);
+    if (!storedItem) return res.sendStatus(404);
+    if (!canAccessItemByRole(storedItem, role)) return res.sendStatus(403);
+
+    const item = syncStoredItemFiles(storedItem, collection, getCollectionConfig(collection, cfg).mode);
+    const file = getPreviewableFiles(item, collection, cfg)[previewIndex];
+    if (!file || file.key !== ticket.fileKey) return res.sendStatus(404);
+    const preview = resolvePreview(item, previewIndex, collection, req.query.encoding);
+    if (!preview) return res.sendStatus(404);
+    if (isOckitEditor(preview)) {
+      if (!hasRolePermission(ticket.user, 'editItemInfo', collection)) return res.sendStatus(403);
+      const protocol = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
+      const origin = normalizeHttpOrigin(`${protocol}://${req.get('host')}`);
+      if (!origin || origin === OCKIT_EDITOR_ORIGIN) return res.sendStatus(400);
+      const hostUrl = getOckitEditorHostUrl(origin, cfg);
+      const saveUrl = withCollection(`/api/items/${encodeURIComponent(id)}/ockit-site`, collection);
+      return res.type('html').send(renderOckitEditorPreview(preview.text, saveUrl, hostUrl));
+    }
+    if (preview.type === 'html-file' && file.relativePath?.startsWith(OCKIT_FOLDER + '/')) {
+      return res.status(403).send('請在編輯器內預覽，或使用公開閱覽開啟角色頁。');
+    }
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (file.relativePath?.startsWith(OCKIT_FOLDER + '/')) res.setHeader('Content-Security-Policy', 'sandbox');
+    return await sendResolvedPreview(res, item, preview, previewIndex, {
+      collection,
+      canEditTxt: file.ext === '.txt' && canEditTxtPreview(ticket.user, collection)
+    });
+  } catch (e) {
+    return res.status(500).send(e.message);
+  }
 });
 
-app.get('/preview-share/:token', (req, res) => {
+app.get('/preview-share/:token', async (req, res) => {
   try {
     const cfg = readCfg();
     if (!ensureTrustedPublicShareRequest(req, res, cfg)) return;
@@ -5893,24 +5848,29 @@ app.get('/preview-share/:token', (req, res) => {
     }
     const resolved = resolveSharedPreview(cfg, req.params.token);
     if (!resolved) return res.status(404).send('找不到分享的線上閱覽檔案');
-    const site = isOckitIndex(resolved)
-      ? {
-          origin: normalizeHttpOrigin(resolved.item.ockitSite.origin),
-          revision: getOckitRevision(resolved.item),
-          favicon: resolved.item.ockitSite.favicon || ''
-        }
-      : null;
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    const access = getPreviewShareAccessState(cfg, resolved.share, req);
+    if (!access.ok && !access.requiresPassword) return res.status(access.status).send(access.error);
     const meta = getPreviewShareMeta(req, cfg, resolved);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    if (!site && resolved.preview.type === 'html-file' && getPreviewShareAccessState(cfg, resolved.share).ok) {
-      res.setHeader('Cache-Control', 'private, no-store');
-      return res.send(renderSharedHtmlPreview(resolved.preview.text, meta));
+    if (!access.ok) return res.send(renderPreviewSharePassword(req.params.token, getPublicShareSiteSlug(cfg), meta));
+    const accessToken = access.requiresPassword ? getPreviewShareAccessTokenFromReq(req) : '';
+    if (isOckitIndex(resolved)) {
+      return res.send(renderSharedOckitSite(cfg, resolved, meta, accessToken));
     }
-    if (site) res.setHeader('Cache-Control', 'private, no-store');
-    return res.send(renderPreviewShareShell(req.params.token, {
-      meta,
-      site
-    }));
+    if (resolved.preview.type === 'html-file') {
+      return res.send(addPreviewShareMetadata(applyNoContextMenuToHtml(resolved.preview.text), meta));
+    }
+    if (resolved.preview.type === 'media' || resolved.preview.type === 'pdf') {
+      const url = getPublicPreviewContentUrl(cfg, req.params.token, accessToken);
+      return res.send(renderSharedMediaPreview(resolved.preview, meta, url));
+    }
+    return await sendResolvedPreview(res, resolved.item, resolved.preview, resolved.previewIndex, {
+      collection: resolved.share.collection,
+      disableContextMenu: true,
+      shareMeta: meta
+    });
   } catch (e) {
     return res.status(500).send(e.message);
   }
@@ -6085,6 +6045,41 @@ app.put('/api/items/:id/ockit-site', auth, ockitProject, ockitUpload, ockitProje
     }
   }
 });
+
+function getOckitEditorHostUrl(origin, cfg) {
+  const ticket = Buffer.from(JSON.stringify({ scope: 'ockit-editor', origin, expires: Date.now() + 60000 })).toString('base64url');
+  const url = new URL(buildPreviewSharePath(OCKIT_EDITOR_SHARE_TOKEN, cfg), OCKIT_EDITOR_ORIGIN);
+  url.searchParams.set('ticket', ticket + '.' + sign(ticket, cfg.authSecret));
+  return url.href;
+}
+
+function renderOckitEditorPreview(html, saveUrl, hostUrl) {
+  const args = JSON.stringify([html, saveUrl, hostUrl]).replace(/</g, '\\u003c');
+  return `<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>角色頁面編輯器</title>
+  <style>body{margin:0}iframe{display:block;width:100%;height:100vh;border:0}</style>
+  <script src="/ockit-host.js?v=4"></script>
+</head>
+<body>
+  <script>
+    const [html, saveUrl, hostUrl] = ${args};
+    const token = localStorage.getItem('adm-token') || '';
+    try {
+      if (!token) throw new Error('請先登入再開啟角色編輯器。');
+      window.mountOckitEditor(html, saveUrl, token, hostUrl);
+    } catch (error) {
+      const message = document.createElement('p');
+      message.textContent = error.message;
+      document.body.replaceChildren(message);
+    }
+  </script>
+</body>
+</html>`;
+}
 
 function sendOckitEditorHost(req, res, cfg) {
   const [body, signature] = String(req.query.ticket || '').split('.');
@@ -6280,11 +6275,8 @@ app.get('/api/preview/:id/:index', auth, async (req, res) => {
       const origin = normalizeHttpOrigin(req.query.ockitOrigin);
       if (!origin || origin === OCKIT_EDITOR_ORIGIN) return res.sendStatus(400);
       const cfg = readCfg();
-      const ticket = Buffer.from(JSON.stringify({ scope: 'ockit-editor', origin, expires: Date.now() + 60000 })).toString('base64url');
       res.setHeader('X-Ockit-Editor', '1');
-      const hostUrl = new URL(buildPreviewSharePath(OCKIT_EDITOR_SHARE_TOKEN, cfg), OCKIT_EDITOR_ORIGIN);
-      hostUrl.searchParams.set('ticket', ticket + '.' + sign(ticket, cfg.authSecret));
-      res.setHeader('X-Ockit-Host-Url', hostUrl.href);
+      res.setHeader('X-Ockit-Host-Url', getOckitEditorHostUrl(origin, cfg));
       res.setHeader('Content-Security-Policy', 'sandbox');
       res.setHeader('Cache-Control', 'no-store');
     } else if (preview.type === 'html-file' && preview.file?.relativePath?.startsWith(OCKIT_FOLDER + '/')) {
