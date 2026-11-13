@@ -3991,9 +3991,10 @@ function getPreviewShareEntry(cfg, token = '') {
 function resolveSharedPreview(cfg, token = '') {
   const share = getPreviewShareEntry(cfg, token);
   if (!share?.itemId) return null;
-  const cat = readCat(share.collection);
-  const item = (cat.items || []).find(entry => entry.id === share.itemId);
-  if (!item) return null;
+  const cat = readCat(share.collection, { syncFiles: false });
+  const storedItem = (cat.items || []).find(entry => entry.id === share.itemId);
+  if (!storedItem) return null;
+  const item = syncStoredItemFiles(storedItem, share.collection, getCollectionConfig(share.collection, cfg).mode);
   const previewIndex = resolvePreviewFileIndexByShare(item, share);
   if (previewIndex < 0) return null;
   const preview = resolvePreview(item, previewIndex, share.collection);
@@ -5556,22 +5557,13 @@ function renderPreviewOpenShell(itemId, previewIndex, collection = 'scenario') {
 </html>`;
 }
 
-function renderPreviewShareShell(token = '', options = {}) {
-  const meta = options.meta || {};
-  const site = options.site || null;
-  const safePageTitle = escapeMetaContent(meta.pageTitle || meta.title || '公開閱覽');
+function renderPreviewShareMetaTags(meta) {
   const safeTitle = escapeMetaContent(meta.title || meta.pageTitle || '公開閱覽');
   const safeDescription = escapeMetaContent(meta.description || '');
   const safeUrl = escapeMetaContent(meta.url || '');
   const safeImageUrl = escapeMetaContent(meta.imageUrl || '');
   const isImageShare = !!meta.isImageShare && !!safeImageUrl;
-  return `<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${safePageTitle}</title>
-  ${isImageShare ? '' : `<meta property="og:title" content="${safeTitle}">`}
+  return `${isImageShare ? '' : `<meta property="og:title" content="${safeTitle}">`}
   ${!isImageShare && safeDescription ? `<meta property="og:description" content="${safeDescription}">` : ''}
   <meta property="og:type" content="${isImageShare ? 'image' : 'website'}">
   ${isImageShare ? '' : `<meta property="og:site_name" content="公開閱覽">`}
@@ -5580,7 +5572,32 @@ function renderPreviewShareShell(token = '', options = {}) {
   <meta name="twitter:card" content="${safeImageUrl ? 'summary_large_image' : 'summary'}">
   ${isImageShare ? '' : `<meta name="twitter:title" content="${safeTitle}">`}
   ${!isImageShare && safeDescription ? `<meta name="twitter:description" content="${safeDescription}">` : ''}
-  ${safeImageUrl ? `<meta name="twitter:image" content="${safeImageUrl}">` : ''}
+  ${safeImageUrl ? `<meta name="twitter:image" content="${safeImageUrl}">` : ''}`;
+}
+
+function renderSharedHtmlPreview(html, meta) {
+  const title = /<title\b/i.test(html) ? '' : `<title>${escapeMetaContent(meta.pageTitle)}</title>`;
+  const headContent = `${title}${renderPreviewShareMetaTags(meta)}`;
+  const body = applyNoContextMenuToHtml(html);
+  if (/<head\b[^>]*>/i.test(body)) {
+    return body.replace(/<head\b[^>]*>/i, head => `${head}${headContent}`);
+  }
+  // Keep an existing doctype first, even for attachments without a head tag.
+  return body.replace(/^(\s*(?:<!doctype[^>]*>\s*)?(?:<html\b[^>]*>\s*)?)/i,
+    prefix => `${prefix}<head>${headContent}</head>`);
+}
+
+function renderPreviewShareShell(token = '', options = {}) {
+  const meta = options.meta || {};
+  const site = options.site || null;
+  const safePageTitle = escapeMetaContent(meta.pageTitle || meta.title || '公開閱覽');
+  return `<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${safePageTitle}</title>
+  ${renderPreviewShareMetaTags(meta)}
   <style>
     :root{--bg:#111118;--panel:#15151d;--text:#e8e2d6;--muted:#8e8a98;--border:#28283a;--gold:#c9a84c}
     html{color-scheme:dark}
@@ -5883,10 +5900,15 @@ app.get('/preview-share/:token', (req, res) => {
           favicon: resolved.item.ockitSite.favicon || ''
         }
       : null;
-    if (site) res.setHeader('Cache-Control', 'private, no-store');
+    const meta = getPreviewShareMeta(req, cfg, resolved);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (!site && resolved.preview.type === 'html-file' && getPreviewShareAccessState(cfg, resolved.share).ok) {
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.send(renderSharedHtmlPreview(resolved.preview.text, meta));
+    }
+    if (site) res.setHeader('Cache-Control', 'private, no-store');
     return res.send(renderPreviewShareShell(req.params.token, {
-      meta: getPreviewShareMeta(req, cfg, resolved),
+      meta,
       site
     }));
   } catch (e) {
