@@ -29,7 +29,6 @@ const TEXT_HISTORY_RETENTION_MS = 72 * 60 * 60 * 1000;
 const TEXT_TOC_MAX_ENTRIES = 2000;
 const TEXT_TOC_MAX_TEXT_LENGTH = 2000;
 const TEXT_HISTORY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
-const PREVIEW_STREAM_TICKET_TTL_MS = 1000 * 60 * 60 * 12;
 const APP_TIME_ZONE = 'Asia/Taipei';
 const DEFAULT_PUBLIC_SHARE_ORIGIN = 'https://share.rikastudio.com';
 const OCKIT_EDITOR_ORIGIN = normalizeHttpOrigin(process.env.OCKIT_EDITOR_ORIGIN) || DEFAULT_PUBLIC_SHARE_ORIGIN;
@@ -751,12 +750,6 @@ function getLightboxPreviewMaxEdge(sourceKey = '', collection = '') {
   return getCollectionConfig(collectionKey).mode === 'image'
     ? IMAGE_LIGHTBOX_PREVIEW_MAX_EDGE
     : SCENARIO_LIGHTBOX_PREVIEW_MAX_EDGE;
-}
-
-function getUploadPublicUrl(sourceKey = '') {
-  const normalized = String(sourceKey || '').replace(/\\/g, '/').trim().replace(/^\/+/, '');
-  if (!normalized) return '';
-  return `/uploads/${normalized.split('/').map(part => encodeURIComponent(part)).join('/')}`;
 }
 
 function resolveThumbSourceFromRequestPath(rawPath = '') {
@@ -1521,23 +1514,8 @@ function verifyToken(token) {
   }
 }
 
-function makePreviewStreamTicket(user, itemId, previewIndex, collection, fileKey, cfg = readCfg()) {
-  const body = Buffer.from(JSON.stringify({
-    iat: Date.now(),
-    rnd: crypto.randomBytes(8).toString('hex'),
-    uid: user?.id || '',
-    username: user?.username || '',
-    itemId: String(itemId || ''),
-    previewIndex: Number(previewIndex) || 0,
-    collection: sanitizeCollectionKey(collection),
-    fileKey: String(fileKey || '')
-  })).toString('base64url');
-  return `${body}.${sign(body, cfg.authSecret)}`;
-}
-
-function getPreviewStreamUrl(user, itemId, index, collection, fileKey, cfg) {
-  const ticket = makePreviewStreamTicket(user, itemId, index, collection, fileKey, cfg);
-  return withCollection(`/api/preview-stream/${encodeURIComponent(itemId)}/${index}?ticket=${encodeURIComponent(ticket)}`, collection);
+function getPreviewStreamUrl(itemId, index, collection) {
+  return withCollection(`/api/preview-stream/${encodeURIComponent(itemId)}/${index}`, collection);
 }
 
 async function sendOckitThumbnail(req, res, fileKey) {
@@ -1548,34 +1526,70 @@ async function sendOckitThumbnail(req, res, fileKey) {
   return true;
 }
 
-function verifyPreviewStreamTicket(token) {
-  if (!token || !token.includes('.')) return null;
-  const [body, sig] = String(token).split('.');
-  if (!body || !sig) return null;
-  const cfg = readCfg();
-  if (!safeEq(sig, sign(body, cfg.authSecret))) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-    if (!(Number(payload.iat) > 0 && (Date.now() - Number(payload.iat)) <= PREVIEW_STREAM_TICKET_TTL_MS)) return null;
-    const user = getAuthUserById(cfg, payload.uid) || getAuthUserByUsername(cfg, payload.username);
-    if (!user) return null;
-    return {
-      user,
-      itemId: String(payload.itemId || ''),
-      previewIndex: Number(payload.previewIndex) || 0,
-      collection: sanitizeCollectionKey(payload.collection),
-      fileKey: String(payload.fileKey || '')
-    };
-  } catch {
-    return null;
-  }
-}
-
 function getTokenFromReq(req) {
   const h = req.headers['authorization'] || '';
   return h.startsWith('Bearer ')
     ? h.slice(7)
     : (req.headers['x-token'] || '');
+}
+
+const PREVIEW_LOGIN_COOKIE = 'catalog_preview_login';
+
+function getPreviewLoginCookie(req) {
+  const prefix = `${PREVIEW_LOGIN_COOKIE}=`;
+  const entry = String(req.headers.cookie || '').split(';').map(value => value.trim())
+    .find(value => value.startsWith(prefix));
+  return entry ? entry.slice(prefix.length) : '';
+}
+
+function previewLoginCookieOptions(req) {
+  const protocol = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
+  return { httpOnly: true, sameSite: 'lax', secure: protocol === 'https', path: '/' };
+}
+
+function setPreviewLoginCookie(req, res, token, iat) {
+  if (token === getPreviewLoginCookie(req)) return;
+  const maxAge = Math.max(0, TOKEN_TTL_MS - (Date.now() - iat));
+  res.cookie(PREVIEW_LOGIN_COOKIE, token, { ...previewLoginCookieOptions(req), maxAge });
+}
+
+function getPreviewLoginUser(req) {
+  return verifyToken(getTokenFromReq(req) || getPreviewLoginCookie(req));
+}
+
+function syncPreviewLoginCookie(req, res, next) {
+  res.setHeader('Cache-Control', 'private, no-store');
+  setPreviewLoginCookie(req, res, getTokenFromReq(req), req.authUser.iat);
+  next();
+}
+
+function syncCatalogPreviewLogin(req, res, next) {
+  const token = getTokenFromReq(req);
+  const user = verifyToken(token);
+  if (user) {
+    req.authUser = user;
+    res.setHeader('Cache-Control', 'private, no-store');
+    setPreviewLoginCookie(req, res, token, user.iat);
+  }
+  next();
+}
+
+function canReadStoredAsset(req, sourceKey) {
+  const key = sourceKey.replace(/\\/g, '/').replace(/^\/+/, '');
+  const parts = key.split('/');
+  if (parts.some(part => !part || part.startsWith('.') || /[:\0]/.test(part))) return false;
+  const collection = getStoredKeyCollection(key);
+  const itemId = parts[collection === 'scenario' ? 0 : 1];
+  const item = readCat(collection, { syncFiles: false }).items.find(entry => entry.id === itemId);
+  if (!item) return false;
+  const catalogImage = item.coverKey === key || (Array.isArray(item.previewKeys) && item.previewKeys.includes(key));
+  if (catalogImage && canAccessCollectionByRole(collection, 'public') && canAccessItemByRole(item, 'public')) return true;
+  const user = getPreviewLoginUser(req);
+  if (!user || !canAccessCollectionByRole(collection, user.role) || !canAccessItemByRole(item, user.role)) return false;
+  if (catalogImage || hasRolePermission(user, 'downloadFiles', collection)) return true;
+  const ext = getExt(key);
+  const previewable = ['.pdf', '.txt', '.doc', '.docx', '.html', '.htm'].includes(ext) || !!PREVIEWABLE_MEDIA_MIME[ext];
+  return previewable && hasRolePermission(user, 'onlinePreview', collection);
 }
 
 function sanitizeCatalogForPublic(cat) {
@@ -4312,15 +4326,16 @@ function escapeMetaContent(value) {
   return escapeXml(String(value || '')).replace(/\r?\n/g, ' ').trim();
 }
 
-function getPreviewShareEmbedImagePath(item = {}, preview = null, token = '') {
+function getPreviewShareEmbedImagePath(cfg, { item, preview, share }) {
+  if (!share.enabled || share.passwordHash) return '';
   const imageExts = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
   const previewFile = preview?.file || null;
   if (previewFile?.key && imageExts.has(String(previewFile.ext || '').toLowerCase())) {
-    return getUploadPublicUrl(previewFile.key) || getThumbUrl(previewFile.key) || `/api/preview-share/${encodeURIComponent(token)}`;
+    return getPublicPreviewContentUrl(cfg, share.token);
   }
-  const thumbKeys = collectThumbSourceKeys(item);
-  if (thumbKeys.length) return getThumbUrl(thumbKeys[0]);
-  return '';
+  if (!canAccessCollectionByRole(share.collection, 'public', cfg) || !canAccessItemByRole(item, 'public')) return '';
+  const key = [item.coverKey, ...(item.previewKeys || [])].find(isThumbEligibleImageKey);
+  return key ? getThumbUrl(key) : '';
 }
 
 function getPreviewShareMeta(req, cfg, resolved) {
@@ -4333,7 +4348,7 @@ function getPreviewShareMeta(req, cfg, resolved) {
     ? (String(item.ockitSite.title || '').trim() || itemTitle)
     : rawFileLabel.replace(/\.txt$/i, '') || rawFileLabel;
   const url = buildAbsoluteUrl(req, buildPreviewSharePath(token, cfg), cfg);
-  const imagePath = getPreviewShareEmbedImagePath(item, preview, token);
+  const imagePath = getPreviewShareEmbedImagePath(cfg, resolved);
   const imageUrl = imagePath ? buildAbsoluteUrl(req, imagePath, cfg) : '';
   const isImageShare = preview?.type === 'media' && String(preview?.mimeType || '').toLowerCase().startsWith('image/');
   return {
@@ -4722,23 +4737,27 @@ app.use(express.static(path.join(ROOT, 'public')));
 app.use('/vendor/opencc-js', express.static(path.join(ROOT, 'node_modules', 'opencc-js', 'dist', 'umd')));
 app.use('/uploads',
   (req, res, next) => {
+    res.setHeader('Cache-Control', 'private, no-store');
     const relativePath = decodeURIComponent(req.path);
     const segments = relativePath.toLowerCase().split('/');
     const editorPath = path.resolve(UPLOADS, '.' + relativePath);
-    if (segments.includes('ockit-site') || (segments.at(-1) === 'editor.html' &&
+    if (!canReadStoredAsset(req, relativePath) || segments.includes('ockit-site') || (segments.at(-1) === 'editor.html' &&
         isSubPath(editorPath, UPLOADS) && fs.existsSync(editorPath) &&
         isOckitEditor({ type: 'html-file', filename: 'editor.html', text: readTextFile(editorPath).text })) ||
-        path.basename(req.path).startsWith('dl.')) {
+        path.basename(relativePath).toLowerCase().startsWith('dl.')) {
       return res.status(403).json({ error: 'Direct upload access is not allowed here.' });
     }
+    if (/\.(?:svg|html?)$/i.test(relativePath)) res.setHeader('Content-Security-Policy', 'sandbox');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     next();
   },
-  express.static(UPLOADS, { maxAge: '7d' })
+  express.static(UPLOADS, { cacheControl: false })
 );
 app.get('/thumbs/*', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
   if (req.params[0].toLowerCase().split('/').includes('ockit-site')) return res.sendStatus(404);
   const sourceKey = resolveThumbSourceFromRequestPath(req.params[0] || '');
-  if (!sourceKey || path.basename(sourceKey).startsWith('dl.')) {
+  if (!sourceKey || path.basename(sourceKey).toLowerCase().startsWith('dl.') || !canReadStoredAsset(req, sourceKey)) {
     return res.status(404).end();
   }
   const thumbAbs = await ensureThumbForKey(sourceKey);
@@ -4746,14 +4765,14 @@ app.get('/thumbs/*', async (req, res) => {
     return res.status(404).end();
   }
   res.type('image/webp');
-  res.set('Cache-Control', 'public, max-age=604800');
   return res.sendFile(thumbAbs);
 });
 
 app.get('/lightbox-previews/*', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
   if (req.params[0].toLowerCase().split('/').includes('ockit-site')) return res.sendStatus(404);
   const sourceKey = resolveLightboxPreviewSourceFromRequestPath(req.params[0] || '');
-  if (!sourceKey || path.basename(sourceKey).startsWith('dl.')) {
+  if (!sourceKey || path.basename(sourceKey).toLowerCase().startsWith('dl.') || !canReadStoredAsset(req, sourceKey)) {
     return res.status(404).end();
   }
   lightboxPreviewLastInteractiveAt = Date.now();
@@ -4762,8 +4781,6 @@ app.get('/lightbox-previews/*', async (req, res) => {
     return res.status(404).end();
   }
   res.type('image/webp');
-  res.set('Cache-Control', 'public, max-age=604800');
-  res.set('Cloudflare-CDN-Cache-Control', 'public, max-age=2592000');
   return res.sendFile(previewAbs);
 });
 
@@ -4772,7 +4789,7 @@ app.get('/lightbox-previews/*', async (req, res) => {
 // ══════════════════════════════════════════════════
 
 // 取得目錄（公開）
-app.get('/api/catalog', (req, res) => {
+app.get('/api/catalog', syncCatalogPreviewLogin, (req, res) => {
   const collection = getC(req);
   const role = getViewerRole(req);
   const cfg = readCfg();
@@ -4785,7 +4802,7 @@ app.get('/api/catalog', (req, res) => {
 });
 
 // 精簡目錄索引：一次載入後由瀏覽器在本機完成搜尋、篩選與分頁。
-app.get('/api/catalog-index', (req, res) => {
+app.get('/api/catalog-index', syncCatalogPreviewLogin, (req, res) => {
   const collection = getC(req);
   const role = getViewerRole(req);
   const cfg = readCfg();
@@ -4890,8 +4907,10 @@ app.post('/api/auth/google', async (req, res) => {
     }
     if (!user) return res.status(401).json({ error: `此 Google 帳號（${googleEmail}）尚未綁定任何使用者，請站主至後台帳號管理填入對應信箱` });
 
+    const token = makeToken(user);
+    setPreviewLoginCookie(req, res, token, Date.now());
     res.json({
-      token: makeToken(user),
+      token,
       expiresInMs: TOKEN_TTL_MS,
       user: { id: user.id, username: user.username, role: user.role }
     });
@@ -4904,15 +4923,18 @@ app.post('/api/login', (req, res) => {
   if (targetUser?.googleOnly) return res.status(403).json({ error: '此帳號已停用帳號密碼登入，請改用 Google 登入' });
   const user = getAuthUserByCredentials(cfg, req.body.username || '', req.body.password || '');
   if (!user) return res.status(401).json({ error: '用戶名或密碼錯誤' });
+  const token = makeToken(user);
+  setPreviewLoginCookie(req, res, token, Date.now());
   res.json({
-    token: makeToken(user),
+    token,
     expiresInMs: TOKEN_TTL_MS,
     user: { id: user.id, username: user.username, role: user.role }
   });
 });
 
 // 登出
-app.post('/api/logout', auth, (req, res) => {
+app.post('/api/logout', (req, res) => {
+  res.clearCookie(PREVIEW_LOGIN_COOKIE, previewLoginCookieOptions(req));
   res.json({ ok: true });
 });
 
@@ -5082,7 +5104,7 @@ function buildDownloadListData(item, collection, mode = 'scenario') {
   return { files: [], allUrl: '', allName: '' };
 }
 
-function buildPreviewListData(item, collection, user, cfg) {
+function buildPreviewListData(item, collection, cfg) {
   const files = getPreviewableFiles(item, collection, cfg)
     .map((file, index) => ({ ...file, index }))
     .filter(file => fs.existsSync(file.abs));
@@ -5091,16 +5113,15 @@ function buildPreviewListData(item, collection, user, cfg) {
     const { index } = file;
     const isMedia = !!PREVIEWABLE_MEDIA_MIME[file.ext];
     const streamUrl = isMedia && file.relativePath?.startsWith(OCKIT_FOLDER + '/')
-      ? getPreviewStreamUrl(user, item.id, index, collection, file.key, cfg)
+      ? getPreviewStreamUrl(item.id, index, collection)
       : '';
     const relativePath = file.relativePath || file.name || path.basename(file.key || 'document');
     const openPath = `/preview-open/${encodeURIComponent(item.id)}/${index}`;
-    const ticket = makePreviewStreamTicket(user, item.id, index, collection, file.key, cfg);
     return {
       index,
       name: path.posix.basename(String(relativePath).replace(/\\/g, '/')),
       relativePath,
-      url: withCollection(`${openPath}?ticket=${encodeURIComponent(ticket)}`, collection),
+      url: withCollection(openPath, collection),
       mediaUrl: streamUrl || (isMedia
         ? withCollection(`/uploads/${file.key}`, collection)
         : withCollection(`/api/preview/${item.id}/${index}`, collection)),
@@ -5119,7 +5140,7 @@ function buildPreviewListData(item, collection, user, cfg) {
   };
 }
 
-app.get('/api/lightbox-lists', auth, (req, res) => {
+app.get('/api/lightbox-lists', auth, syncPreviewLoginCookie, (req, res) => {
   try {
     const collection = getC(req);
     const cfg = readCfg();
@@ -5141,7 +5162,7 @@ app.get('/api/lightbox-lists', auth, (req, res) => {
       return [{
         id,
         downloadData: canDownload ? buildDownloadListData(item, collection, mode) : { files: [], allUrl: '', allName: '' },
-        previewData: canPreview ? buildPreviewListData(item, collection, req.authUser, cfg) : { supported: false, url: '', count: 0, files: [], itemId: id }
+        previewData: canPreview ? buildPreviewListData(item, collection, cfg) : { supported: false, url: '', count: 0, files: [], itemId: id }
       }];
     });
     return res.json({ items });
@@ -5164,7 +5185,7 @@ app.get('/api/items/:id/download-files', auth, (req, res) => {
   return res.json(buildDownloadListData(item, collection, collCfg.mode));
 });
 
-app.get('/api/items/:id/preview', auth, (req, res) => {
+app.get('/api/items/:id/preview', auth, syncPreviewLoginCookie, (req, res) => {
   try {
     const collection = getC(req);
     const cfg = readCfg();
@@ -5176,7 +5197,7 @@ app.get('/api/items/:id/preview', auth, (req, res) => {
     if (!storedItem) return res.status(404).json({ error: '找不到項目。' });
     if (!canAccessItemByRole(storedItem, req.authUser?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
     const item = syncStoredItemFiles(storedItem, collection, getCollectionConfig(collection).mode);
-    return res.json(buildPreviewListData(item, collection, req.authUser, cfg));
+    return res.json(buildPreviewListData(item, collection, cfg));
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
@@ -5323,8 +5344,10 @@ app.get('/api/download/:id/files/:index', auth, (req, res) => {
   return res.sendFile(file.abs);
 });
 
-app.get('/preview-hub/:id', auth, (req, res) => {
+app.get('/preview-hub/:id', (req, res) => {
   try {
+    req.authUser = getPreviewLoginUser(req);
+    if (!req.authUser) return res.sendStatus(401);
     const collection = getC(req);
     const cfg = readCfg();
     const collectionDenied = ensureCollectionAccessOrNull(collection, req.authUser?.role, cfg);
@@ -5334,7 +5357,7 @@ app.get('/preview-hub/:id', auth, (req, res) => {
     const item = (cat.items || []).find(i => i.id === req.params.id);
     if (!item) return res.status(404).send('Item not found');
     if (!canAccessItemByRole(item, req.authUser?.role)) return res.status(403).send('Forbidden');
-    const { files } = buildPreviewListData(item, collection, req.authUser, cfg);
+    const { files } = buildPreviewListData(item, collection, cfg);
     if (!files.length) return res.status(404).send('No previewable files');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(renderPreviewHubPageV2(item, files));
@@ -5794,18 +5817,16 @@ app.get('/preview-open/:id/:index', async (req, res) => {
     const { id, index } = req.params;
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
-    const ticket = verifyPreviewStreamTicket(String(req.query.ticket || ''));
-    if (!ticket) return res.type('html').send(renderPreviewOpenShell(id, index, collection));
+    const user = getPreviewLoginUser(req);
+    if (!user) return res.type('html').send(renderPreviewOpenShell(id, index, collection));
 
     const previewIndex = Number(index);
-    if (ticket.collection !== collection || ticket.itemId !== id || ticket.previewIndex !== previewIndex) {
-      return res.sendStatus(403);
-    }
+    if (!Number.isSafeInteger(previewIndex) || previewIndex < 0) return res.sendStatus(404);
     const cfg = readCfg();
-    const role = ticket.user?.role;
+    const role = user.role;
     const denied = ensureCollectionAccessOrNull(collection, role, cfg);
     if (denied) return res.status(403).send(denied.error);
-    if (!hasRolePermission(ticket.user, 'onlinePreview', collection)) return res.sendStatus(403);
+    if (!hasRolePermission(user, 'onlinePreview', collection)) return res.sendStatus(403);
     const cat = readCat(collection, { syncFiles: false });
     const storedItem = (cat.items || []).find(item => item.id === id);
     if (!storedItem) return res.sendStatus(404);
@@ -5813,11 +5834,11 @@ app.get('/preview-open/:id/:index', async (req, res) => {
 
     const item = syncStoredItemFiles(storedItem, collection, getCollectionConfig(collection, cfg).mode);
     const file = getPreviewableFiles(item, collection, cfg)[previewIndex];
-    if (!file || file.key !== ticket.fileKey) return res.sendStatus(404);
+    if (!file) return res.sendStatus(404);
     const preview = resolvePreview(item, previewIndex, collection, req.query.encoding);
     if (!preview) return res.sendStatus(404);
     if (isOckitEditor(preview)) {
-      if (!hasRolePermission(ticket.user, 'editItemInfo', collection)) return res.sendStatus(403);
+      if (!hasRolePermission(user, 'editItemInfo', collection)) return res.sendStatus(403);
       const protocol = String(req.get('x-forwarded-proto') || req.protocol).split(',')[0].trim();
       const origin = normalizeHttpOrigin(`${protocol}://${req.get('host')}`);
       if (!origin || origin === OCKIT_EDITOR_ORIGIN) return res.sendStatus(400);
@@ -5832,7 +5853,7 @@ app.get('/preview-open/:id/:index', async (req, res) => {
     if (file.relativePath?.startsWith(OCKIT_FOLDER + '/')) res.setHeader('Content-Security-Policy', 'sandbox');
     return await sendResolvedPreview(res, item, preview, previewIndex, {
       collection,
-      canEditTxt: file.ext === '.txt' && canEditTxtPreview(ticket.user, collection)
+      canEditTxt: file.ext === '.txt' && canEditTxtPreview(user, collection)
     });
   } catch (e) {
     return res.status(500).send(e.message);
@@ -6190,7 +6211,7 @@ app.get('/api/preview-share/:token', async (req, res) => {
   }
 });
 
-app.get('/api/preview/:id/:index/stream-ticket', auth, (req, res) => {
+app.get('/api/preview/:id/:index/stream-ticket', auth, syncPreviewLoginCookie, (req, res) => {
   try {
     const collection = getC(req);
     const cfg = readCfg();
@@ -6210,7 +6231,7 @@ app.get('/api/preview/:id/:index/stream-ticket', auth, (req, res) => {
     return res.json({
       streamable: true,
       mimeType: file.ext === '.pdf' ? 'application/pdf' : getPreviewMediaMimeType(file.ext),
-      streamUrl: getPreviewStreamUrl(req.authUser, item.id, previewIndex, collection, file.key, cfg)
+      streamUrl: getPreviewStreamUrl(item.id, previewIndex, collection)
     });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -6219,31 +6240,28 @@ app.get('/api/preview/:id/:index/stream-ticket', auth, (req, res) => {
 
 app.get('/api/preview-stream/:id/:index', async (req, res) => {
   try {
-    const ticketState = verifyPreviewStreamTicket(String(req.query?.ticket || ''));
-    if (!ticketState) return res.status(401).json({ error: '閱覽授權已失效，請重新開啟檔案。' });
+    const user = getPreviewLoginUser(req);
+    if (!user) return res.sendStatus(401);
     const collection = getC(req);
-    const previewIndex = Number(req.params.index) || 0;
-    if (
-      ticketState.collection !== collection ||
-      ticketState.itemId !== req.params.id ||
-      ticketState.previewIndex !== previewIndex
-    ) return res.status(403).json({ error: '閱覽授權與檔案不符。' });
+    const previewIndex = Number(req.params.index);
+    if (!Number.isSafeInteger(previewIndex) || previewIndex < 0) return res.sendStatus(404);
     const cfg = readCfg();
-    const collectionDenied = ensureCollectionAccessOrNull(collection, ticketState.user?.role, cfg);
+    const collectionDenied = ensureCollectionAccessOrNull(collection, user.role, cfg);
     if (collectionDenied) return res.status(403).json(collectionDenied);
-    if (!hasRolePermission(ticketState.user, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限使用線上閱覽。' });
-    const cat = readCat(collection);
-    const item = (cat.items || []).find(i => i.id === req.params.id);
-    if (!item) return res.status(404).json({ error: '找不到項目。' });
-    if (!canAccessItemByRole(item, ticketState.user?.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+    if (!hasRolePermission(user, 'onlinePreview', collection)) return res.status(403).json({ error: '你沒有權限使用線上閱覽。' });
+    const cat = readCat(collection, { syncFiles: false });
+    const storedItem = (cat.items || []).find(i => i.id === req.params.id);
+    if (!storedItem) return res.status(404).json({ error: '找不到項目。' });
+    if (!canAccessItemByRole(storedItem, user.role)) return res.status(403).json({ error: '你沒有權限存取這個項目。' });
+    const item = syncStoredItemFiles(storedItem, collection, getCollectionConfig(collection, cfg).mode);
     const file = getPreviewableFiles(item, collection)[previewIndex];
-    if (!file || !fs.existsSync(file.abs) || String(file.key || '') !== ticketState.fileKey) {
+    if (!file || !fs.existsSync(file.abs)) {
       return res.status(404).json({ error: '找不到可閱覽的檔案。' });
     }
     if (file.ext !== '.pdf' && !PREVIEWABLE_MEDIA_MIME[file.ext]) {
       return res.status(415).json({ error: '這個檔案不支援串流閱覽。' });
     }
-    res.setHeader('Cache-Control', 'private, max-age=300, no-transform');
+    res.setHeader('Cache-Control', 'private, no-store, no-transform');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (file.relativePath?.startsWith(OCKIT_FOLDER + '/')) {
       res.setHeader('Content-Security-Policy', 'sandbox');

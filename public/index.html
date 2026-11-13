@@ -6408,7 +6408,7 @@ function closeAll() { closeAdm(); closeCategoryFilter(); closeTagFilter(); close
 async function doLogout() {
   try { await releaseManagePageLock(true); } catch {}
   try {
-    if (getToken()) await api('POST', '/api/logout');
+    await api('POST', '/api/logout');
   } catch {}
   localStorage.removeItem('adm-token');
   localStorage.removeItem('adm-user');
