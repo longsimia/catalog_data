@@ -1585,11 +1585,12 @@ function canReadStoredAsset(req, sourceKey) {
   const item = readCat(collection, { syncFiles: false }).items.find(entry => entry.id === itemId);
   if (!item) return false;
   const catalogImage = item.coverKey === key || (Array.isArray(item.previewKeys) && item.previewKeys.includes(key));
+  const ext = getExt(key);
+  if (catalogImage && (THUMB_IMAGE_EXTS.has(ext) || ext === '.svg' || ext === '.avif')) return true;
   if (catalogImage && canAccessCollectionByRole(collection, 'public') && canAccessItemByRole(item, 'public')) return true;
   const user = getPreviewLoginUser(req);
   if (!user || !canAccessCollectionByRole(collection, user.role) || !canAccessItemByRole(item, user.role)) return false;
   if (catalogImage || hasRolePermission(user, 'downloadFiles', collection)) return true;
-  const ext = getExt(key);
   const previewable = ['.pdf', '.txt', '.doc', '.docx', '.html', '.htm'].includes(ext) || !!PREVIEWABLE_MEDIA_MIME[ext];
   return previewable && hasRolePermission(user, 'onlinePreview', collection);
 }
