@@ -1363,7 +1363,7 @@ function getViewerRole(req) {
   return authUser?.role || 'public';
 }
 
-const readCfg = () => {
+const readCfg = ({ validatePreviewShares = true } = {}) => {
   const cfg = readJSON(CFG_FILE, {
     pwdHash: '',
     authSecret: '',
@@ -1431,10 +1431,12 @@ const readCfg = () => {
     cfg.collections = collections;
     dirty = true;
   }
-  const previewShareLinks = normalizePreviewShareLinks(cfg.previewShareLinks, cfg);
-  if (JSON.stringify(cfg.previewShareLinks || {}) !== JSON.stringify(previewShareLinks)) {
-    cfg.previewShareLinks = previewShareLinks;
-    dirty = true;
+  if (validatePreviewShares) {
+    const previewShareLinks = normalizePreviewShareLinks(cfg.previewShareLinks, cfg);
+    if (JSON.stringify(cfg.previewShareLinks) !== JSON.stringify(previewShareLinks)) {
+      cfg.previewShareLinks = previewShareLinks;
+      dirty = true;
+    }
   }
   const userUiPrefs = getUserUiPrefs(cfg);
   if (JSON.stringify(cfg.userUiPrefs || {}) !== JSON.stringify(userUiPrefs)) {
@@ -1495,7 +1497,7 @@ function verifyToken(token) {
   if (!token || !token.includes('.')) return null;
   const [body, sig] = token.split('.');
   if (!body || !sig) return null;
-  const cfg = readCfg();
+  const cfg = readCfg({ validatePreviewShares: false });
   const expected = sign(body, cfg.authSecret);
   if (!safeEq(sig, expected)) return null;
   try {
@@ -3971,8 +3973,7 @@ function resolvePreview(item, previewIndex = 0, collection = 'scenario', preferr
   };
 }
 
-function resolvePreviewFileIndexByShare(item, share = {}) {
-  const files = getPreviewableFiles(item, share.collection || 'scenario');
+function resolvePreviewFileIndexByShare(item, share = {}, files = getPreviewableFiles(item, share.collection || 'scenario')) {
   if (item.ockitSite && share.relativePath === OCKIT_SHARE_PATH) {
     const entryPath = OCKIT_FOLDER + '/' + getOckitEntry(item);
     return files.findIndex(file => file.relativePath === entryPath);
@@ -4016,14 +4017,6 @@ function resolveSharedPreview(cfg, token = '') {
   return { share, item, preview, previewIndex };
 }
 
-function buildPreviewShareTargetKey(share = {}) {
-  return [
-    sanitizeCollectionKey(share.collection || 'scenario'),
-    String(share.itemId || '').trim(),
-    String(share.fileKey || '').trim() || String(share.relativePath || '').replace(/\\/g, '/').trim()
-  ].join('::');
-}
-
 function normalizePreviewShareLinks(existingLinks = {}, cfg = null) {
   const sourceLinks = existingLinks && typeof existingLinks === 'object' && !Array.isArray(existingLinks) ? existingLinks : {};
   const collections = getCollectionsConfig(cfg);
@@ -4059,22 +4052,18 @@ function normalizePreviewShareLinks(existingLinks = {}, cfg = null) {
       passwordHash: typeof entry.passwordHash === 'string' ? entry.passwordHash : ''
     };
     if (!share.itemId || (!share.fileKey && !share.relativePath)) continue;
-    const targetKey = buildPreviewShareTargetKey(share);
+    const targetKey = [collection, share.itemId, share.fileKey || share.relativePath].join('::');
     if (seenTargets.has(targetKey)) continue;
 
-    if (!catCache.has(share.collection)) {
-  catCache.set(
-    share.collection,
-    readCat(share.collection, { syncFiles: false })
-  );
+    if (!catCache.has(collection)) {
+      catCache.set(collection, readCat(collection, { syncFiles: false }));
     }
-    const cat = catCache.get(share.collection);
+    const cat = catCache.get(collection);
     const item = (cat?.items || []).find(candidate => candidate.id === share.itemId);
     if (!item) continue;
-    const previewIndex = resolvePreviewFileIndexByShare(item, share);
-    if (previewIndex < 0) continue;
-    const preview = resolvePreview(item, previewIndex, share.collection);
-    if (!preview) continue;
+    const files = getPreviewableFiles(item, collection, cfg);
+    const file = files[resolvePreviewFileIndexByShare(item, share, files)];
+    if (!file || !fs.existsSync(file.abs)) continue;
 
     seenTargets.add(targetKey);
     normalized[token] = share;
@@ -4805,7 +4794,7 @@ app.get('/api/catalog', syncCatalogPreviewLogin, (req, res) => {
 app.get('/api/catalog-index', syncCatalogPreviewLogin, (req, res) => {
   const collection = getC(req);
   const role = getViewerRole(req);
-  const cfg = readCfg();
+  const cfg = readCfg({ validatePreviewShares: false });
   if (!canAccessCollectionByRole(collection, role, cfg)) return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
   const cat = readCat(collection, { syncFiles: false });
   return res.json({
@@ -4817,7 +4806,7 @@ app.get('/api/catalog-index', syncCatalogPreviewLogin, (req, res) => {
 // 匿名索引使用可快取路徑；登入後資料不會進入共享快取。
 app.get('/api/catalog-index.js', (req, res) => {
   const collection = getC(req);
-  const cfg = readCfg();
+  const cfg = readCfg({ validatePreviewShares: false });
   if (!canAccessCollectionByRole(collection, 'public', cfg)) {
     return res.status(403).json({ error: '你沒有權限查看這個資料庫' });
   }
@@ -4850,7 +4839,7 @@ app.get('/api/ping', (req, res) => {
 
 app.get('/api/cfg-public', (req, res) => {
   try {
-    const cfg = readCfg();
+    const cfg = readCfg({ validatePreviewShares: false });
     res.json({
       googleClientId: cfg.googleClientId || null,
       uploadOrigin: cfg.uploadOrigin || null
@@ -6725,7 +6714,7 @@ app.put('/api/ui-preferences', auth, (req, res) => {
 
 app.get('/api/collections', (req, res) => {
   try {
-    const cfg = readCfg();
+    const cfg = readCfg({ validatePreviewShares: false });
     const role = getViewerRole(req);
     const collections = getCollectionsConfig(cfg)
       .filter(item => canAccessCollectionByRole(item.key, role, cfg))
